@@ -1,0 +1,36 @@
+appId: in.drycare.desktop
+productName: DryCare
+copyright: Copyright © 2026 DryCare
+electronVersion: 44.5.1
+directories:
+  app: stage/app
+  output: release
+  buildResources: build
+files:
+  - "**/*"
+  - "!resources/**"
+  - "!**/*.map"
+# Web screens, migrations and the icon live outside app.asar.
+extraResources:
+  - from: stage/app/resources
+    to: .
+    filter: ["**/*"]
+# No asar archive: the bundled PostgreSQL resolves its .exe paths relative to its own JS file,
+# and Windows cannot execute files that only exist inside an asar archive.
+asar: false
+win:
+  target: nsis
+  icon: build/icon.ico
+  executableName: DryCare
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: DryCare
+  # Shop data and backups live in %APPDATA% / Documents and must survive uninstall/upgrade.
+  deleteAppDataOnUninstall: false
+  artifactName: DryCare-Setup-${version}.${ext}
+  # Refuses Windows < 10 and 32-bit Windows with a clear message.
+  include: build/installer.nsh

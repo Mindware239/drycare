@@ -1,0 +1,25 @@
+node_modules
+.next
+dist
+.env
+*.log
+.turbo
+coverage
+apps/desktop/stage
+apps/desktop/release
+apps/web/out
+
+# Never commit: local secrets, credentials and database backups
+.local/
+*.dcbak
+*.dump
+
+# Desktop installer builds (large; publish installers separately)
+apps/desktop/release*/
+apps/desktop/stage/
+
+# Local editor / OS files
+.vscode/
+.idea/
+Thumbs.db
+*.tsbuildinfo

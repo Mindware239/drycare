@@ -1,0 +1,2 @@
+ALTER TABLE "notification_jobs" ADD COLUMN "customer_approval_id" uuid;--> statement-breakpoint
+ALTER TABLE "notification_jobs" ADD CONSTRAINT "notification_jobs_customer_approval_id_customer_approvals_id_fk" FOREIGN KEY ("customer_approval_id") REFERENCES "public"."customer_approvals"("id") ON DELETE no action ON UPDATE no action;

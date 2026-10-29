@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD CONSTRAINT "orders_coupon_id_marketing_coupons_id_fk" FOREIGN KEY ("coupon_id") REFERENCES "public"."marketing_coupons"("id") ON DELETE no action ON UPDATE no action;

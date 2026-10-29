@@ -1,0 +1,28 @@
+{
+  "name": "@drycare/desktop",
+  "productName": "DryCare",
+  "version": "0.1.10",
+  "private": true,
+  "type": "module",
+  "description": "DryCare for PC — standalone dry cleaning store management",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron stage/app",
+    "dev": "electron stage/app",
+    "dist": "node scripts/build.mjs && electron-builder --config electron-builder.yml --win nsis",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "2.2.2",
+    "embedded-postgres": "17.10.0-beta.17"
+  },
+  "devDependencies": {
+    "@drycare/shared": "workspace:*",
+    "@types/node": "26.6.5",
+    "drizzle-orm": "0.45.4",
+    "electron": "44.5.1",
+    "electron-builder": "26.17.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}

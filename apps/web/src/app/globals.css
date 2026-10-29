@@ -1,0 +1,291 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #effcf9;
+  --color-brand-100: #c9f5ec;
+  --color-brand-200: #94eadb;
+  --color-brand-500: #14a38b;
+  --color-brand-600: #0d8573;
+  --color-brand-700: #0f6a5d;
+  --color-brand-800: #11554c;
+  --color-brand-900: #133f39;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  background: #f5f7f8;
+  color: #0f172a;
+  font-feature-settings: "tnum" 1;
+}
+
+:root[data-theme="dark"] body {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .bg-white,
+:root[data-theme="dark"] [class~="bg-white/90"] {
+  background-color: #111827;
+}
+
+:root[data-theme="dark"] .bg-slate-50,
+:root[data-theme="dark"] [class~="bg-slate-50/60"] {
+  background-color: #0f172a;
+}
+
+:root[data-theme="dark"] .bg-slate-100 {
+  background-color: #1e293b;
+}
+
+:root[data-theme="dark"] .bg-slate-200 {
+  background-color: #334155;
+}
+
+:root[data-theme="dark"] .text-slate-900 {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .text-slate-800 {
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .text-slate-700,
+:root[data-theme="dark"] .text-slate-600 {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .text-slate-500 {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .border-slate-100,
+:root[data-theme="dark"] .border-slate-200 {
+  border-color: #263449;
+}
+
+:root[data-theme="dark"] .border-slate-300 {
+  border-color: #475569;
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select {
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] option {
+  background: #111827;
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .divide-slate-100 > :not(:last-child) {
+  border-color: #263449;
+}
+
+:root[data-theme="dark"] .hover\:bg-slate-50:hover,
+:root[data-theme="dark"] .hover\:bg-slate-100:hover {
+  background-color: #1e293b;
+}
+
+
+/* ---- Dark theme: tinted panels, coloured text and light gradients (generated per colour) ---- */
+:root[data-theme="dark"] .bg-red-50, :root[data-theme="dark"] .hover\:bg-red-50:hover, :root[data-theme="dark"] [class~="bg-red-50/5"], :root[data-theme="dark"] [class~="bg-red-50/10"], :root[data-theme="dark"] [class~="bg-red-50/20"], :root[data-theme="dark"] [class~="bg-red-50/25"], :root[data-theme="dark"] [class~="bg-red-50/30"], :root[data-theme="dark"] [class~="bg-red-50/40"], :root[data-theme="dark"] [class~="bg-red-50/50"], :root[data-theme="dark"] [class~="bg-red-50/60"], :root[data-theme="dark"] [class~="bg-red-50/70"], :root[data-theme="dark"] [class~="bg-red-50/75"], :root[data-theme="dark"] [class~="bg-red-50/80"], :root[data-theme="dark"] [class~="bg-red-50/90"], :root[data-theme="dark"] [class~="bg-red-50/95"], :root[data-theme="dark"] .hover\:bg-red-50\/5:hover, :root[data-theme="dark"] .hover\:bg-red-50\/10:hover, :root[data-theme="dark"] .hover\:bg-red-50\/20:hover, :root[data-theme="dark"] .hover\:bg-red-50\/25:hover, :root[data-theme="dark"] .hover\:bg-red-50\/30:hover, :root[data-theme="dark"] .hover\:bg-red-50\/40:hover, :root[data-theme="dark"] .hover\:bg-red-50\/50:hover, :root[data-theme="dark"] .hover\:bg-red-50\/60:hover, :root[data-theme="dark"] .hover\:bg-red-50\/70:hover, :root[data-theme="dark"] .hover\:bg-red-50\/75:hover, :root[data-theme="dark"] .hover\:bg-red-50\/80:hover, :root[data-theme="dark"] .hover\:bg-red-50\/90:hover, :root[data-theme="dark"] .hover\:bg-red-50\/95:hover { background-color: rgb(239 68 68 / 0.14); }
+:root[data-theme="dark"] .bg-red-100, :root[data-theme="dark"] .hover\:bg-red-100:hover { background-color: rgb(239 68 68 / 0.22); }
+:root[data-theme="dark"] .text-red-700, :root[data-theme="dark"] .text-red-800, :root[data-theme="dark"] .text-red-900, :root[data-theme="dark"] .text-red-950 { color: #fca5a5; }
+:root[data-theme="dark"] .text-red-600 { color: #f87171; }
+:root[data-theme="dark"] .border-red-100, :root[data-theme="dark"] .border-red-200, :root[data-theme="dark"] .border-red-300 { border-color: rgb(239 68 68 / 0.35); }
+:root[data-theme="dark"] .ring-red-200, :root[data-theme="dark"] .ring-red-300 { --tw-ring-color: rgb(239 68 68 / 0.35); }
+:root[data-theme="dark"] .from-red-50, :root[data-theme="dark"] .from-red-100 { --tw-gradient-from: rgb(239 68 68 / 0.16); }
+:root[data-theme="dark"] .bg-amber-50, :root[data-theme="dark"] .hover\:bg-amber-50:hover, :root[data-theme="dark"] [class~="bg-amber-50/5"], :root[data-theme="dark"] [class~="bg-amber-50/10"], :root[data-theme="dark"] [class~="bg-amber-50/20"], :root[data-theme="dark"] [class~="bg-amber-50/25"], :root[data-theme="dark"] [class~="bg-amber-50/30"], :root[data-theme="dark"] [class~="bg-amber-50/40"], :root[data-theme="dark"] [class~="bg-amber-50/50"], :root[data-theme="dark"] [class~="bg-amber-50/60"], :root[data-theme="dark"] [class~="bg-amber-50/70"], :root[data-theme="dark"] [class~="bg-amber-50/75"], :root[data-theme="dark"] [class~="bg-amber-50/80"], :root[data-theme="dark"] [class~="bg-amber-50/90"], :root[data-theme="dark"] [class~="bg-amber-50/95"], :root[data-theme="dark"] .hover\:bg-amber-50\/5:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/10:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/20:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/25:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/30:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/40:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/50:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/60:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/70:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/75:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/80:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/90:hover, :root[data-theme="dark"] .hover\:bg-amber-50\/95:hover { background-color: rgb(245 158 11 / 0.14); }
+:root[data-theme="dark"] .bg-amber-100, :root[data-theme="dark"] .hover\:bg-amber-100:hover { background-color: rgb(245 158 11 / 0.22); }
+:root[data-theme="dark"] .text-amber-700, :root[data-theme="dark"] .text-amber-800, :root[data-theme="dark"] .text-amber-900, :root[data-theme="dark"] .text-amber-950 { color: #fcd34d; }
+:root[data-theme="dark"] .text-amber-600 { color: #fbbf24; }
+:root[data-theme="dark"] .border-amber-100, :root[data-theme="dark"] .border-amber-200, :root[data-theme="dark"] .border-amber-300 { border-color: rgb(245 158 11 / 0.35); }
+:root[data-theme="dark"] .ring-amber-200, :root[data-theme="dark"] .ring-amber-300 { --tw-ring-color: rgb(245 158 11 / 0.35); }
+:root[data-theme="dark"] .from-amber-50, :root[data-theme="dark"] .from-amber-100 { --tw-gradient-from: rgb(245 158 11 / 0.16); }
+:root[data-theme="dark"] .bg-emerald-50, :root[data-theme="dark"] .hover\:bg-emerald-50:hover, :root[data-theme="dark"] [class~="bg-emerald-50/5"], :root[data-theme="dark"] [class~="bg-emerald-50/10"], :root[data-theme="dark"] [class~="bg-emerald-50/20"], :root[data-theme="dark"] [class~="bg-emerald-50/25"], :root[data-theme="dark"] [class~="bg-emerald-50/30"], :root[data-theme="dark"] [class~="bg-emerald-50/40"], :root[data-theme="dark"] [class~="bg-emerald-50/50"], :root[data-theme="dark"] [class~="bg-emerald-50/60"], :root[data-theme="dark"] [class~="bg-emerald-50/70"], :root[data-theme="dark"] [class~="bg-emerald-50/75"], :root[data-theme="dark"] [class~="bg-emerald-50/80"], :root[data-theme="dark"] [class~="bg-emerald-50/90"], :root[data-theme="dark"] [class~="bg-emerald-50/95"], :root[data-theme="dark"] .hover\:bg-emerald-50\/5:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/10:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/20:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/25:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/30:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/40:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/50:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/60:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/70:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/75:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/80:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/90:hover, :root[data-theme="dark"] .hover\:bg-emerald-50\/95:hover { background-color: rgb(16 185 129 / 0.14); }
+:root[data-theme="dark"] .bg-emerald-100, :root[data-theme="dark"] .hover\:bg-emerald-100:hover { background-color: rgb(16 185 129 / 0.22); }
+:root[data-theme="dark"] .text-emerald-700, :root[data-theme="dark"] .text-emerald-800, :root[data-theme="dark"] .text-emerald-900, :root[data-theme="dark"] .text-emerald-950 { color: #6ee7b7; }
+:root[data-theme="dark"] .text-emerald-600 { color: #34d399; }
+:root[data-theme="dark"] .border-emerald-100, :root[data-theme="dark"] .border-emerald-200, :root[data-theme="dark"] .border-emerald-300 { border-color: rgb(16 185 129 / 0.35); }
+:root[data-theme="dark"] .ring-emerald-200, :root[data-theme="dark"] .ring-emerald-300 { --tw-ring-color: rgb(16 185 129 / 0.35); }
+:root[data-theme="dark"] .from-emerald-50, :root[data-theme="dark"] .from-emerald-100 { --tw-gradient-from: rgb(16 185 129 / 0.16); }
+:root[data-theme="dark"] .bg-green-50, :root[data-theme="dark"] .hover\:bg-green-50:hover, :root[data-theme="dark"] [class~="bg-green-50/5"], :root[data-theme="dark"] [class~="bg-green-50/10"], :root[data-theme="dark"] [class~="bg-green-50/20"], :root[data-theme="dark"] [class~="bg-green-50/25"], :root[data-theme="dark"] [class~="bg-green-50/30"], :root[data-theme="dark"] [class~="bg-green-50/40"], :root[data-theme="dark"] [class~="bg-green-50/50"], :root[data-theme="dark"] [class~="bg-green-50/60"], :root[data-theme="dark"] [class~="bg-green-50/70"], :root[data-theme="dark"] [class~="bg-green-50/75"], :root[data-theme="dark"] [class~="bg-green-50/80"], :root[data-theme="dark"] [class~="bg-green-50/90"], :root[data-theme="dark"] [class~="bg-green-50/95"], :root[data-theme="dark"] .hover\:bg-green-50\/5:hover, :root[data-theme="dark"] .hover\:bg-green-50\/10:hover, :root[data-theme="dark"] .hover\:bg-green-50\/20:hover, :root[data-theme="dark"] .hover\:bg-green-50\/25:hover, :root[data-theme="dark"] .hover\:bg-green-50\/30:hover, :root[data-theme="dark"] .hover\:bg-green-50\/40:hover, :root[data-theme="dark"] .hover\:bg-green-50\/50:hover, :root[data-theme="dark"] .hover\:bg-green-50\/60:hover, :root[data-theme="dark"] .hover\:bg-green-50\/70:hover, :root[data-theme="dark"] .hover\:bg-green-50\/75:hover, :root[data-theme="dark"] .hover\:bg-green-50\/80:hover, :root[data-theme="dark"] .hover\:bg-green-50\/90:hover, :root[data-theme="dark"] .hover\:bg-green-50\/95:hover { background-color: rgb(34 197 94 / 0.14); }
+:root[data-theme="dark"] .bg-green-100, :root[data-theme="dark"] .hover\:bg-green-100:hover { background-color: rgb(34 197 94 / 0.22); }
+:root[data-theme="dark"] .text-green-700, :root[data-theme="dark"] .text-green-800, :root[data-theme="dark"] .text-green-900, :root[data-theme="dark"] .text-green-950 { color: #86efac; }
+:root[data-theme="dark"] .text-green-600 { color: #4ade80; }
+:root[data-theme="dark"] .border-green-100, :root[data-theme="dark"] .border-green-200, :root[data-theme="dark"] .border-green-300 { border-color: rgb(34 197 94 / 0.35); }
+:root[data-theme="dark"] .ring-green-200, :root[data-theme="dark"] .ring-green-300 { --tw-ring-color: rgb(34 197 94 / 0.35); }
+:root[data-theme="dark"] .from-green-50, :root[data-theme="dark"] .from-green-100 { --tw-gradient-from: rgb(34 197 94 / 0.16); }
+:root[data-theme="dark"] .bg-blue-50, :root[data-theme="dark"] .hover\:bg-blue-50:hover, :root[data-theme="dark"] [class~="bg-blue-50/5"], :root[data-theme="dark"] [class~="bg-blue-50/10"], :root[data-theme="dark"] [class~="bg-blue-50/20"], :root[data-theme="dark"] [class~="bg-blue-50/25"], :root[data-theme="dark"] [class~="bg-blue-50/30"], :root[data-theme="dark"] [class~="bg-blue-50/40"], :root[data-theme="dark"] [class~="bg-blue-50/50"], :root[data-theme="dark"] [class~="bg-blue-50/60"], :root[data-theme="dark"] [class~="bg-blue-50/70"], :root[data-theme="dark"] [class~="bg-blue-50/75"], :root[data-theme="dark"] [class~="bg-blue-50/80"], :root[data-theme="dark"] [class~="bg-blue-50/90"], :root[data-theme="dark"] [class~="bg-blue-50/95"], :root[data-theme="dark"] .hover\:bg-blue-50\/5:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/10:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/20:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/25:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/30:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/40:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/50:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/60:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/70:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/75:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/80:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/90:hover, :root[data-theme="dark"] .hover\:bg-blue-50\/95:hover { background-color: rgb(59 130 246 / 0.14); }
+:root[data-theme="dark"] .bg-blue-100, :root[data-theme="dark"] .hover\:bg-blue-100:hover { background-color: rgb(59 130 246 / 0.22); }
+:root[data-theme="dark"] .text-blue-700, :root[data-theme="dark"] .text-blue-800, :root[data-theme="dark"] .text-blue-900, :root[data-theme="dark"] .text-blue-950 { color: #93c5fd; }
+:root[data-theme="dark"] .text-blue-600 { color: #60a5fa; }
+:root[data-theme="dark"] .border-blue-100, :root[data-theme="dark"] .border-blue-200, :root[data-theme="dark"] .border-blue-300 { border-color: rgb(59 130 246 / 0.35); }
+:root[data-theme="dark"] .ring-blue-200, :root[data-theme="dark"] .ring-blue-300 { --tw-ring-color: rgb(59 130 246 / 0.35); }
+:root[data-theme="dark"] .from-blue-50, :root[data-theme="dark"] .from-blue-100 { --tw-gradient-from: rgb(59 130 246 / 0.16); }
+:root[data-theme="dark"] .bg-violet-50, :root[data-theme="dark"] .hover\:bg-violet-50:hover, :root[data-theme="dark"] [class~="bg-violet-50/5"], :root[data-theme="dark"] [class~="bg-violet-50/10"], :root[data-theme="dark"] [class~="bg-violet-50/20"], :root[data-theme="dark"] [class~="bg-violet-50/25"], :root[data-theme="dark"] [class~="bg-violet-50/30"], :root[data-theme="dark"] [class~="bg-violet-50/40"], :root[data-theme="dark"] [class~="bg-violet-50/50"], :root[data-theme="dark"] [class~="bg-violet-50/60"], :root[data-theme="dark"] [class~="bg-violet-50/70"], :root[data-theme="dark"] [class~="bg-violet-50/75"], :root[data-theme="dark"] [class~="bg-violet-50/80"], :root[data-theme="dark"] [class~="bg-violet-50/90"], :root[data-theme="dark"] [class~="bg-violet-50/95"], :root[data-theme="dark"] .hover\:bg-violet-50\/5:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/10:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/20:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/25:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/30:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/40:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/50:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/60:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/70:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/75:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/80:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/90:hover, :root[data-theme="dark"] .hover\:bg-violet-50\/95:hover { background-color: rgb(139 92 246 / 0.14); }
+:root[data-theme="dark"] .bg-violet-100, :root[data-theme="dark"] .hover\:bg-violet-100:hover { background-color: rgb(139 92 246 / 0.22); }
+:root[data-theme="dark"] .text-violet-700, :root[data-theme="dark"] .text-violet-800, :root[data-theme="dark"] .text-violet-900, :root[data-theme="dark"] .text-violet-950 { color: #c4b5fd; }
+:root[data-theme="dark"] .text-violet-600 { color: #a78bfa; }
+:root[data-theme="dark"] .border-violet-100, :root[data-theme="dark"] .border-violet-200, :root[data-theme="dark"] .border-violet-300 { border-color: rgb(139 92 246 / 0.35); }
+:root[data-theme="dark"] .ring-violet-200, :root[data-theme="dark"] .ring-violet-300 { --tw-ring-color: rgb(139 92 246 / 0.35); }
+:root[data-theme="dark"] .from-violet-50, :root[data-theme="dark"] .from-violet-100 { --tw-gradient-from: rgb(139 92 246 / 0.16); }
+:root[data-theme="dark"] .bg-cyan-50, :root[data-theme="dark"] .hover\:bg-cyan-50:hover, :root[data-theme="dark"] [class~="bg-cyan-50/5"], :root[data-theme="dark"] [class~="bg-cyan-50/10"], :root[data-theme="dark"] [class~="bg-cyan-50/20"], :root[data-theme="dark"] [class~="bg-cyan-50/25"], :root[data-theme="dark"] [class~="bg-cyan-50/30"], :root[data-theme="dark"] [class~="bg-cyan-50/40"], :root[data-theme="dark"] [class~="bg-cyan-50/50"], :root[data-theme="dark"] [class~="bg-cyan-50/60"], :root[data-theme="dark"] [class~="bg-cyan-50/70"], :root[data-theme="dark"] [class~="bg-cyan-50/75"], :root[data-theme="dark"] [class~="bg-cyan-50/80"], :root[data-theme="dark"] [class~="bg-cyan-50/90"], :root[data-theme="dark"] [class~="bg-cyan-50/95"], :root[data-theme="dark"] .hover\:bg-cyan-50\/5:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/10:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/20:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/25:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/30:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/40:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/50:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/60:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/70:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/75:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/80:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/90:hover, :root[data-theme="dark"] .hover\:bg-cyan-50\/95:hover { background-color: rgb(6 182 212 / 0.14); }
+:root[data-theme="dark"] .bg-cyan-100, :root[data-theme="dark"] .hover\:bg-cyan-100:hover { background-color: rgb(6 182 212 / 0.22); }
+:root[data-theme="dark"] .text-cyan-700, :root[data-theme="dark"] .text-cyan-800, :root[data-theme="dark"] .text-cyan-900, :root[data-theme="dark"] .text-cyan-950 { color: #67e8f9; }
+:root[data-theme="dark"] .text-cyan-600 { color: #22d3ee; }
+:root[data-theme="dark"] .border-cyan-100, :root[data-theme="dark"] .border-cyan-200, :root[data-theme="dark"] .border-cyan-300 { border-color: rgb(6 182 212 / 0.35); }
+:root[data-theme="dark"] .ring-cyan-200, :root[data-theme="dark"] .ring-cyan-300 { --tw-ring-color: rgb(6 182 212 / 0.35); }
+:root[data-theme="dark"] .from-cyan-50, :root[data-theme="dark"] .from-cyan-100 { --tw-gradient-from: rgb(6 182 212 / 0.16); }
+:root[data-theme="dark"] .bg-sky-50, :root[data-theme="dark"] .hover\:bg-sky-50:hover, :root[data-theme="dark"] [class~="bg-sky-50/5"], :root[data-theme="dark"] [class~="bg-sky-50/10"], :root[data-theme="dark"] [class~="bg-sky-50/20"], :root[data-theme="dark"] [class~="bg-sky-50/25"], :root[data-theme="dark"] [class~="bg-sky-50/30"], :root[data-theme="dark"] [class~="bg-sky-50/40"], :root[data-theme="dark"] [class~="bg-sky-50/50"], :root[data-theme="dark"] [class~="bg-sky-50/60"], :root[data-theme="dark"] [class~="bg-sky-50/70"], :root[data-theme="dark"] [class~="bg-sky-50/75"], :root[data-theme="dark"] [class~="bg-sky-50/80"], :root[data-theme="dark"] [class~="bg-sky-50/90"], :root[data-theme="dark"] [class~="bg-sky-50/95"], :root[data-theme="dark"] .hover\:bg-sky-50\/5:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/10:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/20:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/25:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/30:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/40:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/50:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/60:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/70:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/75:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/80:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/90:hover, :root[data-theme="dark"] .hover\:bg-sky-50\/95:hover { background-color: rgb(14 165 233 / 0.14); }
+:root[data-theme="dark"] .bg-sky-100, :root[data-theme="dark"] .hover\:bg-sky-100:hover { background-color: rgb(14 165 233 / 0.22); }
+:root[data-theme="dark"] .text-sky-700, :root[data-theme="dark"] .text-sky-800, :root[data-theme="dark"] .text-sky-900, :root[data-theme="dark"] .text-sky-950 { color: #7dd3fc; }
+:root[data-theme="dark"] .text-sky-600 { color: #38bdf8; }
+:root[data-theme="dark"] .border-sky-100, :root[data-theme="dark"] .border-sky-200, :root[data-theme="dark"] .border-sky-300 { border-color: rgb(14 165 233 / 0.35); }
+:root[data-theme="dark"] .ring-sky-200, :root[data-theme="dark"] .ring-sky-300 { --tw-ring-color: rgb(14 165 233 / 0.35); }
+:root[data-theme="dark"] .from-sky-50, :root[data-theme="dark"] .from-sky-100 { --tw-gradient-from: rgb(14 165 233 / 0.16); }
+:root[data-theme="dark"] .bg-orange-50, :root[data-theme="dark"] .hover\:bg-orange-50:hover, :root[data-theme="dark"] [class~="bg-orange-50/5"], :root[data-theme="dark"] [class~="bg-orange-50/10"], :root[data-theme="dark"] [class~="bg-orange-50/20"], :root[data-theme="dark"] [class~="bg-orange-50/25"], :root[data-theme="dark"] [class~="bg-orange-50/30"], :root[data-theme="dark"] [class~="bg-orange-50/40"], :root[data-theme="dark"] [class~="bg-orange-50/50"], :root[data-theme="dark"] [class~="bg-orange-50/60"], :root[data-theme="dark"] [class~="bg-orange-50/70"], :root[data-theme="dark"] [class~="bg-orange-50/75"], :root[data-theme="dark"] [class~="bg-orange-50/80"], :root[data-theme="dark"] [class~="bg-orange-50/90"], :root[data-theme="dark"] [class~="bg-orange-50/95"], :root[data-theme="dark"] .hover\:bg-orange-50\/5:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/10:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/20:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/25:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/30:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/40:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/50:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/60:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/70:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/75:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/80:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/90:hover, :root[data-theme="dark"] .hover\:bg-orange-50\/95:hover { background-color: rgb(249 115 22 / 0.14); }
+:root[data-theme="dark"] .bg-orange-100, :root[data-theme="dark"] .hover\:bg-orange-100:hover { background-color: rgb(249 115 22 / 0.22); }
+:root[data-theme="dark"] .text-orange-700, :root[data-theme="dark"] .text-orange-800, :root[data-theme="dark"] .text-orange-900, :root[data-theme="dark"] .text-orange-950 { color: #fdba74; }
+:root[data-theme="dark"] .text-orange-600 { color: #fb923c; }
+:root[data-theme="dark"] .border-orange-100, :root[data-theme="dark"] .border-orange-200, :root[data-theme="dark"] .border-orange-300 { border-color: rgb(249 115 22 / 0.35); }
+:root[data-theme="dark"] .ring-orange-200, :root[data-theme="dark"] .ring-orange-300 { --tw-ring-color: rgb(249 115 22 / 0.35); }
+:root[data-theme="dark"] .from-orange-50, :root[data-theme="dark"] .from-orange-100 { --tw-gradient-from: rgb(249 115 22 / 0.16); }
+:root[data-theme="dark"] .bg-indigo-50, :root[data-theme="dark"] .hover\:bg-indigo-50:hover, :root[data-theme="dark"] [class~="bg-indigo-50/5"], :root[data-theme="dark"] [class~="bg-indigo-50/10"], :root[data-theme="dark"] [class~="bg-indigo-50/20"], :root[data-theme="dark"] [class~="bg-indigo-50/25"], :root[data-theme="dark"] [class~="bg-indigo-50/30"], :root[data-theme="dark"] [class~="bg-indigo-50/40"], :root[data-theme="dark"] [class~="bg-indigo-50/50"], :root[data-theme="dark"] [class~="bg-indigo-50/60"], :root[data-theme="dark"] [class~="bg-indigo-50/70"], :root[data-theme="dark"] [class~="bg-indigo-50/75"], :root[data-theme="dark"] [class~="bg-indigo-50/80"], :root[data-theme="dark"] [class~="bg-indigo-50/90"], :root[data-theme="dark"] [class~="bg-indigo-50/95"], :root[data-theme="dark"] .hover\:bg-indigo-50\/5:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/10:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/20:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/25:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/30:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/40:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/50:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/60:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/70:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/75:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/80:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/90:hover, :root[data-theme="dark"] .hover\:bg-indigo-50\/95:hover { background-color: rgb(99 102 241 / 0.14); }
+:root[data-theme="dark"] .bg-indigo-100, :root[data-theme="dark"] .hover\:bg-indigo-100:hover { background-color: rgb(99 102 241 / 0.22); }
+:root[data-theme="dark"] .text-indigo-700, :root[data-theme="dark"] .text-indigo-800, :root[data-theme="dark"] .text-indigo-900, :root[data-theme="dark"] .text-indigo-950 { color: #a5b4fc; }
+:root[data-theme="dark"] .text-indigo-600 { color: #818cf8; }
+:root[data-theme="dark"] .border-indigo-100, :root[data-theme="dark"] .border-indigo-200, :root[data-theme="dark"] .border-indigo-300 { border-color: rgb(99 102 241 / 0.35); }
+:root[data-theme="dark"] .ring-indigo-200, :root[data-theme="dark"] .ring-indigo-300 { --tw-ring-color: rgb(99 102 241 / 0.35); }
+:root[data-theme="dark"] .from-indigo-50, :root[data-theme="dark"] .from-indigo-100 { --tw-gradient-from: rgb(99 102 241 / 0.16); }
+:root[data-theme="dark"] .bg-yellow-50, :root[data-theme="dark"] .hover\:bg-yellow-50:hover, :root[data-theme="dark"] [class~="bg-yellow-50/5"], :root[data-theme="dark"] [class~="bg-yellow-50/10"], :root[data-theme="dark"] [class~="bg-yellow-50/20"], :root[data-theme="dark"] [class~="bg-yellow-50/25"], :root[data-theme="dark"] [class~="bg-yellow-50/30"], :root[data-theme="dark"] [class~="bg-yellow-50/40"], :root[data-theme="dark"] [class~="bg-yellow-50/50"], :root[data-theme="dark"] [class~="bg-yellow-50/60"], :root[data-theme="dark"] [class~="bg-yellow-50/70"], :root[data-theme="dark"] [class~="bg-yellow-50/75"], :root[data-theme="dark"] [class~="bg-yellow-50/80"], :root[data-theme="dark"] [class~="bg-yellow-50/90"], :root[data-theme="dark"] [class~="bg-yellow-50/95"], :root[data-theme="dark"] .hover\:bg-yellow-50\/5:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/10:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/20:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/25:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/30:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/40:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/50:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/60:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/70:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/75:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/80:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/90:hover, :root[data-theme="dark"] .hover\:bg-yellow-50\/95:hover { background-color: rgb(234 179 8 / 0.14); }
+:root[data-theme="dark"] .bg-yellow-100, :root[data-theme="dark"] .hover\:bg-yellow-100:hover { background-color: rgb(234 179 8 / 0.22); }
+:root[data-theme="dark"] .text-yellow-700, :root[data-theme="dark"] .text-yellow-800, :root[data-theme="dark"] .text-yellow-900, :root[data-theme="dark"] .text-yellow-950 { color: #fde047; }
+:root[data-theme="dark"] .text-yellow-600 { color: #facc15; }
+:root[data-theme="dark"] .border-yellow-100, :root[data-theme="dark"] .border-yellow-200, :root[data-theme="dark"] .border-yellow-300 { border-color: rgb(234 179 8 / 0.35); }
+:root[data-theme="dark"] .ring-yellow-200, :root[data-theme="dark"] .ring-yellow-300 { --tw-ring-color: rgb(234 179 8 / 0.35); }
+:root[data-theme="dark"] .from-yellow-50, :root[data-theme="dark"] .from-yellow-100 { --tw-gradient-from: rgb(234 179 8 / 0.16); }
+:root[data-theme="dark"] .bg-teal-50, :root[data-theme="dark"] .hover\:bg-teal-50:hover, :root[data-theme="dark"] [class~="bg-teal-50/5"], :root[data-theme="dark"] [class~="bg-teal-50/10"], :root[data-theme="dark"] [class~="bg-teal-50/20"], :root[data-theme="dark"] [class~="bg-teal-50/25"], :root[data-theme="dark"] [class~="bg-teal-50/30"], :root[data-theme="dark"] [class~="bg-teal-50/40"], :root[data-theme="dark"] [class~="bg-teal-50/50"], :root[data-theme="dark"] [class~="bg-teal-50/60"], :root[data-theme="dark"] [class~="bg-teal-50/70"], :root[data-theme="dark"] [class~="bg-teal-50/75"], :root[data-theme="dark"] [class~="bg-teal-50/80"], :root[data-theme="dark"] [class~="bg-teal-50/90"], :root[data-theme="dark"] [class~="bg-teal-50/95"], :root[data-theme="dark"] .hover\:bg-teal-50\/5:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/10:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/20:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/25:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/30:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/40:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/50:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/60:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/70:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/75:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/80:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/90:hover, :root[data-theme="dark"] .hover\:bg-teal-50\/95:hover { background-color: rgb(20 184 166 / 0.14); }
+:root[data-theme="dark"] .bg-teal-100, :root[data-theme="dark"] .hover\:bg-teal-100:hover { background-color: rgb(20 184 166 / 0.22); }
+:root[data-theme="dark"] .text-teal-700, :root[data-theme="dark"] .text-teal-800, :root[data-theme="dark"] .text-teal-900, :root[data-theme="dark"] .text-teal-950 { color: #5eead4; }
+:root[data-theme="dark"] .text-teal-600 { color: #2dd4bf; }
+:root[data-theme="dark"] .border-teal-100, :root[data-theme="dark"] .border-teal-200, :root[data-theme="dark"] .border-teal-300 { border-color: rgb(20 184 166 / 0.35); }
+:root[data-theme="dark"] .ring-teal-200, :root[data-theme="dark"] .ring-teal-300 { --tw-ring-color: rgb(20 184 166 / 0.35); }
+:root[data-theme="dark"] .from-teal-50, :root[data-theme="dark"] .from-teal-100 { --tw-gradient-from: rgb(20 184 166 / 0.16); }
+:root[data-theme="dark"] .bg-rose-50, :root[data-theme="dark"] .hover\:bg-rose-50:hover, :root[data-theme="dark"] [class~="bg-rose-50/5"], :root[data-theme="dark"] [class~="bg-rose-50/10"], :root[data-theme="dark"] [class~="bg-rose-50/20"], :root[data-theme="dark"] [class~="bg-rose-50/25"], :root[data-theme="dark"] [class~="bg-rose-50/30"], :root[data-theme="dark"] [class~="bg-rose-50/40"], :root[data-theme="dark"] [class~="bg-rose-50/50"], :root[data-theme="dark"] [class~="bg-rose-50/60"], :root[data-theme="dark"] [class~="bg-rose-50/70"], :root[data-theme="dark"] [class~="bg-rose-50/75"], :root[data-theme="dark"] [class~="bg-rose-50/80"], :root[data-theme="dark"] [class~="bg-rose-50/90"], :root[data-theme="dark"] [class~="bg-rose-50/95"], :root[data-theme="dark"] .hover\:bg-rose-50\/5:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/10:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/20:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/25:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/30:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/40:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/50:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/60:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/70:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/75:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/80:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/90:hover, :root[data-theme="dark"] .hover\:bg-rose-50\/95:hover { background-color: rgb(244 63 94 / 0.14); }
+:root[data-theme="dark"] .bg-rose-100, :root[data-theme="dark"] .hover\:bg-rose-100:hover { background-color: rgb(244 63 94 / 0.22); }
+:root[data-theme="dark"] .text-rose-700, :root[data-theme="dark"] .text-rose-800, :root[data-theme="dark"] .text-rose-900, :root[data-theme="dark"] .text-rose-950 { color: #fda4af; }
+:root[data-theme="dark"] .text-rose-600 { color: #fb7185; }
+:root[data-theme="dark"] .border-rose-100, :root[data-theme="dark"] .border-rose-200, :root[data-theme="dark"] .border-rose-300 { border-color: rgb(244 63 94 / 0.35); }
+:root[data-theme="dark"] .ring-rose-200, :root[data-theme="dark"] .ring-rose-300 { --tw-ring-color: rgb(244 63 94 / 0.35); }
+:root[data-theme="dark"] .from-rose-50, :root[data-theme="dark"] .from-rose-100 { --tw-gradient-from: rgb(244 63 94 / 0.16); }
+:root[data-theme="dark"] .bg-purple-50, :root[data-theme="dark"] .hover\:bg-purple-50:hover, :root[data-theme="dark"] [class~="bg-purple-50/5"], :root[data-theme="dark"] [class~="bg-purple-50/10"], :root[data-theme="dark"] [class~="bg-purple-50/20"], :root[data-theme="dark"] [class~="bg-purple-50/25"], :root[data-theme="dark"] [class~="bg-purple-50/30"], :root[data-theme="dark"] [class~="bg-purple-50/40"], :root[data-theme="dark"] [class~="bg-purple-50/50"], :root[data-theme="dark"] [class~="bg-purple-50/60"], :root[data-theme="dark"] [class~="bg-purple-50/70"], :root[data-theme="dark"] [class~="bg-purple-50/75"], :root[data-theme="dark"] [class~="bg-purple-50/80"], :root[data-theme="dark"] [class~="bg-purple-50/90"], :root[data-theme="dark"] [class~="bg-purple-50/95"], :root[data-theme="dark"] .hover\:bg-purple-50\/5:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/10:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/20:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/25:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/30:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/40:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/50:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/60:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/70:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/75:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/80:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/90:hover, :root[data-theme="dark"] .hover\:bg-purple-50\/95:hover { background-color: rgb(168 85 247 / 0.14); }
+:root[data-theme="dark"] .bg-purple-100, :root[data-theme="dark"] .hover\:bg-purple-100:hover { background-color: rgb(168 85 247 / 0.22); }
+:root[data-theme="dark"] .text-purple-700, :root[data-theme="dark"] .text-purple-800, :root[data-theme="dark"] .text-purple-900, :root[data-theme="dark"] .text-purple-950 { color: #d8b4fe; }
+:root[data-theme="dark"] .text-purple-600 { color: #c084fc; }
+:root[data-theme="dark"] .border-purple-100, :root[data-theme="dark"] .border-purple-200, :root[data-theme="dark"] .border-purple-300 { border-color: rgb(168 85 247 / 0.35); }
+:root[data-theme="dark"] .ring-purple-200, :root[data-theme="dark"] .ring-purple-300 { --tw-ring-color: rgb(168 85 247 / 0.35); }
+:root[data-theme="dark"] .from-purple-50, :root[data-theme="dark"] .from-purple-100 { --tw-gradient-from: rgb(168 85 247 / 0.16); }
+:root[data-theme="dark"] .bg-brand-50, :root[data-theme="dark"] .hover\:bg-brand-50:hover, :root[data-theme="dark"] [class~="bg-brand-50/5"], :root[data-theme="dark"] [class~="bg-brand-50/10"], :root[data-theme="dark"] [class~="bg-brand-50/20"], :root[data-theme="dark"] [class~="bg-brand-50/25"], :root[data-theme="dark"] [class~="bg-brand-50/30"], :root[data-theme="dark"] [class~="bg-brand-50/40"], :root[data-theme="dark"] [class~="bg-brand-50/50"], :root[data-theme="dark"] [class~="bg-brand-50/60"], :root[data-theme="dark"] [class~="bg-brand-50/70"], :root[data-theme="dark"] [class~="bg-brand-50/75"], :root[data-theme="dark"] [class~="bg-brand-50/80"], :root[data-theme="dark"] [class~="bg-brand-50/90"], :root[data-theme="dark"] [class~="bg-brand-50/95"], :root[data-theme="dark"] .hover\:bg-brand-50\/5:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/10:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/20:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/25:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/30:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/40:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/50:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/60:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/70:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/75:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/80:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/90:hover, :root[data-theme="dark"] .hover\:bg-brand-50\/95:hover { background-color: rgb(20 163 139 / 0.14); }
+:root[data-theme="dark"] .bg-brand-100, :root[data-theme="dark"] .hover\:bg-brand-100:hover { background-color: rgb(20 163 139 / 0.22); }
+:root[data-theme="dark"] .text-brand-700, :root[data-theme="dark"] .text-brand-800, :root[data-theme="dark"] .text-brand-900, :root[data-theme="dark"] .text-brand-950 { color: #7ee3d2; }
+:root[data-theme="dark"] .text-brand-600 { color: #3cc9b0; }
+:root[data-theme="dark"] .border-brand-100, :root[data-theme="dark"] .border-brand-200, :root[data-theme="dark"] .border-brand-300 { border-color: rgb(20 163 139 / 0.35); }
+:root[data-theme="dark"] .ring-brand-200, :root[data-theme="dark"] .ring-brand-300 { --tw-ring-color: rgb(20 163 139 / 0.35); }
+:root[data-theme="dark"] .from-brand-50, :root[data-theme="dark"] .from-brand-100 { --tw-gradient-from: rgb(20 163 139 / 0.16); }
+:root[data-theme="dark"] .text-slate-950 { color: #f8fafc; }
+:root[data-theme="dark"] .text-slate-400 { color: #8391a7; }
+:root[data-theme="dark"] .text-slate-300 { color: #64748b; }
+:root[data-theme="dark"] [class~="bg-slate-50/80"], :root[data-theme="dark"] [class~="bg-slate-50/70"] { background-color: #0f172a; }
+:root[data-theme="dark"] [class~="border-slate-200/80"] { border-color: #263449; }
+:root[data-theme="dark"] .ring-slate-200 { --tw-ring-color: #334155; }
+:root[data-theme="dark"] .to-white { --tw-gradient-to: #111827; }
+:root[data-theme="dark"] .via-white { --tw-gradient-via: #111827; }
+
+/* Dashboard banner: dark teal version, photo dimmed so the greeting stays readable. */
+:root[data-theme="dark"] .dc-hero { background-image: linear-gradient(to right, #0f2f2b, #123a35, #164540); }
+:root[data-theme="dark"] .dc-hero-fade { background-image: linear-gradient(to right, #0f2f2b, #12362f 66%, rgb(18 54 47 / 0.55) 80%, transparent); }
+:root[data-theme="dark"] .dc-hero-img { filter: brightness(0.62) saturate(0.9); }
+
+.input {
+  margin-top: 0.5rem;
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.65rem 0.875rem;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.input:focus {
+  border-color: #14a38b;
+  outline: 3px solid rgb(20 163 139 / 0.12);
+}
+
+::selection {
+  background: #c9f5ec;
+  color: #133f39;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Visible focus for keyboard users (SRS §14.4) */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}
+
+/* Charts drawn as SVG use fixed light colours; soften them in dark mode. */
+:root[data-theme="dark"] .dc-chart-grid { stroke: #223047; }
+:root[data-theme="dark"] .dc-chart-axis { stroke: #334155; }
+:root[data-theme="dark"] .dc-chart-hover { fill: #1e293b; }
+
+/* Opacity variants of the light surfaces (bg-slate-50/50, hover:bg-slate-50/70, bg-white/80 ...). */
+:root[data-theme="dark"] .bg-slate-50, :root[data-theme="dark"] [class~="bg-slate-50/5"], :root[data-theme="dark"] [class~="bg-slate-50/10"], :root[data-theme="dark"] [class~="bg-slate-50/20"], :root[data-theme="dark"] [class~="bg-slate-50/25"], :root[data-theme="dark"] [class~="bg-slate-50/30"], :root[data-theme="dark"] [class~="bg-slate-50/40"], :root[data-theme="dark"] [class~="bg-slate-50/50"], :root[data-theme="dark"] [class~="bg-slate-50/60"], :root[data-theme="dark"] [class~="bg-slate-50/70"], :root[data-theme="dark"] [class~="bg-slate-50/75"], :root[data-theme="dark"] [class~="bg-slate-50/80"], :root[data-theme="dark"] [class~="bg-slate-50/90"], :root[data-theme="dark"] [class~="bg-slate-50/95"], :root[data-theme="dark"] [class~="bg-white/5"], :root[data-theme="dark"] [class~="bg-white/10"], :root[data-theme="dark"] [class~="bg-white/20"], :root[data-theme="dark"] [class~="bg-white/25"], :root[data-theme="dark"] [class~="bg-white/30"], :root[data-theme="dark"] [class~="bg-white/40"], :root[data-theme="dark"] [class~="bg-white/50"], :root[data-theme="dark"] [class~="bg-white/60"], :root[data-theme="dark"] [class~="bg-white/70"], :root[data-theme="dark"] [class~="bg-white/75"], :root[data-theme="dark"] [class~="bg-white/80"], :root[data-theme="dark"] [class~="bg-white/90"], :root[data-theme="dark"] [class~="bg-white/95"] { background-color: #0f172a; }
+:root[data-theme="dark"] .hover\:bg-slate-50:hover, :root[data-theme="dark"] .hover\:bg-slate-100:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/5:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/10:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/20:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/25:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/30:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/40:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/50:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/60:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/70:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/75:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/80:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/90:hover, :root[data-theme="dark"] .hover\:bg-slate-50\/95:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/5:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/10:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/20:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/25:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/30:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/40:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/50:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/60:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/70:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/75:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/80:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/90:hover, :root[data-theme="dark"] .hover\:bg-slate-100\/95:hover { background-color: #1e293b; }
+
+/* Drawn garment pictures: a faint outline so black or navy garments stay visible on dark tiles. */
+:root[data-theme="dark"] .dc-garment-art { filter: drop-shadow(0 0 0.75px rgb(255 255 255 / 0.65)) drop-shadow(0 0 4px rgb(255 255 255 / 0.10)); }
+
+/* Swipeable tab strips: scroll sideways on phones without showing a scrollbar. */
+.dc-tabs { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.dc-tabs::-webkit-scrollbar { display: none; }
+.dc-tabs > * { flex-shrink: 0; }
