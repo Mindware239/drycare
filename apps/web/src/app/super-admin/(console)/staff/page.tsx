@@ -30,7 +30,7 @@ export default function StaffPage() {
 
   return (
     <>
-      <ConsoleHeader title="Admins & security" description="People who can open the DryCare Control Center. Every sign-in needs the admin's password and a one-time code sent to their email." />
+      <ConsoleHeader title="Admins & security" description="People who can open the Drycare Control Center. Every sign-in needs the admin's password and a one-time code sent to their email." />
       {notice && <div className="mb-5"><Alert tone="green" onClose={() => setNotice("")}>{notice}</Alert></div>}
       {error && <div className="mb-5"><Alert>{error}</Alert></div>}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.3fr_1fr] [&>*]:min-w-0">

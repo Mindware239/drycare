@@ -42,7 +42,7 @@ function StatusInner() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-brand-50 to-white px-4 py-8">
       <div className="mx-auto max-w-md">
-        <div className="mb-6 flex items-center gap-3"><Logo className="h-9 w-9" /><div><p className="font-semibold text-slate-900">{data?.storeName ?? "DryCare"}</p><p className="text-xs text-slate-500">{data?.branchName ?? "Self-service laundry"}</p></div></div>
+        <div className="mb-6 flex items-center gap-3"><Logo className="h-7 w-auto" /><div><p className="font-semibold text-slate-900">{data?.storeName ?? "Drycare"}</p><p className="text-xs text-slate-500">{data?.branchName ?? "Self-service laundry"}</p></div></div>
         {error ? <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p> : !data ? <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" /> : (
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Order {data.orderNumber}</p>

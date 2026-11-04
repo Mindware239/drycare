@@ -35,7 +35,7 @@ export default function InvoicesPage() {
   const rows = data?.invoices ?? [];
   return (
     <>
-      <ConsoleHeader title="Tax invoices" description="GST invoices issued to shops for their DryCare subscription. An invoice is created automatically for every verified or online payment, numbered in one continuous series."
+      <ConsoleHeader title="Tax invoices" description="GST invoices issued to shops for their Drycare subscription. An invoice is created automatically for every verified or online payment, numbered in one continuous series."
         actions={<CsvButton disabled={!rows.length} onClick={() => exportCsv(`drycare-invoices-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((r) => ({ Invoice: r.number, Date: r.issuedAt.slice(0, 10), Business: r.organizationName, Plan: r.planName ?? "", "Taxable (INR)": rupees(r.subtotalPaise), "GST (INR)": rupees(r.taxPaise), "Total (INR)": rupees(r.totalPaise), Status: r.status, Payment: r.reference })))} />} />
       {error && <div className="mb-5"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-5"><Alert tone="green" onClose={() => setNotice("")}>{notice}</Alert></div>}

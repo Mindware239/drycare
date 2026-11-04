@@ -23,7 +23,7 @@ export default function LinkDevicePage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f4f7f6] p-5">
+    <main className="flex min-h-screen items-center justify-center bg-[#f7f7f5] p-5">
       <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_10px_40px_rgba(15,23,42,.06)]">
         <Wordmark />
         <div className="mt-8">{children}</div>
@@ -78,7 +78,7 @@ function LinkDevice() {
     return (
       <Shell>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Sign in to approve your shop PC</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Sign in with your DryCare Cloud account, or create one, to link the PC showing code <b className="font-mono">{code || "…"}</b>.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Sign in with your Drycare Cloud account, or create one, to link the PC showing code <b className="font-mono">{code || "…"}</b>.</p>
         <div className="mt-6 flex flex-col gap-2">
           <Link href={`/login?next=${encodeURIComponent(`/link-device?code=${code}`)}`}><Button size="lg" className="w-full">Sign in</Button></Link>
           <Link href={`/signup?next=${encodeURIComponent(`/link-device?code=${code}`)}`}><Button size="lg" variant="secondary" className="w-full">Create a cloud account</Button></Link>
@@ -91,11 +91,11 @@ function LinkDevice() {
       <Shell>
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CircleCheck className="h-6 w-6" /></span>
         <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">PC linked</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">The PC now uploads its records to <b>{req?.shop.name}</b> in DryCare Cloud. The cloud copy is view-only; the shop keeps working on the PC as before.</p>
-        {!done.entitled && <div className="mt-4"><Alert tone="amber">Cloud sync is a paid add-on. Choose a DryCare Cloud plan for this shop to start uploading — until then everything stays safely on the PC.</Alert></div>}
+        <p className="mt-2 text-sm leading-6 text-slate-600">The PC now uploads its records to <b>{req?.shop.name}</b> in Drycare Cloud. The cloud copy is view-only; the shop keeps working on the PC as before.</p>
+        {!done.entitled && <div className="mt-4"><Alert tone="amber">Cloud sync is a paid add-on. Choose a Drycare Cloud plan for this shop to start uploading — until then everything stays safely on the PC.</Alert></div>}
         <div className="mt-6 flex flex-col gap-2">
           {!done.entitled && <Button size="lg" className="w-full" onClick={() => openShop("/billing")}>Choose a cloud plan</Button>}
-          <Button size="lg" variant={done.entitled ? "primary" : "secondary"} className="w-full" onClick={() => openShop("/dashboard")}>Open the shop in DryCare Cloud</Button>
+          <Button size="lg" variant={done.entitled ? "primary" : "secondary"} className="w-full" onClick={() => openShop("/dashboard")}>Open the shop in Drycare Cloud</Button>
         </div>
       </Shell>
     );

@@ -53,7 +53,7 @@ export default function BillingPage() {
     return (
       <>
         <PageHeader title="Plan & billing" />
-        <Alert tone="blue">This Windows PC runs DryCare with a desktop license. Renewals and license keys are handled by your DryCare provider; open <Link href="/settings" className="font-semibold underline">Business settings</Link> to see the license status.</Alert>
+        <Alert tone="blue">This Windows PC runs Drycare with a desktop license. Renewals and license keys are handled by your Drycare provider; open <Link href="/settings" className="font-semibold underline">Business settings</Link> to see the license status.</Alert>
       </>
     );
   }
@@ -67,7 +67,7 @@ export default function BillingPage() {
 
   return (
     <>
-      <PageHeader title="Plan & billing" subtitle="Your DryCare subscription, how to pay, and GST invoices for your accounts." />
+      <PageHeader title="Plan & billing" subtitle="Your Drycare subscription, how to pay, and GST invoices for your accounts." />
       {notice && <div className="mb-5"><Alert tone={notice.tone} onClose={() => setNotice(null)}>{notice.text}</Alert></div>}
 
       {/* Status */}
@@ -82,7 +82,7 @@ export default function BillingPage() {
           ) : data.organization.status === "trial" ? (
             <>
               <p className="text-lg font-semibold text-slate-900">{trialDays !== null && trialDays > 0 ? `Free trial · ${trialDays} day${trialDays === 1 ? "" : "s"} left` : "Your free trial has ended"}</p>
-              <p className="text-sm text-slate-600">{trialDays !== null && trialDays > 0 ? `Ends ${dateOnly(data.organization.trialEndsAt)}. Choose a plan below to keep using DryCare without interruption.` : "Choose a plan and pay to continue using DryCare."}</p>
+              <p className="text-sm text-slate-600">{trialDays !== null && trialDays > 0 ? `Ends ${dateOnly(data.organization.trialEndsAt)}. Choose a plan below to keep using Drycare without interruption.` : "Choose a plan and pay to continue using Drycare."}</p>
             </>
           ) : (
             <>
@@ -95,7 +95,7 @@ export default function BillingPage() {
       </section>
 
       {!data.plans.length ? (
-        <Alert tone="amber">Plans are not available yet. Please contact DryCare support to subscribe.</Alert>
+        <Alert tone="amber">Plans are not available yet. Please contact Drycare support to subscribe.</Alert>
       ) : (
         <>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">1 · Choose a plan</h2>
@@ -127,7 +127,7 @@ export default function BillingPage() {
           {plan && (
             <>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">2 · Pay {money(plan.payablePaise)} for {plan.name}{active && sub?.plan?.id === plan.id ? " (renewal)" : ""}</h2>
-              {active && sub?.plan && sub.plan.id !== plan.id && <div className="mb-4"><Alert tone="amber">You are on {sub.plan.name} until {dateOnly(sub.endsAt)}. To switch to {plan.name}, contact DryCare support so the change is applied correctly.</Alert></div>}
+              {active && sub?.plan && sub.plan.id !== plan.id && <div className="mb-4"><Alert tone="amber">You are on {sub.plan.name} until {dateOnly(sub.endsAt)}. To switch to {plan.name}, contact Drycare support so the change is applied correctly.</Alert></div>}
               <PayOptions billing={data} plan={plan} disabled={Boolean(active && sub?.plan && sub.plan.id !== plan.id)} onDone={(text, tone = "green") => { setNotice({ tone, text }); void reload(); }} />
             </>
           )}
@@ -180,7 +180,7 @@ function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; pla
   ] as const;
   const [tab, setTab] = useState<string>(options[0]?.key ?? "");
   const [paying, setPaying] = useState(false);
-  if (!options.length) return <Alert tone="amber">Payment details are being set up. Please contact DryCare support to pay.</Alert>;
+  if (!options.length) return <Alert tone="amber">Payment details are being set up. Please contact Drycare support to pay.</Alert>;
 
   async function payOnline() {
     setPaying(true);
@@ -224,7 +224,7 @@ function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; pla
             <div className="space-y-4">
               <p className="text-sm text-slate-600">Pay by UPI app, debit / credit card, net banking or wallet through Razorpay. Your plan is activated instantly and the GST invoice is issued automatically.</p>
               <Button size="lg" onClick={() => void payOnline()} loading={paying} disabled={disabled}><ShieldCheck className="h-4 w-4" />Pay {money(plan.payablePaise)} securely</Button>
-              <p className="text-xs text-slate-500">Card and bank details are entered on Razorpay&apos;s secure window; DryCare never sees them.</p>
+              <p className="text-xs text-slate-500">Card and bank details are entered on Razorpay&apos;s secure window; Drycare never sees them.</p>
             </div>
           )}
           {tab === "upi" && billing.pay.upi && (
@@ -294,7 +294,7 @@ function ReportPayment({ plan, upi, bank, disabled, onDone }: { plan: Plan; upi:
       <Button type="submit" className="mt-4 w-full" loading={saving} disabled={disabled || reference.trim().length < 6}>
         {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Report payment of {money(plan.payablePaise)}
       </Button>
-      <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-4 text-slate-500"><TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />Never share your UPI PIN, OTP or bank password with anyone, including DryCare staff.</p>
+      <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-4 text-slate-500"><TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />Never share your UPI PIN, OTP or bank password with anyone, including Drycare staff.</p>
     </form>
   );
 }

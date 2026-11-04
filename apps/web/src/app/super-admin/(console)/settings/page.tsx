@@ -39,7 +39,7 @@ export default function SettingsPage() {
   }, []);
   return (
     <>
-      <ConsoleHeader title="Settings & payment gateways" description="How DryCare bills shops: your company and GST details on every invoice, how shops can pay, and the health of the server." />
+      <ConsoleHeader title="Settings & payment gateways" description="How Drycare bills shops: your company and GST details on every invoice, how shops can pay, and the health of the server." />
       <div className="mb-6"><SegmentedTabs value={tab} onChange={setTab} options={[{ value: "company", label: "Company & invoices" }, { value: "payments", label: "Payments & gateway" }, { value: "system", label: "System health" }]} /></div>
       {tab === "company" ? <CompanyTab /> : tab === "payments" ? <PaymentsTab /> : <SystemTab />}
     </>
@@ -81,10 +81,10 @@ function CompanyTab() {
     <form onSubmit={save} className="space-y-6">
       {gaps.length > 0 && <Alert tone="amber">To issue valid GST tax invoices, add: <strong>{gaps.join(", ")}</strong>. Payments can still be recorded meanwhile.</Alert>}
       <div className="grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
-        <Panel title={<T icon={Building2}>Company (seller) details</T>} description="Printed at the top of every DryCare invoice">
+        <Panel title={<T icon={Building2}>Company (seller) details</T>} description="Printed at the top of every Drycare invoice">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Legal name" required className="sm:col-span-2"><Input value={s.legalName} onChange={(e) => set("legalName", e.target.value)} placeholder="Mindware Infotech Pvt Ltd" /></Field>
-            <Field label="Brand / trade name" className="sm:col-span-2"><Input value={s.tradeName} onChange={(e) => set("tradeName", e.target.value)} placeholder="DryCare" /></Field>
+            <Field label="Brand / trade name" className="sm:col-span-2"><Input value={s.tradeName} onChange={(e) => set("tradeName", e.target.value)} placeholder="Drycare" /></Field>
             <Field label="GSTIN" hint="15 characters"><Input value={s.gstin} onChange={(e) => set("gstin", e.target.value.toUpperCase())} maxLength={15} className="font-mono" placeholder="27ABCDE1234F1Z5" /></Field>
             <Field label="PAN"><Input value={s.pan} onChange={(e) => set("pan", e.target.value.toUpperCase())} maxLength={10} className="font-mono" placeholder="ABCDE1234F" /></Field>
             <Field label="CIN (companies)" className="sm:col-span-2"><Input value={s.cin} onChange={(e) => set("cin", e.target.value.toUpperCase())} className="font-mono" /></Field>
@@ -129,7 +129,7 @@ function CompanyTab() {
                 </Select>
               </Field>
               <Field label="Terms on invoice" className="sm:col-span-2"><Textarea rows={2} value={s.invoice.terms} onChange={(e) => setInv("terms", e.target.value)} placeholder="Subscription fees are non-refundable once the period has started." /></Field>
-              <Field label="Footer line"><Input value={s.invoice.footer} onChange={(e) => setInv("footer", e.target.value)} placeholder="Thank you for choosing DryCare" /></Field>
+              <Field label="Footer line"><Input value={s.invoice.footer} onChange={(e) => setInv("footer", e.target.value)} placeholder="Thank you for choosing Drycare" /></Field>
               <Field label="Authorised signatory"><Input value={s.invoice.signatory} onChange={(e) => setInv("signatory", e.target.value)} placeholder="Director" /></Field>
             </div>
           </Panel>

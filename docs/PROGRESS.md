@@ -321,7 +321,7 @@ Follow the current prioritized plan in [COMMERCIAL_AUDIT.md](./COMMERCIAL_AUDIT.
 
 ## Windows app: 7-day demo, then upgrade (2026-10-28)
 
-- Unlicensed desktop installs run as a full **7-day demo** (`lib/license.ts` `demoState`, `DEMO_DAYS`). After that every API call answers 402 `LICENSE_REQUIRED` ("Your 7-day DryCare demo has ended…") and the app opens `/activate`, which now shows "Your 7-day demo has ended", the data-is-kept note, the 3 steps to buy, and the PC request code. During the demo a banner shows days left with **Upgrade now** (`/activate?upgrade=1`, owners) to activate early.
+- Unlicensed desktop installs run as a full **7-day demo** (`lib/license.ts` `demoState`, `DEMO_DAYS`). After that every feature API call answers 402 `LICENSE_REQUIRED` ("Your 7-day DryCare demo has ended…") while the web screens always load, and the app opens `/activate`, which now shows "Your 7-day demo has ended", the data-is-kept note, the 3 steps to buy, and the PC request code. During the demo a banner shows days left with **Upgrade now** (`/activate?upgrade=1`, owners) to activate early.
 - Start = earliest of `demo.json` (next to `license.json` in the app's user-data folder, HMAC-sealed) and the oldest store record in the local database (set at start-up in `apps/desktop/src/server-entry.ts`). Deleting `demo.json` doesn't restart it; editing it or moving the clock back more than a day ends it. Reinstalling keeps app data, so the demo carries over.
 - Cloud signups keep their own 7-day trial + read-only rules (`subscriptionAccess.ts`); development builds of the desktop app are never limited.
 - `pnpm demo-test` (10 checks). Desktop version 0.1.5.

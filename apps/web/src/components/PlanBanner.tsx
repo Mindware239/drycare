@@ -20,7 +20,7 @@ export function PlanBanner({ canManage }: { canManage: boolean }) {
     return (
       <div role="status" className={cx("mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm", demo.daysLeft <= 2 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900")}>
         <CalendarClock className="h-4 w-4 shrink-0" />
-        <p className="min-w-0 flex-1"><strong>DryCare demo:</strong> {demo.daysLeft} day{demo.daysLeft === 1 ? "" : "s"} left. After that DryCare asks for an upgrade; your data is kept.{!canManage && " Tell the store owner."}</p>
+        <p className="min-w-0 flex-1"><strong>Drycare demo:</strong> {demo.daysLeft} day{demo.daysLeft === 1 ? "" : "s"} left. After that Drycare asks for an upgrade; your data is kept.{!canManage && " Tell the store owner."}</p>
         {canManage && <Link href="/activate?upgrade=1" className="rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-800">Upgrade now</Link>}
       </div>
     );
@@ -39,9 +39,9 @@ export function PlanBanner({ canManage }: { canManage: boolean }) {
   let text = "";
   if (!a.writable) {
     tone = "red";
-    text = a.reason === "suspended" ? "This account is on hold. Contact DryCare support."
-      : a.reason === "trial_ended" ? "Your free trial has ended. DryCare is read-only: you can see everything, but new orders and changes need a plan."
-      : "Your plan has expired. DryCare is read-only until it is renewed.";
+    text = a.reason === "suspended" ? "This account is on hold. Contact Drycare support."
+      : a.reason === "trial_ended" ? "Your free trial has ended. Drycare is read-only: you can see everything, but new orders and changes need a plan."
+      : "Your plan has expired. Drycare is read-only until it is renewed.";
   } else if (a.reason === "trial" && days !== null && days <= 3) {
     tone = "amber";
     text = days <= 0 ? "Your free trial ends today." : `Your free trial ends in ${days} day${days === 1 ? "" : "s"}.`;

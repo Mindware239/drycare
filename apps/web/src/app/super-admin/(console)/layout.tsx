@@ -93,7 +93,7 @@ export default function SuperAdminConsoleLayout({ children }: { children: ReactN
   }
 
   if (state === "loading") {
-    return <div className="flex min-h-screen items-center justify-center gap-3 bg-slate-50 text-sm text-slate-500"><LoaderCircle className="h-5 w-5 animate-spin" />Opening DryCare Control Center…</div>;
+    return <div className="flex min-h-screen items-center justify-center gap-3 bg-slate-50 text-sm text-slate-500"><LoaderCircle className="h-5 w-5 animate-spin" />Opening Drycare Control Center…</div>;
   }
   if (state === "denied") {
     return (
@@ -101,7 +101,7 @@ export default function SuperAdminConsoleLayout({ children }: { children: ReactN
         <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
           <ShieldAlert className="mx-auto h-10 w-10 text-amber-600" />
           <h1 className="mt-4 text-2xl font-semibold text-slate-900">Super admin access required</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">You are signed in with a store account. Shop owners and staff cannot open the DryCare Control Center.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">You are signed in with a store account. Shop owners and staff cannot open the Drycare Control Center.</p>
           <div className="mt-6 flex justify-center gap-3">
             <Button variant="secondary" onClick={() => router.push("/dashboard")}>Back to my store</Button>
             <Button onClick={logout}>Sign in as super admin</Button>
@@ -121,9 +121,9 @@ export default function SuperAdminConsoleLayout({ children }: { children: ReactN
   const nav = (
     <nav aria-label="Control center" className="flex h-full flex-col bg-slate-950 text-slate-300">
       <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-5">
-        <Logo className="h-8 w-8" />
+        <Logo className="h-7 w-auto" dark />
         <div className="min-w-0 leading-tight">
-          <p className="text-sm font-semibold text-white">DryCare Control Center</p>
+          <p className="text-sm font-semibold text-white">Drycare Control Center</p>
           <p className="text-[11px] text-slate-400">Mindware · Software owner</p>
         </div>
       </div>

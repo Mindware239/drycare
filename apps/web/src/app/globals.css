@@ -1,15 +1,35 @@
 @import "tailwindcss";
 
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400 600; font-display: swap; src: url("/site/fonts/dm-sans-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400 600; font-display: swap; src: url("/site/fonts/dm-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Urbanist"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("/site/fonts/urbanist-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Urbanist"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("/site/fonts/urbanist-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* Colours and fonts from the Drycare design. Every screen takes its look from these. */
 @theme {
-  --color-brand-50: #effcf9;
-  --color-brand-100: #c9f5ec;
-  --color-brand-200: #94eadb;
-  --color-brand-500: #14a38b;
-  --color-brand-600: #0d8573;
-  --color-brand-700: #0f6a5d;
-  --color-brand-800: #11554c;
-  --color-brand-900: #133f39;
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-brand-50: #eef9f1;
+  --color-brand-100: #dff3e4;
+  --color-brand-200: #b9e6c5;
+  --color-brand-300: #8fd8a2;
+  --color-brand-400: #5fcb7a;
+  --color-brand-500: #3cbf5a;
+  --color-brand-600: #2a8a45;
+  --color-brand-700: #1f6b34;
+  --color-brand-800: #174f27;
+  --color-brand-900: #123d1f;
+  --color-brand-950: #0b2713;
+  --color-slate-50: #f7f7f5;
+  --color-slate-100: #f3f1ec;
+  --color-slate-200: #e4e1d9;
+  --color-slate-300: #c9c6bd;
+  --color-slate-400: #9a988f;
+  --color-slate-500: #6b6963;
+  --color-slate-600: #4f4e4a;
+  --color-slate-700: #3f3e3a;
+  --color-slate-800: #33332f;
+  --color-slate-900: #151514;
+  --color-slate-950: #0e0e0d;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 :root {
@@ -23,10 +43,18 @@
 }
 
 body {
-  background: #f5f7f8;
-  color: #0f172a;
+  background: #f7f7f5;
+  color: #151514;
   font-feature-settings: "tnum" 1;
 }
+
+h1, h2 {
+  font-family: "Urbanist", ui-sans-serif, system-ui, sans-serif;
+}
+
+.dc-logo-dark { display: none; }
+:root[data-theme="dark"] .dc-logo-light { display: none; }
+:root[data-theme="dark"] .dc-logo-dark { display: inline-block; }
 
 :root[data-theme="dark"] body {
   background: #0b1220;
@@ -219,8 +247,8 @@ body {
 :root[data-theme="dark"] .via-white { --tw-gradient-via: #111827; }
 
 /* Dashboard banner: dark teal version, photo dimmed so the greeting stays readable. */
-:root[data-theme="dark"] .dc-hero { background-image: linear-gradient(to right, #0f2f2b, #123a35, #164540); }
-:root[data-theme="dark"] .dc-hero-fade { background-image: linear-gradient(to right, #0f2f2b, #12362f 66%, rgb(18 54 47 / 0.55) 80%, transparent); }
+:root[data-theme="dark"] .dc-hero { background-image: linear-gradient(to right, #1a1a18, #1f1f1d, #232321); }
+:root[data-theme="dark"] .dc-hero-fade { background-image: linear-gradient(to right, #1a1a18, #1a1a18 66%, rgb(26 26 24 / 0.55) 80%, transparent); }
 :root[data-theme="dark"] .dc-hero-img { filter: brightness(0.62) saturate(0.9); }
 
 .input {

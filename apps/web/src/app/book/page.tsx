@@ -62,7 +62,7 @@ function BookingForm() {
   }
   return (
     <form onSubmit={submit} className="space-y-5">
-      <div className="rounded-2xl bg-gradient-to-br from-teal-700 to-emerald-600 p-5 text-white">
+      <div className="rounded-2xl bg-gradient-to-br from-brand-700 to-emerald-600 p-5 text-white">
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-100"><Truck className="h-4 w-4" />Free pickup request</p>
         <h1 className="mt-1 text-2xl font-bold">{shop.shopName}</h1>
         <p className="mt-1 text-sm text-emerald-50">{[shop.branchName, shop.address].filter(Boolean).join(" · ")}</p>
@@ -80,12 +80,12 @@ function BookingForm() {
         <input className={plainBox} value={f.pincode} onChange={set("pincode")} placeholder="PIN" inputMode="numeric" maxLength={6} aria-label="PIN code" autoComplete="postal-code" />
       </div>
       <div>
-        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><CalendarDays className="h-4 w-4 text-teal-700" />Pickup day</p>
+        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><CalendarDays className="h-4 w-4 text-brand-700" />Pickup day</p>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {nextDays(shop.firstDate, 7).map((d, i) => {
             const dt = new Date(d);
             return (
-              <button key={d} type="button" onClick={() => setF({ ...f, date: d })} className={cx("flex min-w-[64px] flex-col items-center rounded-xl border px-3 py-2 text-xs transition", f.date === d ? "border-teal-600 bg-teal-50 text-teal-900 ring-2 ring-teal-600/15" : "border-slate-200 text-slate-600 hover:border-slate-300")}>
+              <button key={d} type="button" onClick={() => setF({ ...f, date: d })} className={cx("flex min-w-[64px] flex-col items-center rounded-xl border px-3 py-2 text-xs transition", f.date === d ? "border-brand-600 bg-brand-50 text-brand-900 ring-2 ring-brand-600/15" : "border-slate-200 text-slate-600 hover:border-slate-300")}>
                 <span className="font-semibold">{i === 0 ? "Today" : i === 1 ? "Tomorrow" : dt.toLocaleDateString("en-IN", { weekday: "short" })}</span>
                 <span className="mt-0.5 text-lg font-bold">{dt.getDate()}</span>
                 <span>{dt.toLocaleDateString("en-IN", { month: "short" })}</span>
@@ -95,9 +95,9 @@ function BookingForm() {
         </div>
       </div>
       <div>
-        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><Clock3 className="h-4 w-4 text-teal-700" />Time</p>
+        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><Clock3 className="h-4 w-4 text-brand-700" />Time</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {shop.slots.map((s) => <button key={s} type="button" onClick={() => setF({ ...f, slot: s })} className={cx("rounded-xl border px-3 py-2.5 text-sm font-medium transition", f.slot === s ? "border-teal-600 bg-teal-50 text-teal-900" : "border-slate-200 text-slate-600 hover:border-slate-300")}>{slotLabel(s)}</button>)}
+          {shop.slots.map((s) => <button key={s} type="button" onClick={() => setF({ ...f, slot: s })} className={cx("rounded-xl border px-3 py-2.5 text-sm font-medium transition", f.slot === s ? "border-brand-600 bg-brand-50 text-brand-900" : "border-slate-200 text-slate-600 hover:border-slate-300")}>{slotLabel(s)}</button>)}
         </div>
       </div>
       <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-800">What should we pick up? (optional)</span><IconInput icon={Shirt} value={f.items} onChange={set("items")} placeholder="e.g. 2 suits, 1 saree, curtains" /></label>
@@ -112,11 +112,11 @@ function BookingForm() {
 
 export default function BookPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#f2f8f8] px-4 py-8">
-      <div className="pointer-events-none absolute -right-28 -top-28 h-80 w-80 rounded-full bg-teal-100/80 blur-2xl" aria-hidden="true" />
-      <div className="relative mx-auto w-full max-w-xl rounded-3xl border border-white bg-white p-5 shadow-[0_30px_80px_-30px_rgba(6,38,44,0.25)] sm:p-8">
+    <main className="relative min-h-screen overflow-hidden bg-[#f7f7f5] px-4 py-8">
+      <div className="pointer-events-none absolute -right-28 -top-28 h-80 w-80 rounded-full bg-brand-100/80 blur-2xl" aria-hidden="true" />
+      <div className="relative mx-auto w-full max-w-xl rounded-3xl border border-white bg-white p-5 shadow-[0_30px_80px_-30px_rgba(21,21,20,0.25)] sm:p-8">
         <Suspense><BookingForm /></Suspense>
-        <p className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400"><Logo className="h-5 w-5 rounded" />Powered by <BrandName className="text-xs text-slate-500" /></p>
+        <p className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400"><Logo className="h-4 w-auto" />Powered by <BrandName className="text-xs text-slate-500" /></p>
       </div>
     </main>
   );

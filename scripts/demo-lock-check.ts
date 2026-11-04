@@ -1,11 +1,15 @@
 /** Desktop demo lock, end to end through the real API server: day 8 blocks every feature; only the upgrade screen works. */
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 const dir = mkdtempSync(path.join(tmpdir(), "drycare-lock-"));
-Object.assign(process.env, { DRYCARE_MODE: "desktop", LICENSE_ENFORCED: "true", LICENSE_FILE: path.join(dir, "license.json"), LICENSE_INSTALLATION_ID: randomUUID(), LICENSE_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=\n-----END PUBLIC KEY-----\n" });
+const web = path.join(dir, "web");
+mkdirSync(path.join(web, "_next", "static"), { recursive: true });
+for (const page of ["index.html", "login.html", "activate.html", "dashboard.html", "404.html"]) writeFileSync(path.join(web, page), `<html>${page}</html>`);
+writeFileSync(path.join(web, "_next", "static", "app.js"), "// script");
+Object.assign(process.env, { DRYCARE_MODE: "desktop", LICENSE_ENFORCED: "true", WEB_DIST: web, LICENSE_FILE: path.join(dir, "license.json"), LICENSE_INSTALLATION_ID: randomUUID(), LICENSE_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=\n-----END PUBLIC KEY-----\n" });
 const lic = await import("../apps/api/src/lib/license");
 const { buildServer } = await import("../apps/api/src/app");
 const { sqlClient } = await import("../apps/api/src/db/client");
@@ -26,8 +30,9 @@ const FEATURES: [string, string, unknown?][] = [
   ["POST", "/api/v1/orders", {}],
   ["GET", "/api/v1/customers"],
   ["POST", "/api/v1/customers", { name: "X" }],
-  ["GET", "/api/v1/production/board"],
-  ["POST", "/api/v1/garments/scan", {}],
+  ["GET", "/api/v1/production/queues"],
+  ["GET", "/api/v1/scan/resolve?code=X"],
+  ["POST", "/api/v1/garments/00000000-0000-4000-8000-000000000000/transitions", {}],
   ["GET", "/api/v1/reports/catalogue"],
   ["GET", "/api/v1/laundry/config"],
   ["POST", "/api/v1/laundry/orders", {}],
@@ -35,7 +40,7 @@ const FEATURES: [string, string, unknown?][] = [
   ["GET", "/api/v1/cashier-shifts/current"],
   ["POST", "/api/v1/expenses", {}],
   ["GET", "/api/v1/staff"],
-  ["GET", "/api/v1/catalogue/garment-types"],
+  ["GET", "/api/v1/garment-types"],
   ["GET", "/api/v1/system/backups"],
 ];
 try {
@@ -47,6 +52,14 @@ try {
   for (const [m, url, body] of FEATURES) {
     r = await call(m, url, body);
     check(`day 8: ${m} ${url.replace("/api/v1", "")} is locked`, r.status === 402 && r.code === "LICENSE_REQUIRED", r);
+  }
+  for (const url of ["/", "/login", "/activate", "/dashboard", "/_next/static/app.js"]) {
+    r = await call("GET", url);
+    check(`day 8: the software still opens: ${url} loads`, r.status === 200 && r.code !== "LICENSE_REQUIRED", r);
+  }
+  for (const url of ["/%61pi/v1/orders", "/api/v1/orders/", "/api/v1/orders?x=1"]) {
+    r = await call("GET", url);
+    check(`day 8: lock cannot be side-stepped: ${url}`, r.status === 402 || r.status === 404, r);
   }
   r = await call("GET", "/api/v1/system/license/status");
   check("upgrade screen can still read the licence status", r.status === 200);

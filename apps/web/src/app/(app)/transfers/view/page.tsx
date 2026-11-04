@@ -2,7 +2,7 @@
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Circle, CircleAlert, Copy, PackageCheck, ScanLine, Send, Trash2, XCircle } from "lucide-react";
-import { LOCATION_LABELS, type GarmentLocation } from "@drycare/shared";
+import { LOCATION_LABELS, expandScanCode, type GarmentLocation } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { dateTime } from "@/lib/format";
@@ -43,7 +43,7 @@ function TransferInner() {
 
   async function submitScan(event: FormEvent) {
     event.preventDefault();
-    const value = code.trim().toUpperCase();
+    const value = expandScanCode(code);
     if (!value || busy) return;
     // Some scanners send the code twice or an extra Enter; ignore an identical scan within 800 ms.
     if (lastScan.current.code === value && Date.now() - lastScan.current.at < 800) return setCode("");

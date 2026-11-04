@@ -45,6 +45,15 @@ export default function SettingsPage() {
     <div className="space-y-5">
       <PageHeader title="Business settings" subtitle="Business details, invoice & payment details, branches, racks and backups." />
       {msg && <Alert tone={msg.t} onClose={() => setMsg(null)}>{msg.m}</Alert>}
+      {can("org.manage") && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Tags and barcodes</h2>
+            <p className="text-sm text-slate-500">Design your garment tags, choose the printer and test your scanner.</p>
+          </div>
+          <a href="/print/labels?test=1" target="_blank" rel="noreferrer"><Button>Open tag designer</Button></a>
+        </div>
+      )}
       {can("org.manage") && <DesktopCards />}
       {can("org.manage") && (
         <Card title="Business details & rules">
@@ -222,8 +231,8 @@ function DesktopCards() {
       >
         {err && <Alert>{err}</Alert>}
         <p className="text-sm text-slate-600">
-          DryCare backs up automatically every day when it starts and when it closes. Backups are saved in <code className="rounded bg-slate-100 px-1">{backups.data?.folder}</code>. Copy this
-          folder to a pen drive or Google Drive regularly — a backup on the same PC does not protect against disk failure or theft. To restore, use the <strong>DryCare → Restore backup…</strong> menu.
+          Drycare backs up automatically every day when it starts and when it closes. Backups are saved in <code className="rounded bg-slate-100 px-1">{backups.data?.folder}</code>. Copy this
+          folder to a pen drive or Google Drive regularly — a backup on the same PC does not protect against disk failure or theft. To restore, use the <strong>Drycare → Restore backup…</strong> menu.
         </p>
         <ul className="mt-3 divide-y divide-slate-100 text-sm">
           {backups.data?.items.slice(0, 8).map((b: any) => (
@@ -240,7 +249,7 @@ function DesktopCards() {
       <Card title="Other computers in the shop">
         {info.data.lanAccess ? (
           <p className="text-sm text-slate-600">
-            Other PCs, tablets and phones on the same Wi-Fi can open DryCare in a browser at{" "}
+            Other PCs, tablets and phones on the same Wi-Fi can open Drycare in a browser at{" "}
             {info.data.lanUrls.map((u: string) => (
               <code key={u} className="mr-2 rounded bg-slate-100 px-1">
                 {u}
@@ -249,7 +258,7 @@ function DesktopCards() {
             . Each person signs in with their own staff account.
           </p>
         ) : (
-          <p className="text-sm text-slate-600">Only this PC can use DryCare. To let a second counter PC or a tablet connect over the shop Wi-Fi, turn on <strong>DryCare → Allow other computers in this shop</strong> in the menu.</p>
+          <p className="text-sm text-slate-600">Only this PC can use Drycare. To let a second counter PC or a tablet connect over the shop Wi-Fi, turn on <strong>Drycare → Allow other computers in this shop</strong> in the menu.</p>
         )}
       </Card>
     </>

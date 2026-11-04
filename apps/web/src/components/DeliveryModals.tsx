@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { TIME_SLOTS } from "@drycare/shared";
+import { TIME_SLOTS, expandScanCode } from "@drycare/shared";
 import { api, ApiError, newIdempotencyKey } from "@/lib/api";
 import { money, rupeesToPaise, todayISO } from "@/lib/format";
 import { Alert, Badge, Button, Field, Input, Modal, Select, Textarea, cx } from "@/components/ui";
@@ -46,7 +46,7 @@ export function DispatchModal({ stop, onClose, onDone }: { stop: any; onClose: (
 
   function scan(e: React.FormEvent) {
     e.preventDefault();
-    const t = code.trim().toUpperCase();
+    const t = expandScanCode(code);
     setCode("");
     if (!t) return;
     if (!items.some((i) => i.tag_code === t)) setErr(`${t} is not part of this delivery — keep it out of the bag.`);
@@ -193,7 +193,7 @@ export function CompleteModal({ stop, canCollect, onClose, onDone }: { stop: any
             </Select>
           </Field>
           {method === "otp" ? (
-            <Field label="6-digit OTP" hint="Ask the customer for the code DryCare sent them">
+            <Field label="6-digit OTP" hint="Ask the customer for the code Drycare sent them">
               <Input inputMode="numeric" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} className="text-center font-mono text-lg tracking-[0.4em]" />
             </Field>
           ) : (

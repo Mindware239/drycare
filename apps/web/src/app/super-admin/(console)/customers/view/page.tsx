@@ -50,7 +50,7 @@ function CustomerDetailInner() {
         setNotice(`Trial extended by ${days} day${days === "1" ? "" : "s"}.`);
       } else {
         await api(`/platform-admin/organizations/${org.id}/status`, { body: { status: action.status, reason } });
-        setNotice(action.status === "suspended" ? "Account suspended. The shop's staff can no longer use DryCare." : "Account reactivated.");
+        setNotice(action.status === "suspended" ? "Account suspended. The shop's staff can no longer use Drycare." : "Account reactivated.");
       }
       setAction(null);
       setReason("");
@@ -112,7 +112,7 @@ function CustomerDetailInner() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Team" description="Store users. Passwords are never visible to DryCare staff." padded={false}>
+        <Panel title="Team" description="Store users. Passwords are never visible to Drycare staff." padded={false}>
           <DataTable minWidth={560} head={["User", "Role", "Email", "Last sign-in"]}>
             {users.map((u) => (
               <tr key={u.id}>
@@ -187,7 +187,7 @@ function CustomerDetailInner() {
           <form id="customer-action" onSubmit={submit} className="space-y-4">
             {actionError && <Alert>{actionError}</Alert>}
             <p className="text-sm text-slate-600">{org.name}{owner ? ` · ${owner.email}` : ""}</p>
-            {action.type === "status" && action.status === "suspended" && <Alert tone="amber">All staff of this business will be blocked from DryCare immediately. Their data is kept and access returns when you reactivate.</Alert>}
+            {action.type === "status" && action.status === "suspended" && <Alert tone="amber">All staff of this business will be blocked from Drycare immediately. Their data is kept and access returns when you reactivate.</Alert>}
             {action.type === "trial" && (
               <Field label="Additional days" required hint={`Current end: ${dateLabel(org.trialEndsAt)}. Maximum 90 days per extension.`}>
                 <Input type="number" min={1} max={90} required value={days} onChange={(e) => setDays(e.target.value)} />

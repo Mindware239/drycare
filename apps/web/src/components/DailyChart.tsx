@@ -4,7 +4,7 @@ import { money } from "@/lib/format";
 
 /** Grouped daily totals using the dashboard's brand and collection colors. */
 const SERIES = [
-  { key: "billed", label: "Billed", color: "#0d8573" },
+  { key: "billed", label: "Billed", color: "#2f9b4c" },
   { key: "collected", label: "Collected", color: "#f97316" },
 ] as const;
 

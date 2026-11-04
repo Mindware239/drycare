@@ -1,7 +1,7 @@
 {
   "name": "@drycare/desktop",
   "productName": "DryCare",
-  "version": "0.1.10",
+  "version": "0.1.14",
   "private": true,
   "type": "module",
   "description": "DryCare for PC — standalone dry cleaning store management",

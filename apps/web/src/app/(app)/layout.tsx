@@ -187,7 +187,7 @@ function Shell({ children }: { children: ReactNode }) {
         compactNav ? "justify-center px-2" : "justify-between px-4",
         theme === "dark" ? "border-slate-800" : "border-slate-200",
       )}>
-        {compactNav ? <Logo className="h-8 w-8" /> : <Wordmark dark={theme === "dark"} />}
+        {compactNav ? <Logo className="h-6 w-auto" /> : <Wordmark dark={theme === "dark"} />}
         <button
           type="button"
           onClick={toggleSidebar}
@@ -291,12 +291,12 @@ function Shell({ children }: { children: ReactNode }) {
       <header className={cx("no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b px-4 lg:px-6", theme === "dark" ? "border-slate-800 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900")}>
         <button type="button" className="rounded-md p-2 lg:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
         <div className="flex shrink-0 items-center gap-2 lg:hidden">
-          <Logo className="h-7 w-7" />
-          <span className={cx("text-sm font-semibold", theme === "dark" ? "text-slate-100" : "text-slate-800")}>DryCare</span>
+          <Logo className="h-6 w-auto" />
+          <span className={cx("text-sm font-semibold", theme === "dark" ? "text-slate-100" : "text-slate-800")}>Drycare</span>
         </div>
         <div className="hidden shrink-0 items-center gap-2 lg:flex">
-          <Logo className="h-7 w-7" />
-          <span className={cx("text-sm font-semibold", theme === "dark" ? "text-slate-100" : "text-slate-800")}>DryCare</span>
+          <Logo className="h-6 w-auto" />
+          <span className={cx("text-sm font-semibold", theme === "dark" ? "text-slate-100" : "text-slate-800")}>Drycare</span>
         </div>
         {(can("orders.read") || can("customers.read")) && (
           <form onSubmit={search} role="search" className="relative min-w-0 max-w-xl flex-1 lg:ml-2">
@@ -368,7 +368,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       .then(setSession)
       .catch(() => (window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`));
   }, []);
-  if (!session) return <Spinner label="Opening DryCare…" />;
+  if (!session) return <Spinner label="Opening Drycare…" />;
   return <SessionProvider session={session}><Shell>{children}</Shell></SessionProvider>;
 }
 

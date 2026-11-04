@@ -31,7 +31,7 @@ function Kiosk() {
     <div className="min-h-screen bg-gradient-to-b from-brand-50 to-slate-50">
       <header className="flex items-center justify-between border-b border-brand-100 bg-white/80 px-6 py-4 backdrop-blur">
         <div className="flex items-center gap-3">
-          <Logo className="h-10 w-10" />
+          <Logo className="h-8 w-auto" />
           <div><p className="text-lg font-semibold text-slate-900">{session.organization.name}</p><p className="text-sm text-slate-500">Self-service laundry · {branch?.name}</p></div>
         </div>
         <button type="button" onClick={() => document.documentElement.requestFullscreen?.().catch(() => undefined)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"><Maximize2 className="h-4 w-4" />Full screen</button>

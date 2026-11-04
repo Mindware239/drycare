@@ -189,7 +189,7 @@ async function startApp() {
     SESSION_TTL_HOURS: "14",
   });
 
-  showSplash("Preparing DryCare…");
+  showSplash("Preparing Drycare…");
   serverMod = await import("./server-entry");
   serverMod.setCloudUrl(process.env.DRYCARE_CLOUD_URL || config.cloudUrl || null);
   serverMod.setCredentialStore(dpapiCredentialStore());
@@ -234,10 +234,10 @@ function dpapiCredentialStore() {
 
 function showSplash(text: string) {
   if (!splash) {
-    splash = new BrowserWindow({ width: 420, height: 220, frame: false, resizable: false, center: true, show: true, backgroundColor: "#0f6a5d", icon: iconPath() });
+    splash = new BrowserWindow({ width: 420, height: 220, frame: false, resizable: false, center: true, show: true, backgroundColor: "#151514", icon: iconPath() });
   }
-  const html = `<html><body style="margin:0;font-family:Segoe UI,sans-serif;background:#0f6a5d;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh">
-    <div style="font-size:28px;font-weight:700">Dry<span style="color:#94eadb">Care</span></div>
+  const html = `<html><body style="margin:0;font-family:Segoe UI,sans-serif;background:#151514;color:#faf8f4;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh">
+    <div style="font-size:28px;font-weight:700">Dry<span style="color:#3cbf5a">care</span></div>
     <div style="margin-top:14px;font-size:13px;opacity:.85">${text}</div></body></html>`;
   splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
@@ -251,9 +251,9 @@ function createMainWindow() {
     minWidth: 1024,
     minHeight: 680,
     show: false,
-    title: "DryCare",
+    title: "Drycare",
     icon: iconPath(),
-    backgroundColor: "#f6f7f9",
+    backgroundColor: "#ffffff",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
   });
   win.once("ready-to-show", () => {
@@ -280,7 +280,7 @@ function createMainWindow() {
 function buildMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: "DryCare",
+      label: "Drycare",
       submenu: [
         { label: "Back up now", click: () => backupNow() },
         { label: "Restore backup…", click: () => restoreBackup() },
@@ -291,7 +291,7 @@ function buildMenu() {
         { type: "separator" },
         { label: "Open log file", click: () => shell.openPath(logFile) },
         { type: "separator" },
-        { label: "Quit DryCare", accelerator: "Alt+F4", click: () => app.quit() },
+        { label: "Quit Drycare", accelerator: "Alt+F4", click: () => app.quit() },
       ],
     },
     {
@@ -302,12 +302,12 @@ function buildMenu() {
       label: "Help",
       submenu: [
         {
-          label: "About DryCare",
+          label: "About Drycare",
           click: () =>
             dialog.showMessageBox(win!, {
               type: "info",
-              title: "About DryCare",
-              message: `DryCare for PC  v${app.getVersion()}`,
+              title: "About Drycare",
+              message: `Drycare for PC  v${app.getVersion()}`,
               detail: `Dry cleaning & laundry store management.\n\nData folder: ${userData}\nBackups: ${config.backupDir}`,
             }),
         },
@@ -329,7 +329,7 @@ async function backupNow() {
 }
 
 async function restoreBackup() {
-  const pick = await dialog.showOpenDialog(win!, { title: "Choose a DryCare backup", defaultPath: config.backupDir, filters: [{ name: "DryCare backup", extensions: ["dcbak"] }], properties: ["openFile"] });
+  const pick = await dialog.showOpenDialog(win!, { title: "Choose a Drycare backup", defaultPath: config.backupDir, filters: [{ name: "Drycare backup", extensions: ["dcbak"] }], properties: ["openFile"] });
   if (pick.canceled || !pick.filePaths[0]) return;
   const file = pick.filePaths[0];
   try {
@@ -369,10 +369,10 @@ async function toggleLan(on: boolean) {
     type: "question",
     buttons: ["Cancel", on ? "Allow & restart" : "Disable & restart"],
     cancelId: 0,
-    message: on ? "Let other computers in this shop use DryCare?" : "Stop other computers from connecting?",
+    message: on ? "Let other computers in this shop use Drycare?" : "Stop other computers from connecting?",
     detail: on
-      ? "Other PCs, tablets and phones on the same Wi-Fi/LAN will be able to open DryCare in a web browser and sign in with their own staff accounts. Windows may ask you to allow DryCare through the firewall — choose 'Private networks' only."
-      : "Only this PC will be able to use DryCare.",
+      ? "Other PCs, tablets and phones on the same Wi-Fi/LAN will be able to open Drycare in a web browser and sign in with their own staff accounts. Windows may ask you to allow Drycare through the firewall — choose 'Private networks' only."
+      : "Only this PC will be able to use Drycare.",
   });
   if (r.response !== 1) return buildMenu();
   config.lanAccess = on;
@@ -400,7 +400,7 @@ if (!app.requestSingleInstanceLock()) {
     startApp().catch(async (e) => {
       log("Startup failed", e);
       splash?.destroy();
-      dialog.showErrorBox("DryCare could not start", `${(e as Error).message}\n\nDetails are in ${logFile}`);
+      dialog.showErrorBox("Drycare could not start", `${(e as Error).message}\n\nDetails are in ${logFile}`);
       await stopDatabase().catch(() => {});
       app.exit(1);
     }),

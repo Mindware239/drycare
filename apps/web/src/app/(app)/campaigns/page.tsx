@@ -222,7 +222,7 @@ export default function CampaignsPage() {
             {preview && <p className="text-sm font-medium text-slate-800">Estimated recipients: <span className="tabular-nums">{preview.recipientCount}</span></p>}
             <div className="border-t border-slate-200 pt-3">
               <h3 className="mb-2 text-sm font-semibold text-slate-800">Redeemable discount (optional)</h3>
-              <p className="mb-3 text-xs text-slate-500">Creates a coupon DryCare validates during order pricing. Include <code>{"{{coupon_code}}"}</code> in your message.</p>
+              <p className="mb-3 text-xs text-slate-500">Creates a coupon Drycare validates during order pricing. Include <code>{"{{coupon_code}}"}</code> in your message.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Discount percent">
                   <Input type="number" min={1} max={100} value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} placeholder="e.g. 10" />

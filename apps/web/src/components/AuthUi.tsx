@@ -5,11 +5,11 @@ import { useState } from "react";
 import { ChevronRight, Eye, EyeOff, LockKeyhole, type LucideIcon } from "lucide-react";
 import { cx } from "@/components/ui";
 
-export const primaryButton = "flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-800 via-teal-700 to-emerald-600 text-base font-semibold text-white shadow-[0_14px_34px_-10px_rgba(15,118,110,0.6)] transition hover:brightness-110 disabled:opacity-60";
-export const inputBox = "block h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-3 text-[15px] text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:outline-none focus:ring-4 focus:ring-teal-600/10";
+export const primaryButton = "flex h-14 w-full items-center justify-center gap-2 rounded-full bg-brand-500 text-base font-semibold text-slate-900 transition hover:bg-brand-400 disabled:opacity-60";
+export const inputBox = "block h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-3 text-[15px] text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10";
 
 export function BrandName({ className }: { className?: string }) {
-  return <span className={cx("font-bold tracking-tight", className)}>Dry<span className="text-teal-500">Care</span></span>;
+  return <span className={cx("font-bold tracking-tight", className)} style={{ fontFamily: '"Urbanist", sans-serif' }}>Drycare</span>;
 }
 
 export function IconInput({ icon: Icon, ...rest }: { icon: LucideIcon } & React.InputHTMLAttributes<HTMLInputElement>) {
@@ -38,7 +38,7 @@ export function AuthTile({ icon: Icon, title, text }: { icon: LucideIcon; title:
   return (
     <div className="flex items-center justify-between rounded-2xl border border-white/15 bg-white/[0.08] p-4 shadow-lg backdrop-blur-md">
       <div>
-        <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-md"><Icon className="h-5 w-5" /></span>
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-emerald-400 to-brand-600 text-white shadow-md"><Icon className="h-5 w-5" /></span>
         <p className="mt-4 text-base font-semibold">{title}</p>
         <p className="mt-0.5 text-sm text-slate-200">{text}</p>
       </div>

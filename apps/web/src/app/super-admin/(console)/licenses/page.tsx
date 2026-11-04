@@ -27,7 +27,7 @@ export default function LicensesPage() {
   const sys = useAdminData<System>("/platform-admin/system");
   return (
     <>
-      <ConsoleHeader title="Licenses & releases" description="DryCare for Windows works offline with an activation key bound to each PC. Create the signing key once, then issue keys here after the customer has paid." />
+      <ConsoleHeader title="Licenses & releases" description="Drycare for Windows works offline with an activation key bound to each PC. Create the signing key once, then issue keys here after the customer has paid." />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] [&>*]:min-w-0">
         <div className="space-y-6">
           {key.data?.exists ? <IssueKey onIssued={() => void licenses.reload()} /> : (
@@ -49,7 +49,7 @@ export default function LicensesPage() {
           </Panel>
           <Panel title="How activation works">
             <ol className="space-y-3 text-sm leading-6 text-slate-600">
-              {["The customer installs DryCare; the activation screen shows a request code for that PC.", "Record their payment under Payments.", "Issue a key here with that request code and send it by email or WhatsApp.", "They paste it into the activation screen. It works without internet until the expiry date."].map((t, i) => (
+              {["The customer installs Drycare; the activation screen shows a request code for that PC.", "Record their payment under Payments.", "Issue a key here with that request code and send it by email or WhatsApp.", "They paste it into the activation screen. It works without internet until the expiry date."].map((t, i) => (
                 <li key={i} className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">{i + 1}</span>{t}</li>
               ))}
             </ol>

@@ -16,14 +16,14 @@ type Status = {
 };
 
 const HOLD_TEXT: Record<string, string> = {
-  relink_required: "This PC was disconnected from DryCare Cloud or its access expired. Link it again; nothing has been lost.",
-  plan_required: "Cloud sync needs an active DryCare Cloud plan for this shop. Changes are kept safely on this PC until then.",
-  schema_too_new: "This PC runs a newer DryCare than the cloud. Changes wait on this PC until the cloud is updated.",
-  restored: "This PC was restored from a backup, so uploads are paused: sending an older copy could undo newer data in the cloud. Ask DryCare support to check the cloud copy, then link again.",
-  offline: "DryCare Cloud could not be reached. Changes are kept on this PC and upload automatically when the connection is back.",
+  relink_required: "This PC was disconnected from Drycare Cloud or its access expired. Link it again; nothing has been lost.",
+  plan_required: "Cloud sync needs an active Drycare Cloud plan for this shop. Changes are kept safely on this PC until then.",
+  schema_too_new: "This PC runs a newer Drycare than the cloud. Changes wait on this PC until the cloud is updated.",
+  restored: "This PC was restored from a backup, so uploads are paused: sending an older copy could undo newer data in the cloud. Ask Drycare support to check the cloud copy, then link again.",
+  offline: "Drycare Cloud could not be reached. Changes are kept on this PC and upload automatically when the connection is back.",
 };
 
-/** Top-bar sync indicator of DryCare for Windows. Being online is never shown as proof that the cloud has the data. */
+/** Top-bar sync indicator of Drycare for Windows. Being online is never shown as proof that the cloud has the data. */
 export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: boolean }) {
   const status = useApi<Status>("/sync/status");
   const [online, setOnline] = useState(true);
@@ -96,7 +96,7 @@ export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: bool
           </div>
           <dl className="mt-3 space-y-2.5">
             <Row label="Internet on this PC" value={<span className={cx("inline-flex items-center gap-1", online ? "text-emerald-700" : "text-amber-700")}>{online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}{online ? "Online" : "Offline"}</span>} />
-            <Row label="DryCare Cloud" value={!s.cloudConfigured ? <span className="text-slate-500">Not set up on this PC</span> : s.cloudLinked ? <span className={hold ? "text-amber-700" : "text-emerald-700"}>{hold ? "Linked · paused" : "Linked"}</span> : <span className="text-slate-500">Not linked</span>} />
+            <Row label="Drycare Cloud" value={!s.cloudConfigured ? <span className="text-slate-500">Not set up on this PC</span> : s.cloudLinked ? <span className={hold ? "text-amber-700" : "text-emerald-700"}>{hold ? "Linked · paused" : "Linked"}</span> : <span className="text-slate-500">Not linked</span>} />
             {s.cloudLinked && (
               <>
                 {s.linkedBy && <Row label="Approved by" value={<span className="max-w-[170px] truncate">{s.linkedBy}</span>} />}
@@ -110,7 +110,7 @@ export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: bool
           {hold && <div className="mt-3"><Alert tone={hold === "offline" ? "blue" : "amber"}>{HOLD_TEXT[hold]}</Alert></div>}
           {!hold && (
             <p className="mt-3 rounded-lg bg-slate-50 p-2.5 text-xs leading-5 text-slate-600">
-              {!s.cloudConfigured ? "Everything is saved in this PC's database and daily backups. DryCare Cloud is not set up on this PC."
+              {!s.cloudConfigured ? "Everything is saved in this PC's database and daily backups. Drycare Cloud is not set up on this PC."
                 : !s.cloudLinked ? "Link this PC to see orders and reports from anywhere. The shop keeps working offline either way."
                 : "Being online does not by itself mean the cloud has your latest changes — check “Last successful cloud sync”."}
             </p>
@@ -119,7 +119,7 @@ export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: bool
           {canManage && s.cloudConfigured && (
             <div className="mt-3 flex flex-wrap gap-2">
               {(!s.cloudLinked || hold === "relink_required" || hold === "restored") ? (
-                <Button size="sm" className="flex-1" onClick={() => setLinkOpen(true)}><Link2 className="h-4 w-4" />{s.cloudLinked ? "Link again" : "Link to DryCare Cloud"}</Button>
+                <Button size="sm" className="flex-1" onClick={() => setLinkOpen(true)}><Link2 className="h-4 w-4" />{s.cloudLinked ? "Link again" : "Link to Drycare Cloud"}</Button>
               ) : (
                 <Button size="sm" className="flex-1" loading={busy === "now"} disabled={s.syncing} onClick={() => act("now", "/sync/now", (j) => j.started ? (j.hold ? HOLD_TEXT[j.hold] ?? "Paused." : `${j.synced} change${j.synced === 1 ? "" : "s"} uploaded.`) : "Already uploading.")}>
                   <RefreshCw className="h-4 w-4" />Sync now
@@ -145,7 +145,7 @@ function Row({ label, value, hint }: { label: string; value: React.ReactNode; hi
   );
 }
 
-/** Device authorisation: the PC shows a code, the owner approves it in DryCare Cloud in their browser. */
+/** Device authorisation: the PC shows a code, the owner approves it in Drycare Cloud in their browser. */
 function LinkModal({ status, onClose, reload }: { status: Status; onClose: () => void; reload: () => void }) {
   const [name, setName] = useState("Counter PC");
   const [err, setErr] = useState("");
@@ -172,7 +172,7 @@ function LinkModal({ status, onClose, reload }: { status: Status; onClose: () =>
   }
 
   return (
-    <Modal open title="Link this PC to DryCare Cloud" onClose={waiting ? cancel : onClose} footer={
+    <Modal open title="Link this PC to Drycare Cloud" onClose={waiting ? cancel : onClose} footer={
       l?.status === "approved" ? <Button onClick={onClose}>Done</Button>
         : waiting ? <><Button variant="ghost" onClick={cancel}>Cancel</Button><a href={l!.verificationUrl} target="_blank" rel="noreferrer"><Button><ExternalLink className="h-4 w-4" />Open approval page</Button></a></>
         : <><Button variant="ghost" onClick={onClose}>Close</Button><Button onClick={start} loading={busy}>Start linking</Button></>
@@ -182,7 +182,7 @@ function LinkModal({ status, onClose, reload }: { status: Status; onClose: () =>
         <Alert tone="green">Linked. Your existing records are uploading now; the top bar shows progress. The shop keeps working while it runs.</Alert>
       ) : waiting ? (
         <div className="space-y-4 text-center">
-          <p className="text-sm text-slate-600">Approve this PC in DryCare Cloud. Your browser opened the approval page; sign in there and check that the code matches:</p>
+          <p className="text-sm text-slate-600">Approve this PC in Drycare Cloud. Your browser opened the approval page; sign in there and check that the code matches:</p>
           <p className="font-mono text-3xl font-bold tracking-[0.2em] text-slate-900">{l!.userCode}</p>
           <p className="flex items-center justify-center gap-2 text-xs text-slate-500"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Waiting for approval · expires {dateTime(l!.expiresAt)}</p>
           {l!.message && <p className="text-xs text-amber-700">{l!.message}</p>}
@@ -192,9 +192,9 @@ function LinkModal({ status, onClose, reload }: { status: Status; onClose: () =>
           {l?.status === "denied" && <Alert tone="amber">The request was declined in the cloud.</Alert>}
           {l?.status === "expired" && <Alert tone="amber">The code expired. Start again.</Alert>}
           {l?.status === "failed" && <Alert>{l.message ?? "Linking failed."}</Alert>}
-          <p>Your orders, bills and reports will also be visible in DryCare Cloud, so you can check the shop from anywhere. The shop keeps working offline; changes upload whenever there is internet.</p>
+          <p>Your orders, bills and reports will also be visible in Drycare Cloud, so you can check the shop from anywhere. The shop keeps working offline; changes upload whenever there is internet.</p>
           <ul className="list-disc space-y-1 pl-5 text-xs">
-            <li>You approve this PC by signing in to DryCare Cloud — your cloud password is never typed here.</li>
+            <li>You approve this PC by signing in to Drycare Cloud — your cloud password is never typed here.</li>
             <li>Only one PC per shop can be linked, so invoice numbers stay unique.</li>
             <li>The cloud copy is view-only; keep making changes on this PC.</li>
           </ul>

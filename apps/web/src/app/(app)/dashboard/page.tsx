@@ -42,7 +42,7 @@ type DashboardOrder = {
 
 /** Live garments grouped the way a shop talks about them. */
 const STATUS_GROUPS = [
-  { label: "Received", color: "#0d8573", statuses: ["received"] },
+  { label: "Received", color: "#2f9b4c", statuses: ["received"] },
   { label: "In production", color: "#2563eb", statuses: ["inspection", "sorting", "cleaning", "drying", "finishing", "packing"] },
   { label: "Quality check", color: "#8b5cf6", statuses: ["quality_control", "rework"] },
   { label: "Ready for delivery", color: "#f97316", statuses: ["ready", "dispatched"] },
@@ -75,7 +75,7 @@ function Kpi({ label, value, note, icon: Icon, tone, delta, goodWhenUp = true, s
   label: string; value: string; note: string; icon: LucideIcon; tone: "teal" | "blue" | "amber" | "violet" | "rose"; delta: number | null; goodWhenUp?: boolean; spark?: number[]; href?: string;
 }) {
   const tones = {
-    teal: { bg: "bg-brand-50 text-brand-700", line: "#0d8573" },
+    teal: { bg: "bg-brand-50 text-brand-700", line: "#2f9b4c" },
     blue: { bg: "bg-blue-50 text-blue-700", line: "#2563eb" },
     amber: { bg: "bg-amber-50 text-amber-700", line: "#f97316" },
     violet: { bg: "bg-violet-50 text-violet-700", line: "#8b5cf6" },
@@ -109,9 +109,9 @@ function Kpi({ label, value, note, icon: Icon, tone, delta, goodWhenUp = true, s
 const QUICK_TONES = {
   teal: { card: "border-brand-100 from-brand-50", icon: "bg-brand-700 shadow-brand-900/20", arrow: "text-brand-700" },
   blue: { card: "border-blue-100 from-blue-50", icon: "bg-blue-600 shadow-blue-900/20", arrow: "text-blue-700" },
-  violet: { card: "border-violet-100 from-violet-50", icon: "bg-violet-600 shadow-violet-900/20", arrow: "text-violet-700" },
+  violet: { card: "border-slate-200 from-slate-100", icon: "bg-slate-900 shadow-slate-900/20", arrow: "text-slate-900" },
   amber: { card: "border-amber-100 from-amber-50", icon: "bg-amber-500 shadow-amber-900/20", arrow: "text-amber-700" },
-  cyan: { card: "border-cyan-100 from-cyan-50", icon: "bg-cyan-600 shadow-cyan-900/20", arrow: "text-cyan-700" },
+  cyan: { card: "border-brand-100 from-brand-50", icon: "bg-brand-600 shadow-brand-900/20", arrow: "text-brand-700" },
   emerald: { card: "border-emerald-100 from-emerald-50", icon: "bg-emerald-600 shadow-emerald-900/20", arrow: "text-emerald-700" },
 };
 
@@ -166,18 +166,18 @@ export default function DashboardPage() {
 
   const heroActions = [
     can("orders.create") && { href: "/pos", icon: Plus, label: "New order", tone: "from-brand-600 to-brand-800 shadow-brand-900/25" },
-    can("garments.process") && { href: "/scan", icon: ScanLine, label: "Scan garments", tone: "from-blue-500 to-blue-700 shadow-blue-900/25" },
-    can("orders.read") && { href: "/production", icon: Factory, label: "Production board", tone: "from-violet-500 to-violet-700 shadow-violet-900/25" },
-    can("customers.read") && { href: "/customers", icon: Users, label: "Find a customer", tone: "from-cyan-500 to-cyan-700 shadow-cyan-900/25" },
+    can("garments.process") && { href: "/scan", icon: ScanLine, label: "Scan garments", tone: "from-slate-800 to-slate-950 shadow-slate-900/25" },
+    can("orders.read") && { href: "/production", icon: Factory, label: "Production board", tone: "from-[#3d6fb5] to-[#2a4f86] shadow-blue-900/25" },
+    can("customers.read") && { href: "/customers", icon: Users, label: "Find a customer", tone: "from-[#f08a24] to-[#d9661b] shadow-orange-900/25" },
   ].filter(Boolean) as { href: string; icon: LucideIcon; label: string; tone: string }[];
 
   return (
     <div className="space-y-6 pb-8">
       {/* Hero */}
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="dc-hero relative min-h-[176px] overflow-hidden rounded-3xl bg-gradient-to-r from-[#d9f2ee] via-[#cdeee8] to-[#bfe6df]">
-          <div className="dc-hero-img absolute inset-y-0 right-0 hidden w-[58%] bg-cover bg-center sm:block" style={{ backgroundImage: "url(/images/dashboard-hero.jpg)" }} aria-hidden="true" />
-          <div className="dc-hero-fade absolute inset-y-0 left-0 hidden w-[62%] bg-gradient-to-r from-[#d9f2ee] via-[#d4f0eb] to-transparent sm:block" aria-hidden="true" />
+        <div className="dc-hero relative min-h-[176px] overflow-hidden rounded-3xl bg-gradient-to-r from-[#eef9f1] via-[#dff3e4] to-[#d8e7fa]">
+          <div className="dc-hero-img absolute inset-y-0 right-0 hidden w-[42%] bg-cover bg-center sm:block" style={{ backgroundImage: "url(/images/dashboard-hero.jpg)" }} aria-hidden="true" />
+          <div className="dc-hero-fade absolute inset-y-0 left-0 hidden w-[66%] bg-gradient-to-r from-[#eef9f1] via-[#eef9f1] to-transparent sm:block" aria-hidden="true" />
           <div className="relative p-6 sm:p-7">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-brand-800"><Sparkles className="h-4 w-4" />Store overview</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{greeting}, {firstName} <span aria-hidden="true">👋</span></h1>
@@ -394,11 +394,11 @@ function CounterTable({ data }: { data: DashboardData }) {
       {data.paymentMethods.length > 0 && (
         <div className="border-b border-slate-100 px-4 py-3">
           <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100">
-            {data.paymentMethods.map((m, i) => <span key={m.method} style={{ width: `${(m.total / total) * 100}%`, background: ["#0d8573", "#2563eb", "#f97316", "#8b5cf6", "#64748b"][i % 5] }} />)}
+            {data.paymentMethods.map((m, i) => <span key={m.method} style={{ width: `${(m.total / total) * 100}%`, background: ["#2f9b4c", "#2563eb", "#f97316", "#8b5cf6", "#64748b"][i % 5] }} />)}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
             {data.paymentMethods.map((m, i) => (
-              <span key={m.method} className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: ["#0d8573", "#2563eb", "#f97316", "#8b5cf6", "#64748b"][i % 5] }} />{METHOD_LABELS[m.method] ?? m.method} <strong className="tabular-nums text-slate-900">{money(m.total)}</strong></span>
+              <span key={m.method} className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: ["#2f9b4c", "#2563eb", "#f97316", "#8b5cf6", "#64748b"][i % 5] }} />{METHOD_LABELS[m.method] ?? m.method} <strong className="tabular-nums text-slate-900">{money(m.total)}</strong></span>
             ))}
           </div>
         </div>

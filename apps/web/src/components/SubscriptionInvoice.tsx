@@ -1,5 +1,5 @@
 "use client";
-/** A4 GST tax invoice for a DryCare subscription (Mindware → shop). Printed from the super admin console and the shop's billing screen. */
+/** A4 GST tax invoice for a Drycare subscription (Mindware → shop). Printed from the super admin console and the shop's billing screen. */
 import { amountInWords, money } from "@/lib/format";
 import { cx } from "@/components/ui";
 

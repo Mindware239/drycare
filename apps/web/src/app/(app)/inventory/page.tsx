@@ -292,7 +292,7 @@ function ItemModal({ item, suppliers, branchId, onClose, onSaved }: { item: Item
 const MOVE_TEXT = {
   use: { title: "Record use", label: "Quantity used", button: "Record use", help: "Take stock off the shelf for work done (e.g. solvent top-up for the machine)." },
   wastage: { title: "Record wastage", label: "Quantity wasted or damaged", button: "Record wastage", help: "Spilled, expired or damaged stock. A note is required." },
-  count: { title: "Stock check", label: "Quantity actually on the shelf", button: "Save count", help: "Count what is on the shelf. DryCare corrects the stock to match and records the difference." },
+  count: { title: "Stock check", label: "Quantity actually on the shelf", button: "Save count", help: "Count what is on the shelf. Drycare corrects the stock to match and records the difference." },
   opening: { title: "Add stock", label: "Quantity added", button: "Add stock", help: "Stock bought without a purchase order, or found. For supplier deliveries, use a purchase order so the bill is tracked." },
   return: { title: "Return to supplier", label: "Quantity returned", button: "Record return", help: "Goods sent back to the supplier." },
 } as const;

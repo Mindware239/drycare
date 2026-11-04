@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { TRANSFER_FLOW, collectionDiscount, type GarmentLocation, type TransferDirection } from "@drycare/shared";
+import { TRANSFER_FLOW, collectionDiscount, expandScanCode, type GarmentLocation, type TransferDirection } from "@drycare/shared";
 import { db, schema, type Tx } from "../db/client";
 import { assertBranchAccess, can, requirePermission, type AuthContext } from "../lib/context";
 import { audit } from "../lib/audit";
@@ -42,7 +42,7 @@ async function moveGarments(tx: Tx, auth: AuthContext, garmentIds: string[], to:
 
 /** Resolves a scanned code to a bag or a garment of this organization. */
 async function resolveCode(tx: Tx | typeof db, orgId: string, raw: string) {
-  const code = raw.trim().toUpperCase();
+  const code = expandScanCode(raw);
   const bag = await tx.query.bags.findFirst({ where: and(eq(schema.bags.organizationId, orgId), eq(schema.bags.bagCode, code)) });
   if (bag) return { kind: "bag" as const, code, bag };
   const garment = await tx.query.garments.findFirst({ where: and(eq(schema.garments.organizationId, orgId), eq(schema.garments.tagCode, code)) });

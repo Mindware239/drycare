@@ -52,7 +52,7 @@ export default function IntegrationsPage() {
         {!ready && (
           <div className="mt-4">
             <Alert tone="amber">
-              Add the settings below to the workspace-root <code>.env</code> file. Do not paste API keys into DryCare, source control, or support messages.
+              Add the settings below to the workspace-root <code>.env</code> file. Do not paste API keys into Drycare, source control, or support messages.
             </Alert>
           </div>
         )}

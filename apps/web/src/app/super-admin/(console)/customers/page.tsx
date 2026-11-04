@@ -8,7 +8,7 @@ function CustomersInner() {
   const params = useSearchParams();
   return (
     <>
-      <ConsoleHeader title="Customers & businesses" description="Every dry-cleaning business registered on DryCare. Open a business to see its owner, branches, usage, subscription, payments and account history." />
+      <ConsoleHeader title="Customers & businesses" description="Every dry-cleaning business registered on Drycare. Open a business to see its owner, branches, usage, subscription, payments and account history." />
       <CustomerList mode="customers" initialSort={params.get("sort") ?? undefined} />
     </>
   );

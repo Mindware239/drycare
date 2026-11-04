@@ -42,10 +42,10 @@ export default function DesktopRecoveryPage() {
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-5 sm:p-8">
       <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9">
         <Wordmark />
-        <p className="mt-8 text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">DryCare for PC · local recovery</p>
+        <p className="mt-8 text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Drycare for PC · local recovery</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Reset this PC&apos;s owner password</h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          This only works in the DryCare Windows app on the PC that holds the store data. It cannot reset a cloud account or an account from another computer.
+          This only works in the Drycare Windows app on the PC that holds the store data. It cannot reset a cloud account or an account from another computer.
         </p>
 
         <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">

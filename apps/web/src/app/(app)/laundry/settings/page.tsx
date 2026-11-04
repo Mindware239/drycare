@@ -243,7 +243,7 @@ function MachineForm({ machine, controlModes, branchId, onClose, onSaved }: { ma
         {mode === "http" && <>
           <Field label="Controller address" className="sm:col-span-2" hint="The machine controller's API base URL"><Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="http://192.168.1.50:8080" /></Field>
           <Field label="Device ID"><Input value={deviceId} onChange={(e) => setDeviceId(e.target.value)} /></Field>
-          <p className="text-xs text-slate-500 sm:col-span-3">DryCare sends a start command and reads status from the controller. If the controller does not confirm, the machine is never shown as running. See the integration notes in docs/LAUNDRY_IOT.md.</p>
+          <p className="text-xs text-slate-500 sm:col-span-3">Drycare sends a start command and reads status from the controller. If the controller does not confirm, the machine is never shown as running. See the integration notes in docs/LAUNDRY_IOT.md.</p>
         </>}
       </div>
       <Field label="Programs">

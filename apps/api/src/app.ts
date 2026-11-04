@@ -34,6 +34,7 @@ import { logisticsRoutes } from "./modules/logistics";
 import { laundryRoutes } from "./modules/laundry";
 import { inventoryRoutes } from "./modules/inventory";
 import { claimRoutes } from "./modules/claims";
+import { labelPrintRoutes } from "./modules/labelPrint";
 import { syncRoutes } from "./modules/sync";
 import { syncCloudRoutes } from "./modules/syncCloud";
 import { assertDesktopLicense, isLicenseActivationRequest } from "./lib/license";
@@ -73,7 +74,9 @@ export async function buildServer() {
   });
 
   app.addHook("preHandler", async (req) => {
-    if (!isLicenseActivationRequest(req.method, req.url)) assertDesktopLicense();
+    // The lock is on features, not on opening the app. Web screens are served by the not-found handler
+    // (see serveWebApp) and hold no data, so they must always load, or the upgrade screen itself would be locked.
+    if (!req.is404 && !isLicenseActivationRequest(req.method, req.url)) assertDesktopLicense();
     req.auth = await loadAuth(req);
     // Lapsed trial / expired plan: the shop stays signed in and can read and pay, but cannot change data.
     await assertWritable(req);
@@ -141,6 +144,7 @@ export async function buildServer() {
       await api.register(laundryRoutes);
       await api.register(inventoryRoutes);
       await api.register(claimRoutes);
+      await api.register(labelPrintRoutes);
       await api.register(syncRoutes);
       await api.register(syncCloudRoutes);
     },

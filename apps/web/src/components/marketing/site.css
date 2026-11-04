@@ -2,10 +2,6 @@
  * Drycare public website design system (from "Drycare Website - Single File").
  * Everything is scoped to .dc-site, so the signed-in app keeps its own look.
  */
-@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400 600; font-display: swap; src: url("/site/fonts/dm-sans-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
-@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400 600; font-display: swap; src: url("/site/fonts/dm-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: "Urbanist"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("/site/fonts/urbanist-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
-@font-face { font-family: "Urbanist"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("/site/fonts/urbanist-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 .dc-site {
   color-scheme: light;
@@ -216,6 +212,13 @@
 .dc-plan:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(21, 21, 20, .14); }
 .dc-plan-price { display: flex; flex-direction: column; gap: 6px; padding-bottom: 22px; }
 @media (min-width: 904px) { .dc-plan-price { min-height: 176px; } }
+
+/* First-run checklist */
+.dc-onboard { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px; align-items: start; padding: clamp(32px, 5vw, 56px) 32px 96px; }
+.dc-onboard-side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 100px; }
+.dc-onboard-step { display: flex; align-items: center; gap: 16px; }
+@media (max-width: 959.98px) { .dc-onboard { grid-template-columns: minmax(0, 1fr); } .dc-onboard-side { position: static; } }
+@media (max-width: 639.98px) { .dc-onboard-step { flex-direction: column; align-items: stretch; } }
 
 /* Sign-in style pages */
 .dc-authbg { min-height: 100vh; background: #f7f7f5; }

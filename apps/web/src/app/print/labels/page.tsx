@@ -1,17 +1,26 @@
 "use client";
-import { Suspense, useEffect, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Printer, Settings2, TriangleAlert, XCircle } from "lucide-react";
-import { DEFAULT_LABEL_SETTINGS, type LabelSettings } from "@drycare/shared";
+import { CheckCircle2, Printer, ScanLine, Settings2, TriangleAlert, XCircle } from "lucide-react";
+import { DEFAULT_LABEL_SETTINGS, GARMENT_DESIGN_CODE128, GARMENT_DESIGN_QR, labelSettingsSchema, type LabelDesign, type LabelSettings } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { dateOnly } from "@/lib/format";
-import { Alert, Badge, Button, Field, Input, Select, Spinner, cx } from "@/components/ui";
+import { labelToBitmap, renderLabel, type LabelData, type RenderedLabel } from "@/lib/labelRender";
+import { Alert, Badge, Button, Select, Spinner } from "@/components/ui";
+import { LabelDesigner, type PrinterDetails } from "@/components/LabelDesigner";
+import { SCANNER_SAMPLES, ScannerTest, sampleData } from "@/components/ScannerTest";
 
 type Scope = "all" | "bag" | "garments";
+type PrintItem = { key: string; design: LabelDesign; data: LabelData };
+type Drawn = PrintItem & { label: RenderedLabel; url: string };
+type PrinterInfo = { available: boolean; printers: PrinterDetails[] };
+
+/** The largest group sent to the printer at once: keeps each request small even for big bag labels. */
+const BATCH = 20;
 
 /**
- * Bag labels and individual garment tags for one order. Printing goes through the browser to the
- * label printer selected in the print dialog; staff then confirm whether the labels came out.
+ * Bag labels and garment tags for one order. In the PC edition they go straight to the label printer;
+ * elsewhere they go through the browser's print dialog. Both use the same dot-exact image.
  */
 function LabelsPageInner() {
   const params = useSearchParams();
@@ -19,47 +28,156 @@ function LabelsPageInner() {
   const test = params.get("test") === "1";
   const order = useApi<any>(test ? null : `/orders/${id}`);
   const org = useApi<any>("/organizations/current");
+  const printerInfo = useApi<PrinterInfo>("/labels/printers");
   const [scope, setScope] = useState<Scope>((params.get("scope") as Scope) || "all");
   const [settings, setSettings] = useState<LabelSettings>(DEFAULT_LABEL_SETTINGS);
-  const [editing, setEditing] = useState(false);
+  const [panel, setPanel] = useState<"" | "design" | "scanner">(test ? "design" : "");
   const [job, setJob] = useState<{ id: string; labelCount: number } | null>(null);
+  const [asked, setAsked] = useState(false);
   const [jobStatus, setJobStatus] = useState<"" | "printed" | "failed">("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [drawn, setDrawn] = useState<Drawn[]>([]);
+  const [override, setOverride] = useState<PrintItem[] | null>(null);
 
   useEffect(() => {
-    if (org.data) setSettings({ ...DEFAULT_LABEL_SETTINGS, ...(org.data.settings?.labels ?? {}) });
+    if (!org.data) return;
+    // Parsing fills in anything a design saved by an older version does not have yet.
+    const saved = labelSettingsSchema.safeParse({ ...DEFAULT_LABEL_SETTINGS, ...(org.data.settings?.labels ?? {}) });
+    setSettings(saved.success ? saved.data : DEFAULT_LABEL_SETTINGS);
   }, [org.data]);
 
-  if (order.error) return <div className="p-6"><Alert>{order.error.message}</Alert></div>;
-  if ((!order.data && !test) || !org.data) return <Spinner />;
+  // The sample is created once: a new object on each render would redraw the labels forever.
+  const o = useMemo(() => (test ? sampleOrder() : order.data), [test, order.data]);
+  const direct = printerInfo.data?.available ?? false;
+  const printers = useMemo(() => printerInfo.data?.printers ?? [], [printerInfo.data]);
 
-  const o = test ? sampleOrder() : order.data;
-  const live = o.garments.filter((g: any) => g.currentStatus !== "cancelled");
-  const item = (iid: string) => o.items.find((i: any) => i.id === iid);
-  const bags: any[] = o.bags ?? [];
-  const showBags = scope !== "garments";
-  const showGarments = scope !== "bag";
-  const labelCount = (showBags ? bags.length : 0) + (showGarments ? live.length : 0);
-  const customer = settings.customerOnTag === "none" ? "" : settings.customerOnTag === "first_name" ? String(o.customer?.name ?? "").split(/\s+/)[0] : o.customer?.name;
-  const barcodeSrc = (code: string) => `/api/v1/garments/barcode/${encodeURIComponent(code)}?type=${settings.barcode}`;
+  // On a PC, pick the Windows default printer until the owner chooses one.
+  const printerName = settings.printerName || printers.find((p) => p.isDefault)?.name || "";
+
+  const live: any[] = useMemo(() => (o ? o.garments.filter((g: any) => g.currentStatus !== "cancelled") : []), [o]);
+  const bags: any[] = useMemo(() => o?.bags ?? [], [o]);
+
+  const customer = !o || settings.customerOnTag === "none" ? "" : settings.customerOnTag === "first_name" ? String(o.customer?.name ?? "").split(/\s+/)[0] : o.customer?.name ?? "";
+  const garmentData = (g: any, i: number): LabelData => {
+    const it = o.items.find((x: any) => x.id === g.orderItemId);
+    return {
+      barcodeValue: g.tagCode,
+      texts: {
+        orderNumber: o.orderNumber, count: `${i + 1}/${live.length}`, tagCode: g.tagCode, garment: it?.garmentTypeName ?? "", service: it?.serviceName ?? "", colour: it?.colour ?? "", customer,
+        due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}`,
+      },
+    };
+  };
+  const bagData = (b: any): LabelData => ({
+    barcodeValue: b.bagCode,
+    texts: { title: "BAG", orderNumber: o.orderNumber, pieces: `${b.garmentCount ?? b.expectedCount} pcs`, bagCode: b.bagCode, info: [o.branch?.name, customer].filter(Boolean).join(" · "), due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}` },
+  });
+
+  const items: PrintItem[] = useMemo(() => {
+    if (!o) return [];
+    const list: PrintItem[] = [];
+    if (scope !== "garments") bags.forEach((b) => list.push({ key: `bag-${b.id}`, design: settings.bagDesign, data: bagData(b) }));
+    if (scope !== "bag") live.forEach((g, i) => list.push({ key: `g-${g.id}`, design: settings.garmentDesign, data: garmentData(g, i) }));
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [o, scope, bags, live, settings.bagDesign, settings.garmentDesign, customer]);
+
+  const shown = override ?? items;
+  useEffect(() => {
+    let current = true;
+    Promise.all(shown.map(async (item) => {
+      const label = await renderLabel(item.design, item.data);
+      return { ...item, label, url: label.canvas.toDataURL("image/png") };
+    })).then((result) => { if (current) setDrawn(result); }).catch((e: Error) => setError(e.message));
+    return () => { current = false; };
+  }, [shown]);
+
+  const samples = useMemo(() => {
+    const g = live[0];
+    const b = bags[0];
+    return {
+      garment: g && o ? garmentData(g, 0) : { barcodeValue: "NEWDEL-2026-00001-01", texts: { orderNumber: "NEWDEL-2026-00001", count: "1/3", tagCode: "NEWDEL-2026-00001-01", garment: "Blazer", service: "Dry clean", colour: "Blue", customer: "Neelam", due: "Due 06 Nov" } },
+      bag: b && o ? bagData(b) : { barcodeValue: "NEWDEL-2026-00001-B1", texts: { title: "BAG", orderNumber: "NEWDEL-2026-00001", pieces: "3 pcs", bagCode: "NEWDEL-2026-00001-B1", info: "Main Store · Neelam", due: "Due 06 Nov" } },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [o, live, bags, customer]);
+
+  if (order.error) return <div className="p-6"><Alert>{order.error.message}</Alert></div>;
+  if ((!o && !test) || !org.data) return <Spinner />;
+
+  /** Sends labels of one size to the printer in small groups. Returns how many went. */
+  async function sendDirect(list: Drawn[], copies: number) {
+    const groups = new Map<string, Drawn[]>();
+    for (const item of list) {
+      const key = `${item.design.widthMm}x${item.design.heightMm}`;
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    for (const group of groups.values()) {
+      for (let i = 0; i < group.length; i += BATCH) {
+        const part = group.slice(i, i + BATCH);
+        await api("/labels/print", { body: {
+          printer: printerName, widthMm: part[0].design.widthMm, heightMm: part[0].design.heightMm, gapMm: settings.gapMm, density: settings.density, speed: settings.speed, copies,
+          labels: part.map((p) => labelToBitmap(p.label)),
+        } });
+      }
+    }
+  }
+
+  async function renderAll(list: PrintItem[]): Promise<Drawn[]> {
+    return Promise.all(list.map(async (item) => {
+      const label = await renderLabel(item.design, item.data);
+      return { ...item, label, url: label.canvas.toDataURL("image/png") };
+    }));
+  }
+
+  /** One way out for every print: straight to the printer on a PC, otherwise the print dialog. */
+  async function output(list: PrintItem[], copies: number) {
+    if (direct) {
+      if (!printerName) throw new Error("Choose a tag printer in Tag designer first.");
+      await sendDirect(await renderAll(list), copies);
+      setNotice(`Sent to ${printerName}.`);
+    } else {
+      setOverride(list);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      window.print();
+      setOverride(null);
+    }
+  }
 
   async function print() {
-    setError("");
-    setJobStatus("");
+    setError(""); setNotice(""); setJobStatus(""); setBusy(true);
     try {
       if (!test) setJob(await api(`/orders/${id}/print-jobs`, { body: { scope } }));
-      // Give the browser a moment to paint the labels before opening the print dialog.
-      setTimeout(() => window.print(), 150);
+      await output(items, settings.copies);
+      setAsked(true);
     } catch (e) {
       setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function printSamples(list: PrintItem[]) {
+    setError(""); setNotice(""); setBusy(true);
+    try {
+      await output(list, 1);
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function confirm(status: "printed" | "failed") {
+    setAsked(false);
     if (!job) return setJobStatus(status);
     try {
       await api(`/print-jobs/${job.id}/result`, { body: { status, error: status === "failed" ? "Labels did not print correctly" : undefined } });
       setJobStatus(status);
+      setJob(null);
       order.reload();
     } catch (e) {
       setError((e as ApiError).message);
@@ -67,43 +185,55 @@ function LabelsPageInner() {
   }
 
   async function saveSettings() {
-    setError("");
+    setError(""); setNotice(""); setSaving(true);
     try {
-      await api("/organizations/current", { method: "PATCH", body: { settings: { labels: settings } } });
-      setEditing(false);
+      await api("/organizations/current", { method: "PATCH", body: { settings: { labels: { ...settings, printerName } } } });
+      setNotice("Design saved. Every new tag will use it.");
       org.reload();
     } catch (e) {
       setError((e as ApiError).message);
+    } finally {
+      setSaving(false);
     }
   }
 
-  const pageCss = `@page { margin: 0 } @media print { body { background: #fff } .label { break-after: page; border: none !important; margin: 0 !important; box-shadow: none !important } }`;
-  const garmentStyle: CSSProperties = { width: `${settings.garmentWidthMm}mm`, height: `${settings.garmentHeightMm}mm` };
-  const bagStyle: CSSProperties = { width: `${settings.bagWidthMm}mm`, height: `${settings.bagHeightMm}mm` };
-  const qr = settings.barcode === "qrcode";
-  const copies = Array.from({ length: settings.copies }, (_, i) => i);
+  const applySample = (sampleId: number) => {
+    const preset = sampleId >= 3 ? GARMENT_DESIGN_QR : GARMENT_DESIGN_CODE128;
+    const moduleDots = sampleId === 4 ? 5 : sampleId === 3 ? 8 : sampleId === 1 ? 3 : 2;
+    setSettings({ ...settings, garmentDesign: { ...preset, widthMm: settings.garmentDesign.widthMm, heightMm: settings.garmentDesign.heightMm, barcode: { ...preset.barcode, moduleDots } } });
+    setPanel("design");
+    setNotice("Barcode updated in the designer. Check it, then press Save design.");
+  };
+
+  const first = drawn[0]?.design;
+  const pageCss = `@page { margin: 0${first ? `; size: ${first.widthMm}mm ${first.heightMm}mm` : ""} } @media print { body { background: #fff } .label { break-after: page; margin: 0 !important; box-shadow: none !important; border: none !important } }`;
+  const total = items.length * settings.copies;
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
       <style>{pageCss}</style>
-      <div className="no-print mx-auto mb-5 max-w-5xl space-y-4">
+      <div className="no-print mx-auto mb-5 max-w-6xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">{test ? "Test print" : `Labels · ${o.orderNumber}`}</h1>
-            <p className="text-sm text-slate-500">{bags.length} bag label{bags.length === 1 ? "" : "s"} · {live.length} garment tag{live.length === 1 ? "" : "s"} · {settings.barcode === "qrcode" ? "QR code" : "Code 128"}</p>
+            <h1 className="text-lg font-semibold text-slate-900">{test ? "Tag setup" : `Labels · ${o.orderNumber}`}</h1>
+            <p className="text-sm text-slate-500">{test ? "Design your tags and test your scanner." : `${bags.length} bag label${bags.length === 1 ? "" : "s"} · ${live.length} garment tag${live.length === 1 ? "" : "s"}`}{direct && printerName ? ` · ${printerName}` : ""}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={scope} onChange={(e) => setScope(e.target.value as Scope)} className="w-auto" aria-label="What to print">
-              <option value="all">Bag label + all garment tags</option>
-              <option value="bag">Bag label only</option>
-              <option value="garments">Garment tags only</option>
-            </Select>
-            <Button variant="secondary" onClick={() => setEditing((v) => !v)}><Settings2 className="h-4 w-4" />Label setup</Button>
-            <Button onClick={print}><Printer className="h-4 w-4" />Print {labelCount * settings.copies} label{labelCount * settings.copies === 1 ? "" : "s"}</Button>
+            {!test && (
+              <Select value={scope} onChange={(e) => setScope(e.target.value as Scope)} className="w-auto" aria-label="What to print">
+                <option value="all">Bag label + all garment tags</option>
+                <option value="bag">Bag label only</option>
+                <option value="garments">Garment tags only</option>
+              </Select>
+            )}
+            <Button variant="secondary" onClick={() => setPanel(panel === "design" ? "" : "design")}><Settings2 className="h-4 w-4" />Tag designer</Button>
+            <Button variant="secondary" onClick={() => setPanel(panel === "scanner" ? "" : "scanner")}><ScanLine className="h-4 w-4" />Scanner test</Button>
+            {!test && <Button onClick={print} loading={busy} disabled={total === 0}><Printer className="h-4 w-4" />Print {total} label{total === 1 ? "" : "s"}</Button>}
           </div>
         </div>
         {error && <Alert>{error}</Alert>}
-        {(job || test) && !jobStatus && (
+        {notice && <Alert tone="green">{notice}</Alert>}
+        {asked && !jobStatus && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <p className="flex items-center gap-2 text-sm font-medium text-amber-900"><TriangleAlert className="h-4 w-4" />Did all labels print clearly? Scan one tag to check it reads.</p>
             <div className="flex gap-2">
@@ -119,77 +249,39 @@ function LabelsPageInner() {
             {o.printJobs.slice(0, 5).map((j: any) => <Badge key={j.id} color={j.status === "printed" ? "green" : j.status === "failed" ? "red" : "amber"}>{j.status} · {j.labelCount} · {new Date(j.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</Badge>)}
           </div>
         )}
-        {editing && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Label setup</h2>
-            <p className="mt-1 text-xs text-slate-500">Choose the printer, paper size and darkness in the print dialog (printer driver). Set the label size here to match the roll loaded in the printer — e.g. 50 × 25 mm taffeta tags.</p>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Garment tag width (mm)"><Input type="number" min={20} max={120} value={settings.garmentWidthMm} onChange={(e) => setSettings({ ...settings, garmentWidthMm: Number(e.target.value) })} /></Field>
-              <Field label="Garment tag height (mm)"><Input type="number" min={15} max={120} value={settings.garmentHeightMm} onChange={(e) => setSettings({ ...settings, garmentHeightMm: Number(e.target.value) })} /></Field>
-              <Field label="Bag label width (mm)"><Input type="number" min={30} max={150} value={settings.bagWidthMm} onChange={(e) => setSettings({ ...settings, bagWidthMm: Number(e.target.value) })} /></Field>
-              <Field label="Bag label height (mm)"><Input type="number" min={25} max={150} value={settings.bagHeightMm} onChange={(e) => setSettings({ ...settings, bagHeightMm: Number(e.target.value) })} /></Field>
-              <Field label="Barcode type"><Select value={settings.barcode} onChange={(e) => setSettings({ ...settings, barcode: e.target.value as LabelSettings["barcode"] })}><option value="code128">Code 128 (most scanners)</option><option value="qrcode">QR code (needs a 2D scanner)</option></Select></Field>
-              <Field label="Customer on tag"><Select value={settings.customerOnTag} onChange={(e) => setSettings({ ...settings, customerOnTag: e.target.value as LabelSettings["customerOnTag"] })}><option value="first_name">First name only</option><option value="full_name">Full name</option><option value="none">Don&apos;t print</option></Select></Field>
-              <Field label="Copies of each label"><Input type="number" min={1} max={5} value={settings.copies} onChange={(e) => setSettings({ ...settings, copies: Number(e.target.value) })} /></Field>
-              <div className="space-y-2 pt-6 text-sm text-slate-700">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={settings.showHumanReadable} onChange={(e) => setSettings({ ...settings, showHumanReadable: e.target.checked })} />Print code under barcode</label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={settings.showColour} onChange={(e) => setSettings({ ...settings, showColour: e.target.checked })} />Print garment colour</label>
-              </div>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Button onClick={saveSettings}>Save setup</Button>
-              <a href="/print/labels?test=1" target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 hover:bg-slate-50">Test print</a>
-            </div>
-          </div>
+        {panel === "design" && (
+          <LabelDesigner
+            settings={{ ...settings, printerName }}
+            onChange={setSettings}
+            samples={samples}
+            printers={printers}
+            directAvailable={direct}
+            onRefreshPrinters={() => printerInfo.reload()}
+            saving={saving}
+            onSave={saveSettings}
+            onTestPrint={(kind) => printSamples([{ key: `test-${kind}`, design: kind === "garment" ? settings.garmentDesign : settings.bagDesign, data: samples[kind] }])}
+          />
+        )}
+        {panel === "scanner" && (
+          <ScannerTest
+            disabled={busy}
+            onPrint={() => printSamples(SCANNER_SAMPLES.map((s) => ({ key: `sample-${s.id}`, design: s.design, data: sampleData(s) })))}
+            onUse={(s) => applySample(s.id)}
+          />
         )}
       </div>
 
-      <div className="mx-auto flex max-w-5xl flex-wrap gap-3">
-        {showBags && bags.flatMap((b) => copies.map((c) => (
-          <div key={`${b.id}-${c}`} className="label flex flex-col overflow-hidden rounded-sm border border-dashed border-slate-400 bg-white p-[2.5mm] shadow-sm" style={bagStyle}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[7pt] font-bold uppercase tracking-wider">Bag</p>
-                <p className="truncate text-[11pt] font-black leading-tight">{o.orderNumber}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[16pt] font-black leading-none">{b.garmentCount ?? b.expectedCount}</p>
-                <p className="text-[6.5pt]">pieces</p>
-              </div>
-            </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={barcodeSrc(b.bagCode)} alt={b.bagCode} className={cx("mx-auto my-[1mm] min-h-0 flex-1 object-contain", qr ? "w-auto" : "w-full")} />
-            {settings.showHumanReadable && <p className="text-center font-mono text-[8pt] font-bold leading-none">{b.bagCode}</p>}
-            <div className="mt-[1mm] flex justify-between text-[7pt] leading-tight">
-              <span className="truncate">{o.branch?.name}{customer ? ` · ${customer}` : ""}</span>
-              <span className="shrink-0 pl-1 font-semibold">Due {dateOnly(o.promisedAt).slice(0, 6)}{o.express ? " · EXP" : ""}</span>
-            </div>
-          </div>
+      <div className="mx-auto flex max-w-6xl flex-wrap gap-3">
+        {drawn.flatMap((item) => Array.from({ length: override ? 1 : settings.copies }, (_, c) => (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img key={`${item.key}-${c}`} src={item.url} alt={item.data.barcodeValue} className="label rounded-sm border border-dashed border-slate-400 bg-white shadow-sm" style={{ width: `${item.design.widthMm}mm`, height: `${item.design.heightMm}mm`, imageRendering: "pixelated" }} />
         )))}
-        {showGarments && live.flatMap((g: any, i: number) => copies.map((c) => {
-          const it = item(g.orderItemId);
-          return (
-            <div key={`${g.id}-${c}`} className={cx("label flex overflow-hidden rounded-sm border border-dashed border-slate-400 bg-white px-[2mm] py-[1mm] shadow-sm", qr ? "flex-row items-center gap-[2mm]" : "flex-col justify-between")} style={garmentStyle}>
-              {qr && /* eslint-disable-next-line @next/next/no-img-element */ <img src={barcodeSrc(g.tagCode)} alt={g.tagCode} className="h-full max-h-full w-auto shrink-0 object-contain py-[0.5mm]" />}
-              <div className={cx("flex min-w-0 flex-1 flex-col", qr ? "justify-center gap-[0.5mm]" : "h-full justify-between")}>
-                <div className="flex justify-between text-[7pt] font-bold leading-tight"><span className="truncate">{o.orderNumber}</span><span className="shrink-0 pl-1">{i + 1}/{live.length}</span></div>
-                {!qr && /* eslint-disable-next-line @next/next/no-img-element */ <img src={barcodeSrc(g.tagCode)} alt={g.tagCode} className="mx-auto h-[9mm] w-full object-contain" />}
-                {settings.showHumanReadable && <div className={cx("font-mono text-[6.5pt] leading-none", !qr && "text-center")}>{g.tagCode}</div>}
-                <div className="truncate text-[6.5pt] font-semibold leading-tight">{it?.garmentTypeName} · {it?.serviceName}</div>
-                <div className="flex justify-between text-[6.5pt] leading-tight">
-                  <span className="truncate">{[settings.showColour ? it?.colour : null, customer].filter(Boolean).join(" · ")}{o.express ? " · EXPRESS" : ""}</span>
-                  <span className="shrink-0 pl-1">{dateOnly(o.promisedAt).slice(0, 6)}</span>
-                </div>
-              </div>
-            </div>
-          );
-        }))}
       </div>
     </div>
   );
 }
 
-/** A realistic sample for the test print: no database records are created. */
+/** A realistic sample for setup: no database records are created. */
 function sampleOrder() {
   const items = [{ id: "i1", garmentTypeName: "Shirt", serviceName: "Dry clean", colour: "Blue" }];
   return {

@@ -410,8 +410,91 @@ export const deliveryCompleteSchema = z.object({
 
 export const deliveryRescheduleSchema = z.object({ scheduledDate: z.iso.date(), timeSlot: z.enum(TIME_SLOTS), notes: z.string().max(300).optional() });
 
-/** Tag / label printer layout. Printer choice and print density are set in the operating-system printer driver. */
+/**
+ * Tag designs are stored in printer dots (8 dots per mm on a 203 dpi printer), so what is designed is
+ * exactly what prints. Barcode bars are always a whole number of dots wide, which keeps them scannable.
+ */
+const labelElementSchema = z.object({
+  show: z.boolean(),
+  x: z.number().int().min(0).max(1600),
+  y: z.number().int().min(0).max(1600),
+  size: z.number().int().min(8).max(240),
+  bold: z.boolean(),
+});
+const labelBarcodeSchema = z.object({
+  type: z.enum(["code128", "qrcode"]),
+  show: z.boolean(),
+  x: z.number().int().min(0).max(1600),
+  y: z.number().int().min(0).max(1600),
+  centered: z.boolean(),
+  moduleDots: z.number().int().min(1).max(16),
+  heightDots: z.number().int().min(16).max(800),
+  /** Clockwise turn of the barcode on the tag. */
+  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).default(0),
+  /** Line barcodes only: hold the short form of the tag number, so the bars can be thicker. */
+  compact: z.boolean().default(true),
+});
+export const labelDesignSchema = z.object({
+  widthMm: z.number().min(20).max(150),
+  heightMm: z.number().min(15).max(150),
+  barcode: labelBarcodeSchema,
+  elements: z.record(z.string().max(30), labelElementSchema),
+});
+export type LabelDesign = z.infer<typeof labelDesignSchema>;
+
+const el = (x: number, y: number, size: number, bold = false) => ({ show: true, x, y, size, bold });
+const GARMENT_TEXT = (top: number) => ({
+  orderNumber: el(16, 8, 24, true),
+  count: el(340, 8, 24, true),
+  tagCode: el(16, top, 20),
+  garment: el(16, top + 26, 34, true),
+  service: el(16, top + 62, 24),
+  colour: el(230, top + 62, 24),
+  customer: el(16, top + 90, 24),
+  due: el(250, top + 90, 24, true),
+});
+/** Default tag: 50 x 30 mm taffeta with large text. */
+export const GARMENT_DESIGN_CODE128: LabelDesign = {
+  widthMm: 50, heightMm: 30,
+  barcode: { type: "code128", show: true, x: 16, y: 38, centered: true, moduleDots: 2, heightDots: 72, rotation: 0, compact: true },
+  elements: GARMENT_TEXT(114),
+};
+export const GARMENT_DESIGN_QR: LabelDesign = {
+  widthMm: 50, heightMm: 30,
+  barcode: { type: "qrcode", show: true, x: 20, y: 46, centered: false, moduleDots: 6, heightDots: 126, rotation: 0, compact: false },
+  elements: {
+    orderNumber: el(16, 8, 24, true), count: el(340, 8, 24, true),
+    garment: el(160, 44, 34, true), service: el(160, 84, 24), colour: el(160, 112, 24),
+    customer: el(160, 140, 24), due: el(160, 168, 24, true), tagCode: el(16, 202, 24),
+  },
+};
+const BAG_TEXT = {
+  title: el(20, 14, 26, true), orderNumber: el(20, 44, 38, true), pieces: el(470, 14, 44, true),
+  bagCode: el(20, 268, 28), info: el(20, 312, 28), due: el(20, 350, 28, true),
+};
+export const BAG_DESIGN_CODE128: LabelDesign = {
+  widthMm: 75, heightMm: 50,
+  barcode: { type: "code128", show: true, x: 20, y: 100, centered: true, moduleDots: 2, heightDots: 150, rotation: 0, compact: true },
+  elements: BAG_TEXT,
+};
+export const BAG_DESIGN_QR: LabelDesign = {
+  widthMm: 75, heightMm: 50,
+  barcode: { type: "qrcode", show: true, x: 220, y: 92, centered: false, moduleDots: 7, heightDots: 170, rotation: 0, compact: false },
+  elements: BAG_TEXT,
+};
+
+/** Tag / label printer layout and print settings. */
 export const labelSettingsSchema = z.object({
+  garmentDesign: labelDesignSchema.default(GARMENT_DESIGN_CODE128),
+  bagDesign: labelDesignSchema.default(BAG_DESIGN_CODE128),
+  /** Windows printer used for direct printing in the PC edition. */
+  printerName: z.string().trim().max(200).default(""),
+  /** Space between tags on the roll. */
+  gapMm: z.number().min(0).max(25).default(2),
+  /** Print darkness, 0 to 15. Taffeta usually needs more than paper. */
+  density: z.number().int().min(0).max(15).default(10),
+  /** Print speed in inches per second. Slower is sharper on taffeta. */
+  speed: z.number().int().min(1).max(6).default(3),
   garmentWidthMm: z.number().int().min(20).max(120).default(50),
   garmentHeightMm: z.number().int().min(15).max(120).default(25),
   bagWidthMm: z.number().int().min(30).max(150).default(75),

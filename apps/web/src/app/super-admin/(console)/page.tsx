@@ -27,7 +27,7 @@ export default function SuperAdminDashboard() {
     <>
       <ConsoleHeader
         title={admin.name && admin.name !== "DryCare Admin" ? `${greeting}, ${admin.name.split(" ")[0]}` : greeting}
-        description="Live figures for the DryCare software business. Collections count only payments verified in your bank or UPI account; nothing here is estimated."
+        description="Live figures for the Drycare software business. Collections count only payments verified in your bank or UPI account; nothing here is estimated."
         actions={<Button variant="secondary" onClick={reload} loading={loading && Boolean(data)}><RefreshCw className="h-4 w-4" />Refresh</Button>}
       />
       {error && <div className="mb-5"><Alert>{error}</Alert></div>}

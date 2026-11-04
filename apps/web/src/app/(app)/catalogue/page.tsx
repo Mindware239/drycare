@@ -324,7 +324,7 @@ function StandardCatalogueBanner({ onInstalled }: { onInstalled: (message: strin
       <div className="min-w-[14rem] flex-1">
         <p className="text-sm font-semibold text-slate-900">{available ? `${available} more ready-made garments available` : "Organise your garments into the new categories"}</p>
         <p className="mt-0.5 text-xs leading-5 text-slate-600">
-          {available ? `Add the DryCare standard list${standard.data.categories.length ? ` (${standard.data.categories.join(", ")})` : ""} with typical starting prices and pictures. ` : ""}
+          {available ? `Add the Drycare standard list${standard.data.categories.length ? ` (${standard.data.categories.join(", ")})` : ""} with typical starting prices and pictures. ` : ""}
           {recategorise ? `${recategorise} standard garment${recategorise === 1 ? "" : "s"} will move into the new categories (e.g. Woollens → Men / Accessories). ` : ""}
           Your prices and anything you renamed or re-categorised yourself are not changed.
         </p>

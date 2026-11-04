@@ -32,31 +32,31 @@ export default function SuperAdminLoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen bg-[#f3f8f8] lg:grid-cols-[minmax(0,1.7fr)_minmax(460px,1fr)]">
-      <section className="relative hidden overflow-hidden bg-[#06232a] text-white lg:block">
+    <main className="grid min-h-screen bg-[#f7f7f5] lg:grid-cols-[minmax(0,1.7fr)_minmax(460px,1fr)]">
+      <section className="relative hidden overflow-hidden bg-[#151514] text-white lg:block">
         {/* Store photo on the right, fading into the dark panel behind the text */}
         <div className="absolute inset-y-0 right-0 w-[56%] bg-cover bg-[center_right] 2xl:w-[64%] 2xl:bg-center" style={{ backgroundImage: "url(/images/super-admin-hero.jpg)" }} aria-hidden="true" />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,#06232a_0%,#06232a_34%,rgba(6,35,42,0.86)_46%,rgba(6,35,42,0.35)_62%,rgba(6,35,42,0)_78%)]" aria-hidden="true" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#06232a]/70 to-transparent" aria-hidden="true" />
-        <div className="absolute -left-40 top-1/3 h-[28rem] w-[28rem] rounded-full bg-teal-500/10 blur-3xl" aria-hidden="true" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,#151514_0%,#151514_34%,rgba(21,21,20,0.86)_46%,rgba(21,21,20,0.35)_62%,rgba(21,21,20,0)_78%)]" aria-hidden="true" />
+        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#151514]/70 to-transparent" aria-hidden="true" />
+        <div className="absolute -left-40 top-1/3 h-[28rem] w-[28rem] rounded-full bg-brand-500/10 blur-3xl" aria-hidden="true" />
 
         <div className="relative flex h-full min-h-screen flex-col justify-between p-12 xl:p-14">
           <div className="flex items-center gap-4">
-            <Logo className="h-14 w-14 rounded-2xl" />
+            <Logo className="h-14 w-auto" dark />
             <div>
-              <p className="text-xl font-semibold tracking-tight">DryCare Control Center</p>
+              <p className="text-xl font-semibold tracking-tight">Drycare Control Center</p>
               <p className="text-sm text-slate-300">Mindware · Software owner administration</p>
             </div>
           </div>
 
           <div className="max-w-[540px] py-10">
             <h1 className="text-5xl font-bold leading-[1.08] tracking-tight xl:text-[56px]">
-              Run the DryCare business from
-              <span className="block bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 bg-clip-text text-transparent">one secure place.</span>
+              Run the Drycare business from
+              <span className="block text-brand-500">one secure place.</span>
             </h1>
-            <p className="mt-6 max-w-[500px] text-lg leading-8 text-slate-300">Customers, trials, plans, payments, renewals and licenses for every dry-cleaning shop on DryCare.</p>
+            <p className="mt-6 max-w-[500px] text-lg leading-8 text-slate-300">Customers, trials, plans, payments, renewals and licenses for every dry-cleaning shop on Drycare.</p>
             <ul className="mt-10 space-y-5">
-              <Feature icon={ShieldCheck} tone="bg-teal-700/60 text-teal-100 ring-teal-400/20" title="Two-step sign-in" text="Password and a one-time email code" />
+              <Feature icon={ShieldCheck} tone="bg-brand-700/60 text-brand-100 ring-brand-400/20" title="Two-step sign-in" text="Password and a one-time email code" />
               <Feature icon={Users} tone="bg-blue-700/50 text-blue-100 ring-blue-400/20" title="Shop owner and staff accounts" text="Can never sign in here" />
               <Feature icon={FileText} tone="bg-indigo-700/50 text-indigo-100 ring-indigo-400/20" title="Every action recorded" text="In a permanent audit log" />
             </ul>
@@ -68,15 +68,15 @@ export default function SuperAdminLoginPage() {
 
       <section className="relative flex flex-col overflow-hidden p-5 sm:p-8 xl:p-12">
         {/* Soft background shapes */}
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-teal-100/70 blur-2xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-cyan-100/70 blur-2xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-20 -right-16 h-56 w-56 rounded-full bg-teal-100/60 blur-2xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-100/70 blur-2xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-brand-100/70 blur-2xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-20 -right-16 h-56 w-56 rounded-full bg-brand-100/60 blur-2xl" aria-hidden="true" />
 
         <div className="relative flex flex-1 items-center justify-center">
-        <div className="w-full max-w-[540px] rounded-3xl border border-white bg-white p-7 shadow-[0_30px_80px_-30px_rgba(6,35,42,0.25)] sm:p-11">
+        <div className="w-full max-w-[540px] rounded-3xl border border-white bg-white p-7 shadow-[0_30px_80px_-30px_rgba(21,21,20,0.25)] sm:p-11">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <Logo className="h-10 w-10 rounded-xl" />
-            <div><p className="font-semibold text-slate-900">DryCare Control Center</p><p className="text-xs text-slate-500">Mindware administration</p></div>
+            <Logo className="h-9 w-auto" />
+            <div><p className="font-semibold text-slate-900">Drycare Control Center</p><p className="text-xs text-slate-500">Mindware administration</p></div>
           </div>
           {mode === "forgot" ? (
             <ForgotPassword initialEmail={email} onDone={(message) => { setMode("signin"); setPassword(""); setError(""); setNotice(message); }} onCancel={() => setMode("signin")} />
@@ -84,9 +84,9 @@ export default function SuperAdminLoginPage() {
             <CodeStep challenge={challenge} onBack={() => { setChallenge(null); setPassword(""); setError(""); }} onResend={() => requestCode()} resending={loading} />
           ) : (
             <>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Step 1 of 2</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Step 1 of 2</p>
               <h2 className="mt-3 text-[28px] font-bold leading-tight tracking-tight text-slate-900">Super admin sign in</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Enter your DryCare administrator email and password. We will then email you a 6-digit code.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Enter your Drycare administrator email and password. We will then email you a 6-digit code.</p>
               <form onSubmit={requestCode} className="mt-7 space-y-4">
                 {notice && <p className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />{notice}</p>}
                 {error && <Alert>{error}</Alert>}
@@ -107,7 +107,7 @@ export default function SuperAdminLoginPage() {
           )}
         </div>
         </div>
-        <p className="relative mt-6 text-center text-xs text-slate-400">© {new Date().getFullYear()} Mindware · DryCare. All rights reserved.</p>
+        <p className="relative mt-6 text-center text-xs text-slate-400">© {new Date().getFullYear()} Mindware · Drycare. All rights reserved.</p>
       </section>
     </main>
   );
@@ -176,10 +176,10 @@ function CodeStep({ challenge, onBack, onResend, resending }: { challenge: Chall
   return (
     <>
       <button type="button" onClick={onBack} className="mb-7 inline-flex items-center gap-2 text-base font-medium text-slate-700 hover:text-slate-950"><ArrowLeft className="h-5 w-5" />Back</button>
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Step 2 of 2</p>
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Step 2 of 2</p>
       <h2 className="mt-3 text-[28px] font-bold leading-tight tracking-tight text-slate-900">Enter your verification code</h2>
       <p className="mt-3 text-base text-slate-600">{challenge.delivery === "email" ? "We've sent a 6-digit code to" : "Your 6-digit code is for"}</p>
-      <p className="mt-3 inline-flex items-center gap-3 rounded-xl bg-slate-100 px-4 py-3 text-base font-semibold text-slate-900"><Mail className="h-5 w-5 text-teal-800" />{challenge.emailHint}</p>
+      <p className="mt-3 inline-flex items-center gap-3 rounded-xl bg-slate-100 px-4 py-3 text-base font-semibold text-slate-900"><Mail className="h-5 w-5 text-brand-800" />{challenge.emailHint}</p>
       {challenge.delivery !== "email" && <DevCodeNotice challenge={challenge} />}
       <form onSubmit={(e) => { e.preventDefault(); void verify(); }} className="mt-7">
         {error && <div className="mb-4"><Alert>{error}</Alert></div>}
@@ -188,7 +188,7 @@ function CodeStep({ challenge, onBack, onResend, resending }: { challenge: Chall
             <input key={i} ref={(el) => { inputs.current[i] = el; }} value={d} inputMode="numeric" autoComplete={i === 0 ? "one-time-code" : "off"} maxLength={6}
               aria-label={`Digit ${i + 1}`} disabled={verifying || secondsLeft === 0}
               onChange={(e) => setDigit(i, e.target.value)} onKeyDown={(e) => onKey(i, e)} onFocus={(e) => e.target.select()}
-              className={cx("h-16 w-full min-w-0 rounded-xl border-2 bg-white text-center text-2xl font-semibold tabular-nums text-slate-900 caret-teal-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/15 disabled:bg-slate-50", error ? "border-red-300" : "border-slate-200")} />
+              className={cx("h-16 w-full min-w-0 rounded-xl border-2 bg-white text-center text-2xl font-semibold tabular-nums text-slate-900 caret-brand-700 outline-none transition focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15 disabled:bg-slate-50", error ? "border-red-300" : "border-slate-200")} />
           ))}
         </div>
         <p className={cx("mt-3 text-center text-sm", secondsLeft < 60 ? "text-red-600" : "text-slate-500")}>
@@ -198,7 +198,7 @@ function CodeStep({ challenge, onBack, onResend, resending }: { challenge: Chall
       </form>
       <p className="mt-6 text-center text-base text-slate-500">
         Didn&apos;t get it?{" "}
-        <button type="button" className="font-semibold text-teal-700 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline" disabled={resendIn > 0 || resending} onClick={onResend}>
+        <button type="button" className="font-semibold text-brand-700 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline" disabled={resendIn > 0 || resending} onClick={onResend}>
           {resendIn > 0 ? `Resend in ${resendIn}s` : resending ? "Sending…" : "Send a new code"}
         </button>
       </p>
@@ -253,7 +253,7 @@ function ForgotPassword({ initialEmail, onDone, onCancel }: { initialEmail: stri
   return (
     <>
       <button type="button" onClick={onCancel} className="mb-7 inline-flex items-center gap-2 text-base font-medium text-slate-700 hover:text-slate-950"><ArrowLeft className="h-5 w-5" />Back to sign in</button>
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Reset password</p>
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Reset password</p>
       <h2 className="mt-3 text-[28px] font-bold leading-tight tracking-tight text-slate-900">{challenge ? "Choose a new password" : "Forgot your password?"}</h2>
       {!challenge ? (
         <>
@@ -339,7 +339,7 @@ function Feature({ icon: Icon, tone, title, text }: { icon: LucideIcon; tone: st
 function PrimaryButton({ children, loading, disabled, className }: { children: React.ReactNode; loading?: boolean; disabled?: boolean; className?: string }) {
   return (
     <button type="submit" disabled={disabled || loading}
-      className={cx("relative flex h-14 w-full items-center justify-center rounded-xl bg-gradient-to-r from-teal-800 via-teal-700 to-teal-600 px-6 text-base font-semibold text-white shadow-[0_12px_30px_-12px_rgba(15,118,110,0.7)] transition hover:brightness-110 focus:outline-none focus-visible:ring-4 focus-visible:ring-teal-600/30 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none", className)}>
+      className={cx("relative flex h-14 w-full items-center justify-center rounded-full bg-brand-500 px-6 text-base font-semibold text-slate-900 transition hover:bg-brand-400 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-600/30 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none", className)}>
       {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <>{children}<ArrowRight className="absolute right-6 h-5 w-5" /></>}
     </button>
   );

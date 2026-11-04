@@ -33,14 +33,14 @@ export function LinkedPcCard() {
   return (
     <div id="shop-pc">
       <Card title={<span className="flex items-center gap-2"><Laptop className="h-4 w-4 text-brand-600" />Linked shop PC</span>}>
-        <p className="text-sm text-slate-600">This PC uploads the shop's orders, bills and stock to DryCare Cloud. Only one PC can upload at a time, so invoice numbers stay unique.</p>
+        <p className="text-sm text-slate-600">This PC uploads the shop's orders, bills and stock to Drycare Cloud. Only one PC can upload at a time, so invoice numbers stay unique.</p>
         <ul className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200">
           {list.data.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-slate-900">{d.name} <Badge color={d.status === "active" ? "green" : "slate"}>{d.status === "active" ? "Connected" : "Disconnected"}</Badge></p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {d.branchName}{d.appVersion ? ` · DryCare ${d.appVersion}` : ""} · last upload {d.lastPushAt ? dateTime(d.lastPushAt) : "not yet"} · {d.eventsApplied.toLocaleString("en-IN")} changes received{d.problems ? ` · ${d.problems} refused or in conflict` : ""}
+                  {d.branchName}{d.appVersion ? ` · Drycare ${d.appVersion}` : ""} · last upload {d.lastPushAt ? dateTime(d.lastPushAt) : "not yet"} · {d.eventsApplied.toLocaleString("en-IN")} changes received{d.problems ? ` · ${d.problems} refused or in conflict` : ""}
                 </p>
                 {d.revokedAt && <p className="mt-0.5 text-xs text-slate-500">Disconnected {dateTime(d.revokedAt)}{d.revokeReason ? ` — ${d.revokeReason}` : ""}</p>}
               </div>

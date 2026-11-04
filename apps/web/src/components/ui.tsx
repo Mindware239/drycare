@@ -7,7 +7,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 
 type Variant = "primary" | "secondary" | "danger" | "ghost";
 const variants: Record<Variant, string> = {
-  primary: "bg-brand-700 text-white hover:bg-brand-800",
+  primary: "bg-brand-500 font-semibold text-slate-900 hover:bg-brand-400",
   secondary: "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50",
   danger: "bg-red-600 text-white hover:bg-red-700",
   ghost: "text-slate-700 hover:bg-slate-100",
@@ -19,7 +19,7 @@ export function Button({ variant = "primary", loading, className, children, disa
       {...rest}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" ? "h-8 px-2.5 text-xs" : size === "lg" ? "h-11 px-5 text-base" : "h-9 px-3.5 text-sm",
         variants[variant],
         className,
