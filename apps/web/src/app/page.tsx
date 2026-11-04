@@ -3,8 +3,9 @@ import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { MarketingHome } from "@/components/marketing/MarketingPages";
 
 export const metadata: Metadata = {
-  title: "DryCare | Dry Cleaning & Laundry Management Software for Windows",
-  description: "Run customers, garment orders, billing, payments and reports with DryCare, a Windows desktop software for dry-cleaning and laundry businesses.",
+  title: { absolute: "Drycare | Dry Cleaning & Laundry Store Management Software" },
+  description: "Book orders, tag every garment, manage pickups and deliveries, and collect payments, all in one software built for dry cleaners and laundries.",
+  icons: { icon: "/site/favicon.png" },
 };
 
 export default function Home() {

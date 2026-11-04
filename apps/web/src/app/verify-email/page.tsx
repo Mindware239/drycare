@@ -3,27 +3,16 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, CircleCheck, LoaderCircle, MailCheck, TriangleAlert } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
-import { Alert, Button } from "@/components/ui";
-import { Wordmark } from "@/components/Brand";
+import { AuthHeading, AuthNotice, AuthShell } from "@/components/marketing/AuthShell";
+
+const cta = { textDecoration: "none" } as const;
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<Shell><p className="text-sm text-slate-600">Loading…</p></Shell>}>
+    <Suspense fallback={<AuthShell><p className="dc-small" style={{ margin: 0 }}>Loading…</p></AuthShell>}>
       <VerifyEmailContent />
     </Suspense>
-  );
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f4f7f6] p-5">
-      <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_10px_40px_rgba(15,23,42,.06)]">
-        <Wordmark />
-        <div className="mt-8">{children}</div>
-      </section>
-    </main>
   );
 }
 
@@ -42,24 +31,20 @@ function CheckLink({ token }: { token: string }) {
       .catch((error: ApiError) => { setState("error"); setMessage(error.message); });
   }, [token]);
 
-  if (state === "checking") return <Shell><p className="flex items-center gap-2 text-sm text-slate-600"><LoaderCircle className="h-4 w-4 animate-spin" />Checking your verification link…</p></Shell>;
+  if (state === "checking") return <AuthShell><p className="dc-small" style={{ margin: 0 }}>Checking your verification link…</p></AuthShell>;
   if (state === "verified") {
     return (
-      <Shell>
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CircleCheck className="h-6 w-6" /></span>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">Email verified</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Your account email is confirmed. Password resets and order emails will reach you.</p>
-        <Link href="/onboarding" className="mt-6 block"><Button size="lg" className="w-full">Continue setup</Button></Link>
-      </Shell>
+      <AuthShell>
+        <AuthHeading title="Email verified">Your account email is confirmed. Password resets and order emails will reach you.</AuthHeading>
+        <Link href="/onboarding" className="dc-btn-block" style={cta}>Continue setup</Link>
+      </AuthShell>
     );
   }
   return (
-    <Shell>
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600"><TriangleAlert className="h-6 w-6" /></span>
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">This link can&apos;t be used</h1>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{message || "The link is invalid or has expired."} Sign in and request a new link from the setup page.</p>
-      <Link href="/verify-email" className="mt-6 block"><Button size="lg" className="w-full">Send a new link</Button></Link>
-    </Shell>
+    <AuthShell>
+      <AuthHeading title="This link can't be used">{message || "The link is invalid or has expired."} Sign in and request a new link from the setup page.</AuthHeading>
+      <Link href="/verify-email" className="dc-btn-block" style={cta}>Send a new link</Link>
+    </AuthShell>
   );
 }
 
@@ -69,7 +54,7 @@ function CheckInbox() {
   const [verified, setVerified] = useState(false);
   const [signedIn, setSignedIn] = useState(true);
   const [sending, setSending] = useState(false);
-  const [notice, setNotice] = useState<{ tone: "green" | "amber" | "red"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
 
   useEffect(() => {
     Promise.all([api<{ user: { email: string } }>("/auth/session"), api<{ emailVerified: boolean }>("/auth/trial-status")])
@@ -83,10 +68,10 @@ function CheckInbox() {
     try {
       const r = await api<{ sent: boolean; alreadyVerified: boolean; emailConfigured?: boolean }>("/auth/verify-email/resend", { body: {} });
       if (r.alreadyVerified) setVerified(true);
-      else if (r.emailConfigured === false) setNotice({ tone: "amber", text: "A new link was created, but email sending is not set up on this DryCare system yet, so it could not be delivered. Ask your DryCare administrator." });
-      else setNotice({ tone: "green", text: `A new link is on its way to ${email}. It works for 24 hours.` });
+      else if (r.emailConfigured === false) setNotice({ tone: "bad", text: "A new link was created, but email sending is not set up on this Drycare system yet, so it could not be delivered. Ask your Drycare administrator." });
+      else setNotice({ tone: "good", text: `A new link is on its way to ${email}. It works for 24 hours.` });
     } catch (e) {
-      setNotice({ tone: "red", text: (e as ApiError).status === 429 ? "You've asked for several links already. Please wait a few minutes and check your spam folder." : (e as ApiError).message });
+      setNotice({ tone: "bad", text: (e as ApiError).status === 429 ? "You've asked for several links already. Please wait a few minutes and check your spam folder." : (e as ApiError).message });
     } finally {
       setSending(false);
     }
@@ -94,35 +79,30 @@ function CheckInbox() {
 
   if (!signedIn) {
     return (
-      <Shell>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Sign in to continue</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Open the link from your verification email, or sign in to request a new one.</p>
-        <Link href="/login?next=/verify-email" className="mt-6 block"><Button size="lg" className="w-full">Sign in</Button></Link>
-      </Shell>
+      <AuthShell>
+        <AuthHeading title="Sign in to continue">Open the link from your verification email, or sign in to request a new one.</AuthHeading>
+        <Link href="/login?next=/verify-email" className="dc-btn-block" style={cta}>Sign in</Link>
+      </AuthShell>
     );
   }
   if (verified) {
     return (
-      <Shell>
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CircleCheck className="h-6 w-6" /></span>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">Your email is already verified</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{email} is confirmed. Nothing more to do here.</p>
-        <Link href="/onboarding" className="mt-6 block"><Button size="lg" className="w-full">Back to setup</Button></Link>
-      </Shell>
+      <AuthShell>
+        <AuthHeading title="Your email is already verified">{email} is confirmed. Nothing more to do here.</AuthHeading>
+        <Link href="/onboarding" className="dc-btn-block" style={cta}>Back to setup</Link>
+      </AuthShell>
     );
   }
   return (
-    <Shell>
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-700"><MailCheck className="h-6 w-6" /></span>
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">Check your inbox</h1>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        We sent a verification link to <span className="font-semibold text-slate-900">{email ?? "your email"}</span>. Open it on any device to confirm your account. It can take a minute to arrive — check the spam folder too.
-      </p>
-      {notice && <div className="mt-4"><Alert tone={notice.tone}>{notice.text}</Alert></div>}
-      <div className="mt-6 space-y-2">
-        <Button size="lg" className="w-full" onClick={resend} loading={sending} disabled={!email}>Send a new link</Button>
-        <Link href="/onboarding" className="block"><Button size="lg" variant="ghost" className="w-full"><ArrowLeft className="h-4 w-4" />Back to setup</Button></Link>
+    <AuthShell>
+      <AuthHeading title="Check your inbox">
+        We sent a verification link to <strong style={{ color: "#151514" }}>{email ?? "your email"}</strong>. Open it on any device to confirm your account. It can take a minute to arrive, so check the spam folder too.
+      </AuthHeading>
+      {notice && <AuthNotice tone={notice.tone}>{notice.text}</AuthNotice>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button type="button" className="dc-btn-block" onClick={resend} disabled={sending || !email}>{sending ? "Sending…" : "Send a new link"}</button>
+        <Link href="/onboarding" className="dc-btn dc-btn-line" style={{ textAlign: "center" }}>← Back to setup</Link>
       </div>
-    </Shell>
+    </AuthShell>
   );
 }
