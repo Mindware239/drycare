@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { TIME_SLOTS, expandScanCode } from "@drycare/shared";
+import { TIME_SLOTS, expandScanCode, numericScanCode } from "@drycare/shared";
 import { api, ApiError, newIdempotencyKey } from "@/lib/api";
 import { money, rupeesToPaise, todayISO } from "@/lib/format";
 import { Alert, Badge, Button, Field, Input, Modal, Select, Textarea, cx } from "@/components/ui";
@@ -46,7 +46,9 @@ export function DispatchModal({ stop, onClose, onDone }: { stop: any; onClose: (
 
   function scan(e: React.FormEvent) {
     e.preventDefault();
-    const t = expandScanCode(code);
+    const typed = expandScanCode(code);
+    // A line barcode holds a number: match it to the tag it was printed for.
+    const t = items.find((i) => numericScanCode(i.tag_code) === typed)?.tag_code ?? typed;
     setCode("");
     if (!t) return;
     if (!items.some((i) => i.tag_code === t)) setErr(`${t} is not part of this delivery — keep it out of the bag.`);

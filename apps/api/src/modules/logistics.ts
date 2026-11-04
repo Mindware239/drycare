@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { TRANSFER_FLOW, collectionDiscount, expandScanCode, type GarmentLocation, type TransferDirection } from "@drycare/shared";
+import { TRANSFER_FLOW, collectionDiscount, type GarmentLocation, type TransferDirection } from "@drycare/shared";
+import { resolveScanCode } from "../lib/scanLookup";
 import { db, schema, type Tx } from "../db/client";
 import { assertBranchAccess, can, requirePermission, type AuthContext } from "../lib/context";
 import { audit } from "../lib/audit";
@@ -42,7 +43,7 @@ async function moveGarments(tx: Tx, auth: AuthContext, garmentIds: string[], to:
 
 /** Resolves a scanned code to a bag or a garment of this organization. */
 async function resolveCode(tx: Tx | typeof db, orgId: string, raw: string) {
-  const code = expandScanCode(raw);
+  const code = await resolveScanCode(tx, orgId, raw);
   const bag = await tx.query.bags.findFirst({ where: and(eq(schema.bags.organizationId, orgId), eq(schema.bags.bagCode, code)) });
   if (bag) return { kind: "bag" as const, code, bag };
   const garment = await tx.query.garments.findFirst({ where: and(eq(schema.garments.organizationId, orgId), eq(schema.garments.tagCode, code)) });
@@ -139,14 +140,14 @@ export async function logisticsRoutes(app: FastifyInstance) {
   app.post("/orders/:orderId/print-jobs", async (req, reply) => {
     const auth = requirePermission(req, "orders.read");
     const { orderId } = z.object({ orderId: uuid }).parse(req.params);
-    const body = z.object({ scope: z.enum(["all", "bag", "garments"]).default("all"), garmentIds: z.array(uuid).optional() }).parse(req.body ?? {});
+    const body = z.object({ scope: z.enum(["all", "bag", "garments"]).default("all"), garmentIds: z.array(uuid).optional(), labelCount: z.number().int().min(1).max(5000).optional() }).parse(req.body ?? {});
     const order = await db.query.orders.findFirst({ where: and(eq(schema.orders.id, orderId), eq(schema.orders.organizationId, auth.orgId)) });
     if (!order) throw notFound("Order");
     assertBranchAccess(auth, order.branchId);
     const [{ bags, garments }] = await db.execute<{ bags: number; garments: number }>(sql`
       select (select count(*)::int from bags where order_id = ${orderId}) as bags,
              (select count(*)::int from garments where order_id = ${orderId} and current_status <> 'cancelled') as garments`);
-    const labelCount = body.scope === "bag" ? bags : body.scope === "garments" ? body.garmentIds?.length ?? garments : bags + garments;
+    const labelCount = body.labelCount ?? (body.scope === "bag" ? bags : body.scope === "garments" ? body.garmentIds?.length ?? garments : bags + garments);
     const [job] = await db.insert(schema.labelPrintJobs).values({ organizationId: auth.orgId, orderId, scope: body.scope, labelCount, requestedBy: auth.userId }).returning();
     reply.code(201);
     return job;

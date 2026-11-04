@@ -1,13 +1,17 @@
 "use client";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Printer, ScanLine, Settings2, TriangleAlert, XCircle } from "lucide-react";
-import { DEFAULT_LABEL_SETTINGS, GARMENT_DESIGN_CODE128, GARMENT_DESIGN_QR, labelSettingsSchema, type LabelDesign, type LabelSettings } from "@drycare/shared";
+import { ArrowLeft, CheckCircle2, Printer, ScanLine, Settings2, TriangleAlert, XCircle } from "lucide-react";
+import { DEFAULT_LABEL_SETTINGS, GARMENT_DESIGN_38_LINE, GARMENT_DESIGN_38_QR, formatMoney, labelSettingsSchema, type LabelDesign, type LabelSettings } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { dateOnly } from "@/lib/format";
+import { withRollSize } from "@/lib/labelDesign";
 import { labelToBitmap, renderLabel, type LabelData, type RenderedLabel } from "@/lib/labelRender";
-import { Alert, Badge, Button, Select, Spinner } from "@/components/ui";
+import { Alert, Badge, Button, Select, Spinner, cx } from "@/components/ui";
+import { BarcodeAdjust } from "@/components/BarcodeAdjust";
 import { LabelDesigner, type PrinterDetails } from "@/components/LabelDesigner";
+import { PrinterQueueStatus, usePrinterQueue } from "@/components/PrinterQueue";
 import { SCANNER_SAMPLES, ScannerTest, sampleData } from "@/components/ScannerTest";
 
 type Scope = "all" | "bag" | "garments";
@@ -17,6 +21,8 @@ type PrinterInfo = { available: boolean; printers: PrinterDetails[] };
 
 /** The largest group sent to the printer at once: keeps each request small even for big bag labels. */
 const BATCH = 20;
+/** Above this many labels, ask before using up the roll. */
+const CONFIRM_ABOVE = 20;
 
 /**
  * Bag labels and garment tags for one order. In the PC edition they go straight to the label printer;
@@ -41,21 +47,35 @@ function LabelsPageInner() {
   const [saving, setSaving] = useState(false);
   const [drawn, setDrawn] = useState<Drawn[]>([]);
   const [override, setOverride] = useState<PrintItem[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmLarge, setConfirmLarge] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const autoPrint = params.get("auto") === "1";
+  const autoStarted = useRef(false);
+  const jobRef = useRef<{ id: string; labelCount: number } | null>(null);
 
-  useEffect(() => {
-    if (!org.data) return;
-    // Parsing fills in anything a design saved by an older version does not have yet.
+  const [adjustKind, setAdjustKind] = useState<"garment" | "bag">(scope === "bag" ? "bag" : "garment");
+
+  // Parsing fills in anything a design saved by an older version does not have yet.
+  const savedSettings = useMemo(() => {
+    if (!org.data) return null;
     const saved = labelSettingsSchema.safeParse({ ...DEFAULT_LABEL_SETTINGS, ...(org.data.settings?.labels ?? {}) });
-    setSettings(saved.success ? saved.data : DEFAULT_LABEL_SETTINGS);
+    return saved.success ? saved.data : DEFAULT_LABEL_SETTINGS;
   }, [org.data]);
+  useEffect(() => {
+    if (savedSettings) setSettings(savedSettings);
+  }, [savedSettings]);
 
   // The sample is created once: a new object on each render would redraw the labels forever.
-  const o = useMemo(() => (test ? sampleOrder() : order.data), [test, order.data]);
+  const branches = useApi<any[]>(test ? "/branches" : null);
+  const sampleBranch = branches.data?.[0]?.branchCode as string | undefined;
+  const o = useMemo(() => (test ? sampleOrder(sampleBranch ?? "TEST") : order.data), [test, sampleBranch, order.data]);
   const direct = printerInfo.data?.available ?? false;
   const printers = useMemo(() => printerInfo.data?.printers ?? [], [printerInfo.data]);
 
   // On a PC, pick the Windows default printer until the owner chooses one.
   const printerName = settings.printerName || printers.find((p) => p.isDefault)?.name || "";
+  const { queue, refresh: refreshQueue, restart: restartQueue } = usePrinterQueue(printerName, !direct ? "off" : watching ? "watching" : panel === "design" ? "idle" : "off");
 
   const live: any[] = useMemo(() => (o ? o.garments.filter((g: any) => g.currentStatus !== "cancelled") : []), [o]);
   const bags: any[] = useMemo(() => o?.bags ?? [], [o]);
@@ -68,12 +88,15 @@ function LabelsPageInner() {
       texts: {
         orderNumber: o.orderNumber, count: `${i + 1}/${live.length}`, tagCode: g.tagCode, garment: it?.garmentTypeName ?? "", service: it?.serviceName ?? "", colour: it?.colour ?? "", customer,
         due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}`,
+        ...commonTexts(),
+        brand: it?.brand ?? "", quantity: `${live.length} pcs`, price: it?.unitPrice !== undefined && it?.unitPrice !== null ? formatMoney(it.unitPrice) : "", notes: it?.careInstructions ?? "",
       },
     };
   };
+  const commonTexts = () => ({ phone: o.customer?.phone ?? "", store: o.branch?.name ?? "", orderDate: o.createdAt ? dateOnly(o.createdAt).slice(0, 6) : "" });
   const bagData = (b: any): LabelData => ({
     barcodeValue: b.bagCode,
-    texts: { title: "BAG", orderNumber: o.orderNumber, pieces: `${b.garmentCount ?? b.expectedCount} pcs`, bagCode: b.bagCode, info: [o.branch?.name, customer].filter(Boolean).join(" · "), due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}` },
+    texts: { title: "BAG", orderNumber: o.orderNumber, pieces: `${b.garmentCount ?? b.expectedCount} pcs`, bagCode: b.bagCode, info: [o.branch?.name, customer].filter(Boolean).join(" · "), due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}`, customer, ...commonTexts() },
   });
 
   const items: PrintItem[] = useMemo(() => {
@@ -86,6 +109,24 @@ function LabelsPageInner() {
   }, [o, scope, bags, live, settings.bagDesign, settings.garmentDesign, customer]);
 
   const shown = override ?? items;
+  const chosen = useMemo(() => (selected.size ? items.filter((item) => selected.has(item.key)) : items), [items, selected]);
+
+  /** Records how a direct print ended, so history does not fill with "pending". */
+  const closeJob = (status: "printed" | "failed", reason?: string) => {
+    const finished = jobRef.current;
+    jobRef.current = null;
+    setJob(null);
+    if (finished) api(`/print-jobs/${finished.id}/result`, { body: { status, error: reason } }).then(() => order.reload()).catch(() => {});
+  };
+
+  // The printer has taken every job once the queue is empty.
+  useEffect(() => {
+    if (!watching || !queue || queue.jobs.length) return;
+    setWatching(false);
+    setNotice("The printer has taken all the tags. Scan one to check it reads.");
+    closeJob("printed");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, watching]);
   useEffect(() => {
     let current = true;
     Promise.all(shown.map(async (item) => {
@@ -105,11 +146,22 @@ function LabelsPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [o, live, bags, customer]);
 
+  // Opened right after a new order: print once. An order with any print history is never printed automatically,
+  // so reloading the page cannot use up more tags.
+  const printRef = useRef<(requestId?: string) => Promise<void>>(async () => {});
+  useEffect(() => {
+    if (!autoPrint || autoStarted.current || !direct || !printerName || !o || !items.length || !drawn.length || settings !== savedSettings) return;
+    autoStarted.current = true;
+    if (o.printJobs?.length) return;
+    if (items.length * settings.copies > CONFIRM_ABOVE) setConfirmLarge(true);
+    else void printRef.current(`auto-${id}`);
+  }, [autoPrint, direct, printerName, o, items, drawn, settings, savedSettings, id]);
+
   if (order.error) return <div className="p-6"><Alert>{order.error.message}</Alert></div>;
   if ((!o && !test) || !org.data) return <Spinner />;
 
   /** Sends labels of one size to the printer in small groups. Returns how many went. */
-  async function sendDirect(list: Drawn[], copies: number) {
+  async function sendDirect(list: Drawn[], copies: number, requestId: string) {
     const groups = new Map<string, Drawn[]>();
     for (const item of list) {
       const key = `${item.design.widthMm}x${item.design.heightMm}`;
@@ -119,6 +171,7 @@ function LabelsPageInner() {
       for (let i = 0; i < group.length; i += BATCH) {
         const part = group.slice(i, i + BATCH);
         await api("/labels/print", { body: {
+          requestId: `${requestId}-${group[0].design.widthMm}x${group[0].design.heightMm}-${i}`,
           printer: printerName, widthMm: part[0].design.widthMm, heightMm: part[0].design.heightMm, gapMm: settings.gapMm, density: settings.density, speed: settings.speed, copies,
           labels: part.map((p) => labelToBitmap(p.label)),
         } });
@@ -134,11 +187,13 @@ function LabelsPageInner() {
   }
 
   /** One way out for every print: straight to the printer on a PC, otherwise the print dialog. */
-  async function output(list: PrintItem[], copies: number) {
+  async function output(list: PrintItem[], copies: number, requestId: string = crypto.randomUUID()) {
     if (direct) {
       if (!printerName) throw new Error("Choose a tag printer in Tag designer first.");
-      await sendDirect(await renderAll(list), copies);
+      await sendDirect(await renderAll(list), copies, requestId);
       setNotice(`Sent to ${printerName}.`);
+      restartQueue();
+      setWatching(true);
     } else {
       setOverride(list);
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -147,14 +202,24 @@ function LabelsPageInner() {
     }
   }
 
-  async function print() {
-    setError(""); setNotice(""); setJobStatus(""); setBusy(true);
+  async function print(requestId?: string) {
+    setError(""); setNotice(""); setJobStatus(""); setBusy(true); setConfirmLarge(false);
     try {
-      if (!test) setJob(await api(`/orders/${id}/print-jobs`, { body: { scope } }));
-      await output(items, settings.copies);
-      setAsked(true);
+      if (!test) {
+        const onlySome = selected.size > 0;
+        const garmentIds = chosen.filter((item) => item.key.startsWith("g-")).map((item) => item.key.slice(2));
+        const created = await api<{ id: string; labelCount: number }>(`/orders/${id}/print-jobs`, { body: onlySome
+          ? { scope: garmentIds.length ? "garments" : "bag", ...(garmentIds.length ? { garmentIds } : {}), labelCount: chosen.length * settings.copies }
+          : { scope } });
+        setJob(created);
+        jobRef.current = created;
+      }
+      await output(chosen, settings.copies, requestId);
+      // Direct printing reports its own progress. The print dialog cannot, so staff are asked.
+      if (!direct) setAsked(true);
     } catch (e) {
       setError((e as ApiError).message);
+      if (direct) closeJob("failed", (e as ApiError).message);
     } finally {
       setBusy(false);
     }
@@ -198,21 +263,35 @@ function LabelsPageInner() {
   }
 
   const applySample = (sampleId: number) => {
-    const preset = sampleId >= 3 ? GARMENT_DESIGN_QR : GARMENT_DESIGN_CODE128;
-    const moduleDots = sampleId === 4 ? 5 : sampleId === 3 ? 8 : sampleId === 1 ? 3 : 2;
-    setSettings({ ...settings, garmentDesign: { ...preset, widthMm: settings.garmentDesign.widthMm, heightMm: settings.garmentDesign.heightMm, barcode: { ...preset.barcode, moduleDots } } });
+    const preset = sampleId >= 3 ? GARMENT_DESIGN_38_QR : GARMENT_DESIGN_38_LINE;
+    setSettings({ ...settings, garmentDesign: preset });
     setPanel("design");
     setNotice("Barcode updated in the designer. Check it, then press Save design.");
   };
 
+  printRef.current = print;
+  /** Staff cancelled what was waiting, so the print in progress did not finish. */
+  const afterCancel = () => {
+    if (watching) {
+      setWatching(false);
+      setNotice("");
+      closeJob("failed", "Cancelled from the print queue");
+    }
+    void refreshQueue();
+  };
+  const changed = !!savedSettings && JSON.stringify(settings) !== JSON.stringify(savedSettings);
   const first = drawn[0]?.design;
-  const pageCss = `@page { margin: 0${first ? `; size: ${first.widthMm}mm ${first.heightMm}mm` : ""} } @media print { body { background: #fff } .label { break-after: page; margin: 0 !important; box-shadow: none !important; border: none !important } }`;
-  const total = items.length * settings.copies;
+  const toggle = (key: string) => setSelected((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const startPrint = () => { if (chosen.length * settings.copies > CONFIRM_ABOVE) setConfirmLarge(true); else void print(); };
+  // On screen, one printer dot is about one screen pixel, so tags look sharp and easy to read.
+  const pageCss = `@page { margin: 0${first ? `; size: ${first.widthMm}mm ${first.heightMm}mm` : ""} } @media screen { .label { zoom: 2.1 } } @media print { body { background: #fff } .label-wrap { display: contents } .label { break-after: page; margin: 0 !important; box-shadow: none !important; border: none !important } }`;
+  const total = chosen.length * settings.copies;
+  const mixedSizes = !test && scope === "all" && (settings.garmentDesign.widthMm !== settings.bagDesign.widthMm || settings.garmentDesign.heightMm !== settings.bagDesign.heightMm);
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
       <style>{pageCss}</style>
-      <div className="no-print mx-auto mb-5 max-w-6xl space-y-4">
+      <div className={cx("no-print mx-auto mb-5 space-y-4", panel === "design" ? "max-w-[1560px]" : "max-w-6xl")}>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">{test ? "Tag setup" : `Labels · ${o.orderNumber}`}</h1>
@@ -220,19 +299,29 @@ function LabelsPageInner() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {!test && (
-              <Select value={scope} onChange={(e) => setScope(e.target.value as Scope)} className="w-auto" aria-label="What to print">
+              <Select value={scope} onChange={(e) => { setScope(e.target.value as Scope); setSelected(new Set()); }} className="w-auto" aria-label="What to print">
                 <option value="all">Bag label + all garment tags</option>
                 <option value="bag">Bag label only</option>
                 <option value="garments">Garment tags only</option>
               </Select>
             )}
+            {autoPrint && <Link href={`/orders/view?id=${id}&created=1`} className="inline-flex items-center gap-1 px-2 text-sm font-semibold text-slate-900 underline underline-offset-4"><ArrowLeft className="h-4 w-4" />Back to order</Link>}
             <Button variant="secondary" onClick={() => setPanel(panel === "design" ? "" : "design")}><Settings2 className="h-4 w-4" />Tag designer</Button>
             <Button variant="secondary" onClick={() => setPanel(panel === "scanner" ? "" : "scanner")}><ScanLine className="h-4 w-4" />Scanner test</Button>
-            {!test && <Button onClick={print} loading={busy} disabled={total === 0}><Printer className="h-4 w-4" />Print {total} label{total === 1 ? "" : "s"}</Button>}
+            {!test && <Button onClick={startPrint} loading={busy} disabled={total === 0}><Printer className="h-4 w-4" />Print {total} {selected.size ? "selected" : `label${total === 1 ? "" : "s"}`}</Button>}
           </div>
         </div>
+        {mixedSizes && <Alert tone="amber">Your bag label is {settings.bagDesign.widthMm} × {settings.bagDesign.heightMm} mm and your garment tag is {settings.garmentDesign.widthMm} × {settings.garmentDesign.heightMm} mm. One roll cannot print both: set them to the same size, or print them separately.</Alert>}
         {error && <Alert>{error}</Alert>}
         {notice && <Alert tone="green">{notice}</Alert>}
+        {confirmLarge && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Print {total} labels?</h2>
+            <p className="mt-1 text-sm text-slate-600">{chosen.length} label{chosen.length === 1 ? "" : "s"} × {settings.copies} cop{settings.copies === 1 ? "y" : "ies"} on {printerName || "the selected printer"}, {settings.garmentDesign.widthMm} × {settings.garmentDesign.heightMm} mm.</p>
+            <div className="mt-3 flex gap-2"><Button onClick={() => print()}>Print {total} labels</Button><Button variant="secondary" onClick={() => setConfirmLarge(false)}>Cancel</Button></div>
+          </div>
+        )}
+        {direct && watching && queue && <PrinterQueueStatus printer={printerName} queue={queue} onChanged={afterCancel} compact />}
         {asked && !jobStatus && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <p className="flex items-center gap-2 text-sm font-medium text-amber-900"><TriangleAlert className="h-4 w-4" />Did all labels print clearly? Scan one tag to check it reads.</p>
@@ -249,13 +338,30 @@ function LabelsPageInner() {
             {o.printJobs.slice(0, 5).map((j: any) => <Badge key={j.id} color={j.status === "printed" ? "green" : j.status === "failed" ? "red" : "amber"}>{j.status} · {j.labelCount} · {new Date(j.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</Badge>)}
           </div>
         )}
+        {!test && panel === "" && (
+          <BarcodeAdjust
+            kind={adjustKind}
+            onKind={setAdjustKind}
+            design={adjustKind === "garment" ? settings.garmentDesign : settings.bagDesign}
+            onChange={(next) => setSettings(adjustKind === "garment" ? { ...settings, garmentDesign: next } : { ...settings, bagDesign: next })}
+            onRollSize={(w, h) => setSettings(withRollSize(settings, w, h))}
+            label={drawn.find((d) => d.key.startsWith(adjustKind === "garment" ? "g-" : "bag-"))?.label}
+            changed={changed}
+            saving={saving}
+            onSave={saveSettings}
+            onDiscard={() => { if (savedSettings) setSettings(savedSettings); }}
+          />
+        )}
         {panel === "design" && (
           <LabelDesigner
             settings={{ ...settings, printerName }}
             onChange={setSettings}
             samples={samples}
+            usingSample={test}
             printers={printers}
             directAvailable={direct}
+            printerQueue={<PrinterQueueStatus printer={printerName} queue={queue} onChanged={afterCancel} />}
+            changed={changed}
             onRefreshPrinters={() => printerInfo.reload()}
             saving={saving}
             onSave={saveSettings}
@@ -271,10 +377,20 @@ function LabelsPageInner() {
         )}
       </div>
 
-      <div className="mx-auto flex max-w-6xl flex-wrap gap-3">
+      {!test && panel !== "design" && items.length > 1 && (
+        <div className="no-print mx-auto mb-3 flex max-w-6xl flex-wrap items-center gap-3 text-sm text-slate-600">
+          <span>{selected.size ? `${selected.size} selected. Only these will print.` : "Tick tags to reprint only those. Otherwise all will print."}</span>
+          {selected.size > 0 && <button type="button" className="font-semibold text-slate-900 underline underline-offset-4" onClick={() => setSelected(new Set())}>Clear selection</button>}
+        </div>
+      )}
+      {/* The designer has its own preview, but the print dialog still needs these. */}
+      <div className={cx("mx-auto max-w-6xl flex-wrap gap-3", panel === "design" && !override ? "hidden" : "flex")}>
         {drawn.flatMap((item) => Array.from({ length: override ? 1 : settings.copies }, (_, c) => (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img key={`${item.key}-${c}`} src={item.url} alt={item.data.barcodeValue} className="label rounded-sm border border-dashed border-slate-400 bg-white shadow-sm" style={{ width: `${item.design.widthMm}mm`, height: `${item.design.heightMm}mm`, imageRendering: "pixelated" }} />
+          <div key={`${item.key}-${c}`} className="label-wrap relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={item.url} alt={item.data.barcodeValue} className={cx("label rounded-sm border bg-white shadow-sm", selected.has(item.key) ? "border-solid border-brand-600 outline-2 outline-brand-500" : "border-dashed border-slate-400")} style={{ width: `${item.design.widthMm}mm`, height: `${item.design.heightMm}mm`, imageRendering: "pixelated" }} />
+            {!test && !override && c === 0 && <label className="no-print mt-1.5 flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold text-slate-800"><input type="checkbox" aria-label={`Select ${item.data.barcodeValue}`} checked={selected.has(item.key)} onChange={() => toggle(item.key)} />Select</label>}
+          </div>
         )))}
       </div>
     </div>
@@ -282,12 +398,14 @@ function LabelsPageInner() {
 }
 
 /** A realistic sample for setup: no database records are created. */
-function sampleOrder() {
-  const items = [{ id: "i1", garmentTypeName: "Shirt", serviceName: "Dry clean", colour: "Blue" }];
+function sampleOrder(branchCode: string) {
+  // Same length as a real number, so a test tag scans as a real one would. Order 00000 is never issued.
+  const orderNumber = `${branchCode}-${new Date().getFullYear()}-00000`;
+  const items = [{ id: "i1", garmentTypeName: "Shirt", serviceName: "Dry clean", colour: "Blue", brand: "Sample Brand", unitPrice: 15000, careInstructions: "Sample instructions" }];
   return {
-    orderNumber: "TEST-2026-00001", promisedAt: new Date().toISOString(), express: false, customer: { name: "Sample Customer" }, branch: { name: "Main Store" },
-    items, garments: [{ id: "g1", tagCode: "TEST-2026-00001-01", orderItemId: "i1", currentStatus: "received" }],
-    bags: [{ id: "b1", bagCode: "TEST-2026-00001-B1", garmentCount: 1 }], printJobs: [],
+    orderNumber, promisedAt: new Date().toISOString(), createdAt: new Date().toISOString(), express: false, customer: { name: "Sample Customer", phone: "98765 43210" }, branch: { name: "Main Store" },
+    items, garments: [{ id: "g1", tagCode: `${orderNumber}-01`, orderItemId: "i1", currentStatus: "received" }],
+    bags: [{ id: "b1", bagCode: `${orderNumber}-B1`, garmentCount: 1 }], printJobs: [],
   };
 }
 

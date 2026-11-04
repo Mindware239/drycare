@@ -203,7 +203,13 @@ function PosInner() {
         },
         idempotencyKey: idemKey.current,
       });
-      router.push(`/orders/view?id=${order.id}&created=1`);
+      // If the store prints tags automatically, go to them first. That page links back to the order.
+      let autoPrint = false;
+      try {
+        const org = await api<{ settings?: { labels?: { autoPrintOnOrder?: boolean } } }>("/organizations/current");
+        autoPrint = !!org.settings?.labels?.autoPrintOnOrder;
+      } catch { /* the order is saved either way; tags can still be printed from it */ }
+      router.push(autoPrint ? `/print/labels?id=${order.id}&auto=1` : `/orders/view?id=${order.id}&created=1`);
     } catch (e) {
       setError((e as ApiError).message);
       setSaving(false);

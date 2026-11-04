@@ -414,15 +414,27 @@ export const deliveryRescheduleSchema = z.object({ scheduledDate: z.iso.date(), 
  * Tag designs are stored in printer dots (8 dots per mm on a 203 dpi printer), so what is designed is
  * exactly what prints. Barcode bars are always a whole number of dots wide, which keeps them scannable.
  */
+const quarterTurn = z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]);
 const labelElementSchema = z.object({
+  /** Text from the order or typed in, or a drawn line or box. */
+  type: z.enum(["text", "line", "box"]).default("text"),
   show: z.boolean(),
   x: z.number().int().min(0).max(1600),
   y: z.number().int().min(0).max(1600),
   size: z.number().int().min(8).max(240),
   bold: z.boolean(),
+  /** Typed text, for custom text elements. */
+  text: z.string().max(120).optional(),
+  font: z.enum(["dm", "urbanist", "arial"]).default("dm"),
+  align: z.enum(["left", "center", "right"]).default("left"),
+  rotation: quarterTurn.default(0),
+  locked: z.boolean().default(false),
+  /** Size of a line or box, in dots. */
+  w: z.number().int().min(1).max(1600).optional(),
+  h: z.number().int().min(1).max(1600).optional(),
 });
 const labelBarcodeSchema = z.object({
-  type: z.enum(["code128", "qrcode"]),
+  type: z.enum(["code128", "code39", "qrcode", "datamatrix"]),
   show: z.boolean(),
   x: z.number().int().min(0).max(1600),
   y: z.number().int().min(0).max(1600),
@@ -430,19 +442,25 @@ const labelBarcodeSchema = z.object({
   moduleDots: z.number().int().min(1).max(16),
   heightDots: z.number().int().min(16).max(800),
   /** Clockwise turn of the barcode on the tag. */
-  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).default(0),
-  /** Line barcodes only: hold the short form of the tag number, so the bars can be thicker. */
+  rotation: quarterTurn.default(0),
+  /** Line barcodes only: hold a 12-digit number instead of the full code, so the bars can be thicker. */
   compact: z.boolean().default(true),
+  locked: z.boolean().default(false),
 });
 export const labelDesignSchema = z.object({
   widthMm: z.number().min(20).max(150),
   heightMm: z.number().min(15).max(150),
+  /** A printed outline around the tag. */
+  border: z.boolean().default(false),
   barcode: labelBarcodeSchema,
   elements: z.record(z.string().max(30), labelElementSchema),
 });
 export type LabelDesign = z.infer<typeof labelDesignSchema>;
+export type LabelElement = LabelDesign["elements"][string];
+export const isLineBarcode = (type: LabelDesign["barcode"]["type"]) => type === "code128" || type === "code39";
 
-const el = (x: number, y: number, size: number, bold = false) => ({ show: true, x, y, size, bold });
+export const el = (x: number, y: number, size: number, bold = false): LabelElement => ({ type: "text", show: true, x, y, size, bold, font: "dm", align: "left", rotation: 0, locked: false });
+const code = (type: LabelDesign["barcode"]["type"], x: number, y: number, moduleDots: number, heightDots: number, centered: boolean): LabelDesign["barcode"] => ({ type, show: true, x, y, centered, moduleDots, heightDots, rotation: 0, compact: isLineBarcode(type), locked: false });
 const GARMENT_TEXT = (top: number) => ({
   orderNumber: el(16, 8, 24, true),
   count: el(340, 8, 24, true),
@@ -454,14 +472,10 @@ const GARMENT_TEXT = (top: number) => ({
   due: el(250, top + 90, 24, true),
 });
 /** Default tag: 50 x 30 mm taffeta with large text. */
-export const GARMENT_DESIGN_CODE128: LabelDesign = {
-  widthMm: 50, heightMm: 30,
-  barcode: { type: "code128", show: true, x: 16, y: 38, centered: true, moduleDots: 2, heightDots: 72, rotation: 0, compact: true },
-  elements: GARMENT_TEXT(114),
-};
+export const GARMENT_DESIGN_CODE128: LabelDesign = { widthMm: 50, heightMm: 30, border: false, barcode: code("code128", 16, 38, 2, 72, true), elements: GARMENT_TEXT(114) };
 export const GARMENT_DESIGN_QR: LabelDesign = {
-  widthMm: 50, heightMm: 30,
-  barcode: { type: "qrcode", show: true, x: 20, y: 46, centered: false, moduleDots: 6, heightDots: 126, rotation: 0, compact: false },
+  widthMm: 50, heightMm: 30, border: false,
+  barcode: code("qrcode", 28, 58, 5, 105, false),
   elements: {
     orderNumber: el(16, 8, 24, true), count: el(340, 8, 24, true),
     garment: el(160, 44, 34, true), service: el(160, 84, 24), colour: el(160, 112, 24),
@@ -472,27 +486,95 @@ const BAG_TEXT = {
   title: el(20, 14, 26, true), orderNumber: el(20, 44, 38, true), pieces: el(470, 14, 44, true),
   bagCode: el(20, 268, 28), info: el(20, 312, 28), due: el(20, 350, 28, true),
 };
-export const BAG_DESIGN_CODE128: LabelDesign = {
-  widthMm: 75, heightMm: 50,
-  barcode: { type: "code128", show: true, x: 20, y: 100, centered: true, moduleDots: 2, heightDots: 150, rotation: 0, compact: true },
-  elements: BAG_TEXT,
+export const BAG_DESIGN_CODE128: LabelDesign = { widthMm: 75, heightMm: 50, border: false, barcode: code("code128", 20, 100, 2, 150, true), elements: BAG_TEXT };
+export const BAG_DESIGN_QR: LabelDesign = { widthMm: 75, heightMm: 50, border: false, barcode: code("qrcode", 220, 92, 7, 170, false), elements: BAG_TEXT };
+
+/**
+ * 38 x 30 mm taffeta roll. The tag number and garment run the full width, so long names stay readable,
+ * and the QR code sits clear of the text with its blank space on every side.
+ */
+const right = (x: number, y: number, size: number, bold = false): LabelElement => ({ ...el(x, y, size, bold), align: "right" });
+export const GARMENT_DESIGN_38_QR: LabelDesign = {
+  widthMm: 38, heightMm: 30, border: false,
+  barcode: code("qrcode", 20, 52, 5, 105, false),
+  elements: {
+    tagCode: el(10, 8, 20, true),
+    service: el(149, 46, 22), colour: el(149, 72, 22), customer: el(149, 98, 22), due: el(149, 124, 22, true), count: el(149, 150, 22, true),
+    garment: el(10, 182, 30, true),
+  },
 };
-export const BAG_DESIGN_QR: LabelDesign = {
-  widthMm: 75, heightMm: 50,
-  barcode: { type: "qrcode", show: true, x: 220, y: 92, centered: false, moduleDots: 7, heightDots: 170, rotation: 0, compact: false },
-  elements: BAG_TEXT,
+/** The default: a line barcode holding a 12-digit number, so 2-dot bars fit this narrow tag with blank space at both sides. */
+export const GARMENT_DESIGN_38_LINE: LabelDesign = {
+  widthMm: 38, heightMm: 30, border: false,
+  barcode: code("code128", 10, 36, 2, 80, true),
+  elements: {
+    tagCode: el(10, 8, 20, true),
+    garment: el(10, 120, 28, true), service: el(10, 154, 22), count: right(294, 154, 22, true), colour: el(10, 182, 22), due: right(294, 182, 22, true), customer: el(10, 208, 22),
+  },
 };
+export const BAG_DESIGN_38_LINE: LabelDesign = {
+  widthMm: 38, heightMm: 30, border: false,
+  barcode: code("code128", 10, 38, 2, 80, true),
+  elements: {
+    title: el(10, 8, 22, true), pieces: right(294, 8, 22, true),
+    bagCode: el(10, 122, 22, true), customer: el(10, 154, 24), due: el(10, 188, 24, true),
+  },
+};
+export const BAG_DESIGN_38_QR: LabelDesign = {
+  widthMm: 38, heightMm: 30, border: false,
+  barcode: code("qrcode", 20, 54, 5, 105, false),
+  elements: {
+    title: el(10, 8, 22, true), pieces: right(294, 8, 22, true),
+    customer: el(149, 66, 22), due: el(149, 100, 22, true),
+    bagCode: el(10, 186, 22, true),
+  },
+};
+
+/** Common roll sizes offered in the designer. Any other size can be typed in. */
+export const LABEL_SIZES: [number, number][] = [[25, 15], [30, 20], [38, 30], [40, 20], [50, 25], [50, 30], [60, 30], [70, 40], [75, 50], [100, 50]];
+
+/** Ready-made designs to start from. */
+export const LABEL_PRESETS: { id: string; name: string; kind: "garment" | "bag"; design: LabelDesign }[] = [
+  { id: "garment-38-line", name: "Taffeta tag, line barcode (38 × 30)", kind: "garment", design: GARMENT_DESIGN_38_LINE },
+  { id: "garment-38-qr", name: "Taffeta tag, QR code (38 × 30)", kind: "garment", design: GARMENT_DESIGN_38_QR },
+  { id: "garment-line", name: "Standard tag, line barcode (50 × 30)", kind: "garment", design: GARMENT_DESIGN_CODE128 },
+  { id: "garment-qr", name: "Standard tag, QR code (50 × 30)", kind: "garment", design: GARMENT_DESIGN_QR },
+  {
+    id: "garment-small", name: "Small tag, QR code (40 × 20)", kind: "garment",
+    design: { widthMm: 40, heightMm: 20, border: false, barcode: code("qrcode", 18, 48, 4, 84, false), elements: { tagCode: el(10, 6, 20, true), garment: el(122, 40, 24, true), service: el(122, 70, 20), due: el(122, 96, 20, true), count: el(122, 122, 20) } },
+  },
+  {
+    id: "garment-large", name: "Large tag, line barcode (70 × 40)", kind: "garment",
+    design: { widthMm: 70, heightMm: 40, border: false, barcode: code("code128", 24, 54, 2, 96, true), elements: { orderNumber: el(24, 12, 34, true), count: el(470, 12, 34, true), tagCode: el(24, 156, 26), garment: el(24, 190, 42, true), service: el(24, 238, 28), colour: el(320, 238, 28), customer: el(24, 276, 28), due: el(340, 276, 28, true) } },
+  },
+  { id: "bag-38-line", name: "Bag label, line barcode (38 × 30)", kind: "bag", design: BAG_DESIGN_38_LINE },
+  { id: "bag-38-qr", name: "Bag label, QR code (38 × 30)", kind: "bag", design: BAG_DESIGN_38_QR },
+  { id: "bag-line", name: "Bag label, line barcode (75 × 50)", kind: "bag", design: BAG_DESIGN_CODE128 },
+  { id: "bag-qr", name: "Bag label, QR code (75 × 50)", kind: "bag", design: BAG_DESIGN_QR },
+];
+
+export const labelTemplateSchema = z.object({
+  id: z.string().min(1).max(40),
+  name: z.string().trim().min(1).max(60),
+  kind: z.enum(["garment", "bag"]),
+  design: labelDesignSchema,
+});
+export type LabelTemplate = z.infer<typeof labelTemplateSchema>;
 
 /** Tag / label printer layout and print settings. */
 export const labelSettingsSchema = z.object({
-  garmentDesign: labelDesignSchema.default(GARMENT_DESIGN_CODE128),
-  bagDesign: labelDesignSchema.default(BAG_DESIGN_CODE128),
+  garmentDesign: labelDesignSchema.default(GARMENT_DESIGN_38_LINE),
+  bagDesign: labelDesignSchema.default(BAG_DESIGN_38_LINE),
+  /** The owner's own saved designs. */
+  templates: z.array(labelTemplateSchema).max(100).default([]),
   /** Windows printer used for direct printing in the PC edition. */
   printerName: z.string().trim().max(200).default(""),
   /** Space between tags on the roll. */
   gapMm: z.number().min(0).max(25).default(2),
   /** Print darkness, 0 to 15. Taffeta usually needs more than paper. */
   density: z.number().int().min(0).max(15).default(10),
+  /** PC edition: print the tags as soon as a new order is created. */
+  autoPrintOnOrder: z.boolean().default(false),
   /** Print speed in inches per second. Slower is sharper on taffeta. */
   speed: z.number().int().min(1).max(6).default(3),
   garmentWidthMm: z.number().int().min(20).max(120).default(50),

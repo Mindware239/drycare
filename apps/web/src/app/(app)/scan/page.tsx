@@ -3,7 +3,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CircleCheck, ScanLine, TriangleAlert } from "lucide-react";
-import { STAGE_LABELS, type GarmentStage } from "@drycare/shared";
+import { STAGE_LABELS, expandScanCode, isSampleScanNumber, type GarmentStage } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { dateTime } from "@/lib/format";
@@ -36,7 +36,7 @@ function ScanInner() {
   );
 
   async function lookup(tag: string, advance = autoAdvance) {
-    const t = tag.trim().toUpperCase();
+    const t = expandScanCode(tag);
     if (!t) return;
     setMsg(null);
     setBusy(true);
@@ -45,12 +45,15 @@ function ScanInner() {
       const next = garment.allowed.find((a: any) => a.kind === "advance" || a.kind === "rework_return");
       if (advance && next && next.permitted && !(next.to === "ready" && !garment.storageLocationId)) {
         garment = await api(`/garments/${garment.id}/transitions`, { body: { to: next.to, version: garment.version } });
-        setMsg({ tone: "green", text: `${t} → ${STAGE_LABELS[next.to as GarmentStage]}` });
+        setMsg({ tone: "green", text: `${garment.tagCode} → ${STAGE_LABELS[next.to as GarmentStage]}` });
       }
       resetForms(garment);
     } catch (e) {
       setG(null);
-      setMsg({ tone: "red", text: (e as ApiError).status === 404 ? `Tag ${t} not found` : (e as ApiError).message });
+      const missing = (e as ApiError).status === 404;
+      // Tags printed from the designer and the scanner test have no order behind them.
+      if (missing && (/^(TEST-|DCTEST-|DC1$)|-\d{4}-00000-/.test(t) || isSampleScanNumber(t))) setMsg({ tone: "green", text: `Scanner is working: it read ${t}. This is a sample tag, so it has no order. Real tags open their garment here.` });
+      else setMsg({ tone: "red", text: missing ? `Tag ${t} not found` : (e as ApiError).message });
     } finally {
       setBusy(false);
       setCode("");

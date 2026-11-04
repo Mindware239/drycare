@@ -100,6 +100,41 @@ public static class DrycareRawPrint {
 
 const available = () => env.DRYCARE_MODE === "desktop" && process.platform === "win32";
 
+const JOB_NAME = "Drycare tags";
+/** A job still here after this long is not moving: the printer usually needs attention. */
+const STUCK_AFTER_SECONDS = 25;
+type RawJob = { id: number; document: string; status: string };
+
+const READ_QUEUE = `
+$printer = Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq $env:DRYCARE_PRINTER }
+$jobs = @(Get-PrintJob -PrinterName $env:DRYCARE_PRINTER -ErrorAction SilentlyContinue | Where-Object { [string]$_.JobStatus -notlike '*Printed*' } | ForEach-Object {
+  [pscustomobject]@{ id = [int]$_.Id; document = $_.DocumentName; status = [string]$_.JobStatus }
+})
+[pscustomobject]@{ found = [bool]$printer; offline = [bool]$printer.WorkOffline; errorState = [int]$printer.DetectedErrorState; jobs = $jobs } | ConvertTo-Json -Compress -Depth 4
+`;
+/** Only removes DryCare's own jobs. Anything else in the queue belongs to someone else. */
+/** Windows' codes for a printer that needs attention. Many label printer drivers never report them, so a stuck job is checked too. */
+const PRINTER_PROBLEM: Record<number, string> = {
+  4: "The printer is out of tags. Load the roll and press FEED.",
+  6: "The ribbon has finished. Replace it and press FEED.",
+  7: "The printer cover is open. Close it and press FEED.",
+  8: "A tag is jammed. Clear it and press FEED.",
+  9: "The printer is offline. Check that it is on and the USB cable is connected.",
+  10: "The printer needs attention. Check its light and press FEED.",
+};
+/** When each waiting job was first seen. Counting from here avoids depending on how Windows reports time zones. */
+const firstSeen = new Map<string, number>();
+const CLEAR_QUEUE = `
+$removed = 0
+Get-PrintJob -PrinterName $env:DRYCARE_PRINTER -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -eq '${JOB_NAME}' } | ForEach-Object { Remove-PrintJob -InputObject $_; $removed++ }
+$removed
+`;
+
+/** Requests already handled, so a double click or a retry cannot print the same tags twice. */
+const handled = new Map<string, { at: number; sent: number }>();
+const REMEMBER_MS = 5 * 60_000;
+const forgetOld = () => { const cutoff = Date.now() - REMEMBER_MS; for (const [key, value] of handled) if (value.at < cutoff) handled.delete(key); };
+
 const printBody = z.object({
   printer: z.string().trim().min(1).max(200),
   widthMm: z.number().min(20).max(150),
@@ -108,6 +143,8 @@ const printBody = z.object({
   density: z.number().int().min(0).max(15),
   speed: z.number().int().min(1).max(6),
   copies: z.number().int().min(1).max(5),
+  /** Sent again with the same value, the tags are not printed again. */
+  requestId: z.string().trim().min(8).max(100).optional(),
   labels: z.array(z.object({ widthDots: z.number().int().min(8).max(1600), heightDots: z.number().int().min(8).max(1600), data: z.string().min(1) })).min(1).max(30),
 });
 
@@ -119,10 +156,47 @@ export async function labelPrintRoutes(app: FastifyInstance) {
     return { available: true, printers: await listPrinters() };
   });
 
-  app.post("/labels/print", async (req) => {
+  /** What Windows knows about this printer's queue. It cannot see inside the printer, so a stuck job is the best signal. */
+  app.get("/labels/queue", async (req) => {
     requirePermission(req, "orders.read");
+    if (!available()) return { available: false, jobs: [], stuck: false, problem: null, offline: false };
+    const { printer } = z.object({ printer: z.string().trim().min(1).max(200) }).parse(req.query);
+    const raw = JSON.parse(await powershell(READ_QUEUE, { DRYCARE_PRINTER: printer })) as { found: boolean; offline: boolean; errorState: number; jobs: RawJob[] | RawJob | null };
+    const waiting = raw.jobs ? (Array.isArray(raw.jobs) ? raw.jobs : [raw.jobs]) : [];
+    const now = Date.now();
+    const keys = new Set(waiting.map((j) => `${printer}:${j.id}`));
+    for (const key of firstSeen.keys()) if (key.startsWith(`${printer}:`) && !keys.has(key)) firstSeen.delete(key);
+    const jobs = waiting.map((j) => {
+      const key = `${printer}:${j.id}`;
+      if (!firstSeen.has(key)) firstSeen.set(key, now);
+      return { ...j, ageSeconds: Math.round((now - firstSeen.get(key)!) / 1000) };
+    });
+    return {
+      available: true,
+      found: raw.found,
+      offline: raw.offline,
+      jobs,
+      stuck: jobs.some((j) => j.ageSeconds > STUCK_AFTER_SECONDS),
+      problem: PRINTER_PROBLEM[raw.errorState] ?? (jobs.some((j) => /error|paper|blocked|intervention|offline/i.test(j.status)) ? "The printer has stopped. Check the roll, ribbon and cover, then press FEED." : null),
+    };
+  });
+
+  app.post("/labels/queue/clear", async (req) => {
+    requirePermission(req, "orders.read");
+    if (!available()) throw badRequest("The print queue can only be managed in Drycare for PC.");
+    const { printer } = z.object({ printer: z.string().trim().min(1).max(200) }).parse(req.body);
+    if (!(await listPrinters()).some((p) => p.name === printer)) throw badRequest(`Printer "${printer}" was not found on this PC.`);
+    return { removed: Number(await powershell(CLEAR_QUEUE, { DRYCARE_PRINTER: printer })) || 0 };
+  });
+
+  app.post("/labels/print", async (req) => {
+    const auth = requirePermission(req, "orders.read");
     if (!available()) throw badRequest("Direct printing is available in Drycare for PC. Use the print dialog here.");
     const body = printBody.parse(req.body);
+    forgetOld();
+    const requestKey = body.requestId ? `${auth.orgId}:${body.requestId}` : null;
+    const earlier = requestKey ? handled.get(requestKey) : undefined;
+    if (earlier) return { sent: earlier.sent, duplicate: true };
     const printer = (await listPrinters()).find((p) => p.name === body.printer);
     if (!printer) throw badRequest(`Printer "${body.printer}" was not found on this PC.`);
     if (printer.offline) throw new AppError(409, "PRINTER_OFFLINE", `${printer.name} is offline. Check that it is switched on and its USB cable is connected, then try again.`);
@@ -136,15 +210,19 @@ export async function labelPrintRoutes(app: FastifyInstance) {
       }),
     });
     const file = path.join(tmpdir(), `drycare-tags-${randomUUID()}.bin`);
+    const sent = body.labels.length * body.copies;
+    // Remembered before sending, so a second click arriving mid-print is also refused.
+    if (requestKey) handled.set(requestKey, { at: Date.now(), sent });
     try {
       await writeFile(file, job);
       await powershell(SEND_RAW, { DRYCARE_PRINTER: printer.name, DRYCARE_PRINT_FILE: file }, 60_000);
     } catch (err) {
+      if (requestKey) handled.delete(requestKey);
       req.log.error({ err }, "direct label print failed");
       throw new AppError(502, "PRINT_FAILED", "The tags could not be sent to the printer. Check the printer and try again.");
     } finally {
       await rm(file, { force: true }).catch(() => undefined);
     }
-    return { sent: body.labels.length * body.copies };
+    return { sent };
   });
 }

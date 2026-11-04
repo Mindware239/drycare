@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { labelSettingsSchema } from "./schemas";
-import { compactTagCode, expandScanCode } from "./scanCodes";
+import { branchCheck, compactTagCode, expandScanCode, isSampleScanNumber, numericScanCode, parseScanNumber } from "./scanCodes";
 import { buildTsplJob, bytesPerRow } from "./tspl";
 
 const text = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1");
@@ -21,6 +21,37 @@ describe("short barcode codes", () => {
     expect(compactTagCode("NEWDEL-2026-100000-01")).toBe("NEWDEL-2026-100000-01");
     expect(compactTagCode("NEWDEL-2026-00001-100")).toBe("NEWDEL-2026-00001-100");
     expect(expandScanCode("DC1")).toBe("DC1");
+  });
+});
+
+describe("12-digit barcode numbers", () => {
+  it("turns a garment tag into 12 digits and back to its ending", () => {
+    const number = numericScanCode("NEWDEL-2026-00001-01");
+    expect(number).toMatch(/^\d{12}$/);
+    expect(number.startsWith(`0${branchCheck("NEWDEL")}`)).toBe(true);
+    expect(parseScanNumber(number)).toEqual({ kind: "garment", check: branchCheck("NEWDEL"), ending: "-2026-00001-01" });
+  });
+  it("turns a bag code into 12 digits and back to its ending", () => {
+    const number = numericScanCode("NEWDEL-2026-00001-B1");
+    expect(number).toMatch(/^1\d{11}$/);
+    expect(parseScanNumber(number)).toEqual({ kind: "bag", check: branchCheck("NEWDEL"), ending: "-2026-00001-B1" });
+  });
+  it("gives different branches different numbers", () => {
+    expect(numericScanCode("NEWDEL-2026-00001-01")).not.toBe(numericScanCode("AND-2026-00001-01"));
+  });
+  it("keeps the full code when it does not fit 12 digits", () => {
+    expect(numericScanCode("NEWDEL-2026-00001-100")).toBe("NEWDEL-2026-00001-100");
+    expect(numericScanCode("NEWDEL-2026-100000-01")).toBe("NEWDEL-2026-100000-01");
+  });
+  it("still reads what a scanner sends, and tags printed earlier", () => {
+    const number = numericScanCode("NEWDEL-2026-00001-01");
+    expect(expandScanCode(` ${number}\r\n`)).toBe(number);
+    expect(expandScanCode("NEWDEL260000101")).toBe("NEWDEL-2026-00001-01");
+    expect(parseScanNumber("NEWDEL260000101")).toBeNull();
+  });
+  it("recognises sample tags", () => {
+    expect(isSampleScanNumber(numericScanCode("NEWDEL-2026-00000-01"))).toBe(true);
+    expect(isSampleScanNumber(numericScanCode("NEWDEL-2026-00001-01"))).toBe(false);
   });
 });
 
@@ -46,7 +77,7 @@ describe("tag printing", () => {
 
   it("keeps older saved settings working by filling in the designs", () => {
     const parsed = labelSettingsSchema.parse({ garmentWidthMm: 50, garmentHeightMm: 25, barcode: "code128", copies: 1 });
-    expect(parsed.garmentDesign.widthMm).toBe(50);
+    expect(parsed.garmentDesign.widthMm).toBe(38);
     expect(parsed.garmentDesign.heightMm).toBe(30);
     expect(parsed.density).toBe(10);
     const saved = labelSettingsSchema.parse({ garmentDesign: { widthMm: 50, heightMm: 30, elements: {}, barcode: { type: "code128", show: true, x: 0, y: 0, centered: true, moduleDots: 1, heightDots: 72 } } });

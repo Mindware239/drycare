@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bwipjs from "bwip-js";
-import { allowedTransitions, expandScanCode, findTransition, inspectionSchema, reworkTarget, storageAssignSchema, transitionSchema, type GarmentStage } from "@drycare/shared";
+import { resolveScanCode } from "../lib/scanLookup";
+import { allowedTransitions, findTransition, inspectionSchema, reworkTarget, storageAssignSchema, transitionSchema, type GarmentStage } from "@drycare/shared";
 import { db, schema, type DbOrTx } from "../db/client";
 import { assertBranchAccess, can, requirePermission, type AuthContext } from "../lib/context";
 import { audit } from "../lib/audit";
@@ -70,7 +71,7 @@ export async function productionRoutes(app: FastifyInstance) {
   app.get("/garments/by-tag/:tagCode", async (req) => {
     const auth = requirePermission(req, "orders.read");
     const { tagCode } = z.object({ tagCode: z.string().trim().min(3).max(60) }).parse(req.params);
-    return garmentView(db, auth, eq(schema.garments.tagCode, expandScanCode(tagCode)));
+    return garmentView(db, auth, eq(schema.garments.tagCode, await resolveScanCode(db, auth.orgId, tagCode)));
   });
 
   app.get("/garments/:garmentId", async (req) => {
