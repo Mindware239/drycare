@@ -219,6 +219,8 @@ export const orderItemInput = z.object({
   discountFlat: money.default(0),
   /** Requires prices.override; reason is mandatory when set. */
   overrideUnitPrice: money.optional(),
+  /** Stain treatment charged per piece. It varies with the stain, so staff enter it on each line. */
+  stainCharge: money.optional(),
   overrideReason: z.string().max(300).optional(),
 }).superRefine((item, ctx) => {
   if (item.specialCareApprovalRequired && !item.specialCareReason) {

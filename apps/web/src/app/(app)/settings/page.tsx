@@ -5,6 +5,7 @@ import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Spinner, Table, Td } from "@/components/ui";
 import { BillingSettings } from "@/components/BillingSettings";
+import { BillTemplates } from "@/components/BillTemplates";
 
 export default function SettingsPage() {
   const { can, has, branchId } = useSession();
@@ -53,7 +54,7 @@ export default function SettingsPage() {
   if (!f || !branches.data) return <Spinner />;
   return (
     <div className="space-y-5">
-      <PageHeader title="Business settings" subtitle="Business details, invoice & payment details, branches, racks and backups." />
+      <PageHeader title="Business settings" subtitle="Business details, bill templates, invoice & payment details, branches, racks and backups." />
       {msg && <Alert tone={msg.t} onClose={() => setMsg(null)}>{msg.m}</Alert>}
       {can("org.manage") && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5">
@@ -187,6 +188,8 @@ export default function SettingsPage() {
           </Button>
         </Card>
       )}
+
+      {can("org.manage") && org.data && <BillTemplates org={org.data} saved={org.data.settings.billTemplates} onSaved={org.reload} />}
 
       {can("org.manage") && org.data && <BillingSettings org={org.data} onSaved={org.reload} />}
 

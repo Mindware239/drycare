@@ -116,6 +116,9 @@ export interface OrgSettings {
   maxDiscountBpsWithoutApproval?: number;
   expressSurchargeBps?: number;
   defaultTurnaroundHours?: number;
+  /** Goals the dashboard measures against. Money in paise. */
+  billTemplates?: import("@drycare/shared").BillTemplateSettings;
+  dashboardTargets?: { billingPerDay?: number; duesLimit?: number; garmentsPerDay?: number };
   invoiceFooter?: string;
   requireFullPaymentBeforeHandover?: boolean;
   customerDuplicateMatch?: ("phone" | "email")[];
@@ -146,6 +149,47 @@ export const commercialPayments = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("commercial_payments_provider_ref_uq").on(t.provider, t.providerReference), index("commercial_payments_org_idx").on(t.organizationId)],
+);
+
+/** A printer Mindware sold: its serial and bill number are what connect it at installation. Software-owner data. */
+export const soldPrinters = pgTable(
+  "sold_printers",
+  {
+    id: id(),
+    serialNumber: text("serial_number").notNull(),
+    billNumber: text("bill_number").notNull(),
+    model: text("model").notNull(),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    customerName: text("customer_name"),
+    soldOn: date("sold_on", { mode: "string" }),
+    status: text("status").notNull().default("active"), // active | revoked
+    note: text("note"),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("sold_printers_serial_uq").on(t.serialNumber), index("sold_printers_org_idx").on(t.organizationId)],
+);
+
+/** A paid period of a module sold apart from the plans. Each row is one period; the RFID module is the first. */
+export const organizationAddons = pgTable(
+  "organization_addons",
+  {
+    id: id(),
+    organizationId: orgId(),
+    addon: text("addon").notNull(),
+    status: text("status").notNull().default("active"), // active | stopped (expiry is worked out from endsAt)
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    pricePaise: integer("price_paise").notNull().default(0),
+    paymentId: uuid("payment_id").references(() => commercialPayments.id),
+    note: text("note"),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("organization_addons_org_idx").on(t.organizationId, t.addon)],
 );
 
 /** Software-owner (super admin) settings such as the seller billing profile and payment gateways. Secrets inside are encrypted. */
@@ -622,6 +666,8 @@ export const orderItems = pgTable("order_items", {
   unitPrice: money("unit_price"),
   listUnitPrice: money("list_unit_price"),
   overrideReason: text("override_reason"),
+  /** Stain treatment per piece, already inside unit_price. Kept apart so the bill can show it. */
+  stainCharge: integer("stain_charge").notNull().default(0),
   surchargeAmount: money("surcharge_amount"),
   discountAmount: money("discount_amount"),
   taxBps: integer("tax_bps").notNull().default(0),
@@ -852,6 +898,60 @@ export const labelPrintJobs = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("label_print_jobs_order_idx").on(t.orderId), check("label_print_jobs_status_check", sql`${t.status} in ('pending', 'printed', 'failed')`)],
+);
+
+/** Reusable RFID tags a shop owns. A tag is on at most one garment, and goes back to the pool when the garment leaves. */
+export const rfidTags = pgTable(
+  "rfid_tags",
+  {
+    id: id(),
+    organizationId: orgId(),
+    epc: text("epc").notNull(),
+    status: text("status").notNull().default("free"), // free | linked | retired
+    garmentId: uuid("garment_id").references(() => garments.id),
+    linkedAt: timestamp("linked_at", { withTimezone: true }),
+    retireReason: text("retire_reason"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("rfid_tags_org_epc_uq").on(t.organizationId, t.epc),
+    uniqueIndex("rfid_tags_garment_uq").on(t.garmentId).where(sql`${t.garmentId} is not null`),
+    check("rfid_tags_status_check", sql`${t.status} in ('free', 'linked', 'retired')`),
+  ],
+);
+
+/** Everything that happened to a tag: never changed afterwards. */
+export const rfidEvents = pgTable(
+  "rfid_events",
+  {
+    id: id(),
+    organizationId: orgId(),
+    epc: text("epc").notNull(),
+    action: text("action").notNull(), // registered | linked | unlinked | released | read | retired
+    garmentId: uuid("garment_id"),
+    notes: text("notes"),
+    actorUserId: uuid("actor_user_id").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("rfid_events_garment_idx").on(t.garmentId), index("rfid_events_org_idx").on(t.organizationId, t.occurredAt)],
+);
+
+/** A printer connected to a shop, from the serial and bill number given at installation. */
+export const shopPrinters = pgTable(
+  "shop_printers",
+  {
+    id: id(),
+    organizationId: orgId(),
+    serialNumber: text("serial_number").notNull(),
+    billNumber: text("bill_number").notNull(),
+    model: text("model").notNull(),
+    /** Its name in Windows, on a PC. */
+    printerName: text("printer_name"),
+    connectedBy: uuid("connected_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("shop_printers_serial_uq").on(t.serialNumber), index("shop_printers_org_idx").on(t.organizationId)],
 );
 
 export const garmentStatusHistory = pgTable(

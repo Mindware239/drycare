@@ -59,7 +59,7 @@ export async function issueCommercialInvoice(tx: DbOrTx, paymentId: string) {
   const intraState = Boolean(sellerCode && buyerCode && sellerCode === buyerCode);
   const rate = seller.invoice.gstRateBps;
   const split = splitGst(payment.amountPaise, rate, intraState);
-  const meta = payment.providerPayload as { periodStart?: string; periodEnd?: string };
+  const meta = payment.providerPayload as { periodStart?: string; periodEnd?: string; description?: string };
   const periodStart = meta.periodStart ? new Date(meta.periodStart) : subscription?.startsAt ?? null;
   const periodEnd = meta.periodEnd ? new Date(meta.periodEnd) : subscription?.endsAt ?? null;
   const fmt = (d: Date | null) => (d ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(d) : "");
@@ -91,7 +91,7 @@ export async function issueCommercialInvoice(tx: DbOrTx, paymentId: string) {
       phone: billing?.phone ?? null,
     },
     lines: [{
-      description: `DryCare ${plan?.name ?? "subscription"}${periodStart && periodEnd ? ` · ${fmt(periodStart)} – ${fmt(periodEnd)}` : ""}`,
+      description: `${meta.description ?? `DryCare ${plan?.name ?? "subscription"}`}${periodStart && periodEnd ? ` · ${fmt(periodStart)} – ${fmt(periodEnd)}` : ""}`,
       sacCode: seller.invoice.sacCode,
       quantity: 1,
       taxablePaise: split.subtotal,

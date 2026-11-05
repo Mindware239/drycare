@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Barcode, Crown, Printer, ScanLine, ShoppingBag, Truck } from "lucide-react";
+import { Barcode, Crown, Printer, Radio, ScanLine, ShoppingBag, Truck } from "lucide-react";
 import { LOCATION_LABELS, STAGE_LABELS, type GarmentLocation, type GarmentStage } from "@drycare/shared";
 import { dateTime, money } from "@/lib/format";
 import { Badge, Card, StageBadge, Table, Td, cx } from "@/components/ui";
@@ -11,7 +11,7 @@ export type TagTraceData = {
   customer?: { id: string; name: string; code: string | null; phone: string | null };
   membership: { planName: string; discountBps: number; freeExpress: boolean; perks: string[]; endsAt: string } | null;
   order: { id: string; orderNumber: string; status: string; receivedAt: string; promisedAt: string; express: boolean; branchName: string | null; branchCode: string | null; createdBy: string | null; invoiceNumber: string | null; total?: number; paid?: number; credits?: number; balance?: number; discount?: number };
-  tags: { id: string; scanCode: string; tagCode: string; status: string; location: string; bagId: string | null; garment: string; service: string; colour: string | null; brand: string | null; rack: string | null }[];
+  tags: { id: string; scanCode: string; tagCode: string; status: string; location: string; bagId: string | null; garment: string; service: string; colour: string | null; brand: string | null; rack: string | null; rfid?: string | null }[];
   bags: { id: string; scanCode: string; bagCode: string; pieces: number }[];
   timeline: TimelineEvent[];
 };
@@ -20,6 +20,7 @@ type TimelineEvent = { id: string; at: string; actor: string | null } & (
   | { type: "status"; from: string | null; to: string; kind: string; notes: string | null; location: string | null; tagCode: string }
   | { type: "scan"; step: string; result: string; code: string; batch: string | null }
   | { type: "delivery"; event: string; notes: string | null }
+  | { type: "rfid"; action: string; epc: string; notes: string | null }
   | { type: "print"; scope: string; labels: number; status: string; error: string | null }
 );
 
@@ -40,6 +41,10 @@ function describe(e: TimelineEvent, showTag: boolean): { icon: typeof ScanLine; 
     if (e.step === "lookup") return { icon: ScanLine, title: "Scanned at the scan station" };
     const step = e.step === "dispatch" ? "Scanned when sent to the facility" : "Scanned when received back";
     return { icon: Truck, title: step, detail: [e.batch ? `Batch ${e.batch}` : "", e.result === "verified" ? "" : words(e.result)].filter(Boolean).join(". "), tone: e.result === "verified" ? undefined : "red" };
+  }
+  if (e.type === "rfid") {
+    const title = { linked: "RFID tag linked", unlinked: "RFID tag removed", released: "RFID tag released for reuse", read: "RFID tag read", retired: "RFID tag retired", registered: "RFID tag added" }[e.action] ?? "RFID";
+    return { icon: Radio, title, detail: [e.epc, e.notes].filter(Boolean).join(". ") };
   }
   if (e.type === "delivery") return { icon: Truck, title: `Pickup and delivery: ${words(e.event)}`, detail: e.notes };
   const what = e.scope === "bag" ? "Bag label" : e.scope === "garments" ? "Chosen tags" : "Bag label and tags";
@@ -132,7 +137,7 @@ export function TagRecord({ data }: { data: TagTraceData }) {
           {data.tags.map((t) => (
             <tr key={t.id} className={t.id === data.label.id ? "bg-brand-50" : undefined}>
               <Td className="font-mono font-semibold"><Link href={`/tags/view?code=${t.scanCode}`} className="hover:text-brand-700">{t.scanCode}</Link></Td>
-              <Td className="font-mono text-xs text-slate-500">{t.tagCode}</Td>
+              <Td className="font-mono text-xs text-slate-500">{t.tagCode}{t.rfid && <span className="mt-0.5 flex items-center gap-1 text-slate-400" title={t.rfid}><Radio className="h-3 w-3" />RFID …{t.rfid.slice(-8)}</span>}</Td>
               <Td><span className="font-medium">{t.garment}</span> <span className="text-slate-500">· {[t.service, t.colour, t.brand].filter(Boolean).join(" · ")}</span></Td>
               <Td><StageBadge stage={t.status} /></Td>
               <Td className="text-xs text-slate-600">{where(t.location)}</Td>

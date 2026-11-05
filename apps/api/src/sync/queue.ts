@@ -13,7 +13,7 @@ import { SyncHold } from "./httpTransport";
 
 /** Tables that are never synchronised (security, device-local state, platform billing). */
 export const LOCAL_ONLY_TABLES = [
-  "audit_logs", "auth_tokens", "sessions", "idempotency_records", "number_sequences", "outbox_events", "notification_jobs",
+  "organization_addons", "sold_printers", "audit_logs", "auth_tokens", "sessions", "idempotency_records", "number_sequences", "outbox_events", "notification_jobs",
   "label_print_jobs", "desktop_licenses", "platform_settings", "public_leads", "commercial_invoices", "commercial_payments",
   "commercial_plans", "commercial_subscriptions", "sync_config", "sync_entities", "sync_outbox", "sync_conflicts",
   // cloud side of sync

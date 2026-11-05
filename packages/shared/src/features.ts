@@ -22,6 +22,11 @@ export const FEATURES = {
   onlineBooking: { label: "Online pickup booking", description: "The public page where customers book a pickup.", whenUnset: true },
   wallet: { label: "Customer wallet", description: "Adding money to a customer's wallet and wallet compensation on claims. Customers can always spend a balance they already have.", whenUnset: true },
   advancedReports: { label: "Advanced reports", description: "Sales by service, garment and branch, discounts, customer and staff reports. Daily sales, money, dues and GST reports are in every plan.", whenUnset: true },
+  rfid: {
+    label: "RFID module",
+    description: "Link RFID tags to garments, track them and bill at handover with an RFID reader. Sold and invoiced separately from the plans.",
+    whenUnset: false,
+  },
   whatsapp: { label: "SMS / WhatsApp updates", description: "Order updates by SMS or WhatsApp. Without it, customers get them by email if they have one. Nothing is sent by SMS or WhatsApp until a provider is connected.", whenUnset: true },
 } as const;
 
@@ -30,6 +35,8 @@ export type FeatureMap = Record<FeatureKey, boolean>;
 export type FeatureOverrides = Partial<Record<FeatureKey, boolean>>;
 
 export const FEATURE_KEYS = Object.keys(FEATURES) as FeatureKey[];
+/** Set by a plan or a shop exception. The RFID module is not: it comes only from its own paid period. */
+export const PLAN_FEATURE_KEYS = FEATURE_KEYS.filter((key) => key !== "rfid");
 
 /** Included in every plan, so they cannot be switched off. */
 export const CORE_FEATURE_LABELS = ["Counter billing & orders", "Customers", "Garment tags & tracking", "GST invoices & receipts", "Reports", "Staff & roles"] as const;

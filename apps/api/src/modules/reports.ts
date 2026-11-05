@@ -7,6 +7,7 @@ import { assertBranchAccess, can, requirePermission, type AuthContext } from "..
 import { audit } from "../lib/audit";
 import { badRequest, notFound, unprocessable } from "../lib/errors";
 import { invoiceCreditSql, invoicePaidSql } from "../lib/balances";
+import { hasFeature } from "../lib/entitlements";
 import { assertDrawerCash, openShiftFor } from "./payments";
 
 /**
@@ -46,7 +47,7 @@ export function branchSql(auth: AuthContext, column: string, branchId?: string) 
 export async function reportRoutes(app: FastifyInstance) {
   app.get("/dashboard", async (req) => {
     const auth = requirePermission(req, "reports.view");
-    const q = dateRangeQuery.parse(req.query);
+    const q = dateRangeQuery.extend({ compareFrom: z.iso.date().optional(), compareTo: z.iso.date().optional() }).parse(req.query);
     const { from, to } = range(q);
     const financial = can(auth, "reports.financial");
     const inv = branchSql(auth, "i.branch_id", q.branchId);
@@ -115,15 +116,22 @@ export async function reportRoutes(app: FastifyInstance) {
 
     // Same-length period just before the selected one, for the "vs previous period" changes.
     const days = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
-    const prevTo = new Date(Date.parse(from) - 86_400_000).toISOString().slice(0, 10);
-    const prevFrom = new Date(Date.parse(from) - days * 86_400_000).toISOString().slice(0, 10);
+    // The screen can ask for a fairer stretch, such as the same days of last week.
+    const prevTo = q.compareTo ?? new Date(Date.parse(from) - 86_400_000).toISOString().slice(0, 10);
+    const prevFrom = q.compareFrom ?? new Date(Date.parse(from) - days * 86_400_000).toISOString().slice(0, 10);
     const inPrev = (col: string) => sql`(${sql.raw(col)} at time zone ${tz})::date between ${prevFrom}::date and ${prevTo}::date`;
     const [prev] = await db.execute<Record<string, string>>(sql`
       select coalesce((select sum(i.grand_total) from invoices i where i.organization_id = ${auth.orgId} and i.status <> 'cancelled' and ${inPrev("i.issued_at")} ${inv}),0) as gross,
              coalesce((select sum(p.amount) from payments p where p.organization_id = ${auth.orgId} and p.status = 'succeeded' and p.payment_method <> 'store_credit' and ${inPrev("p.received_at")} ${pay}),0)
                - coalesce((select sum(r.amount) from refunds r join payments p on p.id = r.payment_id where r.organization_id = ${auth.orgId} and r.status = 'succeeded' and p.payment_method <> 'store_credit' and ${inPrev("r.created_at")} ${pay}),0) as collections,
              coalesce((select sum(e.amount) from expenses e where e.organization_id = ${auth.orgId} and e.voided_at is null and e.spent_on::date between ${prevFrom}::date and ${prevTo}::date ${exp}),0) as expenses,
-             (select count(*)::int from orders o where o.organization_id = ${auth.orgId} and ${inPrev("o.received_at")} ${ord}) as orders`);
+             (select count(*)::int from orders o where o.organization_id = ${auth.orgId} and ${inPrev("o.received_at")} ${ord}) as orders,
+             (select count(*)::int from garments g where g.organization_id = ${auth.orgId} and g.current_status <> 'cancelled' and (${inPrev("g.created_at")} or (g.delivered_at is not null and ${inPrev("g.delivered_at")})) ${gar}) as garments`);
+    const [handled] = await db.execute<{ handled: number; turnaround: string | null }>(sql`
+      select count(*)::int as handled,
+             avg(extract(epoch from g.delivered_at - g.created_at) / 86400) filter (where g.delivered_at is not null and ${inRange("g.delivered_at")}) as turnaround
+      from garments g
+      where g.organization_id = ${auth.orgId} and g.current_status <> 'cancelled' and (${inRange("g.created_at")} or (g.delivered_at is not null and ${inRange("g.delivered_at")})) ${gar}`);
     const [laundry] = await db.execute<Record<string, string>>(sql`
       select coalesce(sum(lo.total),0) as billed, count(*)::int as orders from laundry_orders lo
       where lo.organization_id = ${auth.orgId} and lo.status <> 'cancelled' and ${inRange("lo.created_at")} ${branchSql(auth, "lo.branch_id", q.branchId)}`);
@@ -164,11 +172,112 @@ export async function reportRoutes(app: FastifyInstance) {
       operations: { ...ops, ...gstat, reworkRate: qc.inspections ? qc.failed / qc.inspections : 0, inspections: qc.inspections },
       daily: financial ? daily.map((d) => ({ day: d.day, billed: Number(d.billed), collected: Number(d.collected), expenses: Number(d.expenses), laundry: Number(d.laundry) })) : [],
       branches: financial ? branches.map((b) => ({ ...b, billed: Number(b.billed), collected: Number(b.collected), laundry: Number(b.laundry), outstanding: Number(b.outstanding) })) : [],
-      previous: financial ? { from: prevFrom, to: prevTo, grossBilled: Number(prev.gross), collections: Number(prev.collections), expenses: Number(prev.expenses), orders: Number(prev.orders) } : { from: prevFrom, to: prevTo, orders: Number(prev.orders) },
+      previous: financial ? { from: prevFrom, to: prevTo, grossBilled: Number(prev.gross), collections: Number(prev.collections), expenses: Number(prev.expenses), orders: Number(prev.orders), garments: Number(prev.garments) } : { from: prevFrom, to: prevTo, orders: Number(prev.orders), garments: Number(prev.garments) },
+      garments: { handled: handled.handled, avgTurnaroundDays: handled.turnaround === null ? null : Number(handled.turnaround) },
       laundry: financial ? { billed: Number(laundry.billed), orders: Number(laundry.orders) } : null,
       garmentStatus: [...garmentStatus, { status: "delivered", count: delivered.count }],
       counters: financial ? counters.map((c) => ({ ...c, total: Number(c.total), cash: Number(c.cash), upi: Number(c.upi), card: Number(c.card), other: Number(c.other) })) : [],
       paymentMethods: financial ? methods.map((m) => ({ method: m.method, total: Number(m.total), count: m.count })) : [],
+    };
+  });
+
+  /** What is happening right now, whatever period the screen is showing. Lists are short: each has its own full screen. */
+  app.get("/dashboard/live", async (req) => {
+    const auth = requirePermission(req, "reports.view");
+    const { branchId } = z.object({ branchId: z.uuid().optional() }).parse(req.query);
+    const financial = can(auth, "reports.financial");
+    const orders = can(auth, "orders.read");
+    const seesPhone = can(auth, "customers.read");
+    const ord = branchSql(auth, "o.branch_id", branchId);
+    const gar = branchSql(auth, "g.current_branch_id", branchId);
+    const inv = branchSql(auth, "i.branch_id", branchId);
+    const tz = "Asia/Kolkata";
+    const today = sql`(now() at time zone ${tz})::date`;
+    const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId), columns: { settings: true } });
+    const phone = seesPhone ? sql`c.phone` : sql`null`;
+    const itemsOf = sql`(select string_agg(oi.garment_type_name || case when oi.quantity > 1 then ' ×' || oi.quantity else '' end, ', ' order by oi.created_at) from order_items oi where oi.order_id = o.id)`;
+    // Garments that have left, or were cancelled, are out of the line. Delivered ones count on the day they went.
+    const stage = sql`case when g.current_status = 'received' then 'received'
+        when g.current_status in ('inspection', 'sorting', 'cleaning', 'drying') then 'cleaning'
+        when g.current_status in ('finishing', 'quality_control', 'rework', 'packing') then 'finishing'
+        when g.current_status in ('ready', 'dispatched') then 'ready'
+        when g.current_status = 'delivered' then 'delivered' else null end`;
+    const onLine = sql`g.organization_id = ${auth.orgId} and g.current_status not in ('cancelled', 'exception')
+      and (g.current_status <> 'delivered' or (g.delivered_at at time zone ${tz})::date = ${today}) ${gar}`;
+
+    const [stageCounts, stageTags, [exceptions], [late]] = await Promise.all([
+      db.execute<{ stage: string; count: number }>(sql`select ${stage} as stage, count(*)::int as count from garments g where ${onLine} group by 1`),
+      orders ? db.execute<{ stage: string }>(sql`
+        select stage, "scanCode", "tagCode", garment, "customerName" from (
+          select ${stage} as stage, g.scan_code as "scanCode", g.tag_code as "tagCode", oi.garment_type_name as garment, c.name as "customerName",
+                 row_number() over (partition by ${stage} order by o.promised_at, g.tag_code) as n
+          from garments g join order_items oi on oi.id = g.order_item_id join orders o on o.id = g.order_id join customers c on c.id = o.customer_id
+          where ${onLine}
+        ) x where n <= 6 order by stage, n`) : Promise.resolve([]),
+      db.execute<{ count: number }>(sql`select count(*)::int as count from garments g where g.organization_id = ${auth.orgId} and g.current_status = 'exception' ${gar}`),
+      db.execute<{ count: number }>(sql`select count(*)::int as count from orders o where o.organization_id = ${auth.orgId} and o.promised_at < now() and o.operational_status in ('received', 'in_processing', 'partially_ready') ${ord}`),
+    ]);
+
+    const owed = sql`i.grand_total - ${invoiceCreditSql} - ${invoicePaidSql}`;
+    const [overdue, ready, dues, [counts], recent] = orders ? await Promise.all([
+      db.execute(sql`
+        select o.id, o.order_number as "orderNumber", c.id as "customerId", c.name, ${phone} as phone, ${itemsOf} as items,
+               greatest(1, (${today} - (o.promised_at at time zone ${tz})::date))::int as days
+        from orders o join customers c on c.id = o.customer_id
+        where o.organization_id = ${auth.orgId} and o.promised_at < now() and o.operational_status in ('received', 'in_processing', 'partially_ready') ${ord}
+        order by o.promised_at limit 5`),
+      db.execute(sql`
+        select o.id, o.order_number as "orderNumber", c.id as "customerId", c.name, ${phone} as phone, ${itemsOf} as items,
+               (${today} - (o.updated_at at time zone ${tz})::date)::int as days,
+               ${financial ? sql`coalesce((select ${owed} from invoices i where i.order_id = o.id and i.status <> 'cancelled'), 0)` : sql`null`} as balance
+        from orders o join customers c on c.id = o.customer_id
+        where o.organization_id = ${auth.orgId} and o.operational_status in ('ready', 'partially_ready') ${ord}
+        order by o.updated_at limit 5`),
+      financial ? db.execute(sql`
+        select c.id as "customerId", c.name, ${phone} as phone, sum(${owed}) as balance, count(*)::int as invoices,
+               max((${today} - (i.issued_at at time zone ${tz})::date))::int as days
+        from invoices i join customers c on c.id = i.customer_id
+        where i.organization_id = ${auth.orgId} and i.status <> 'cancelled' and ${owed} > 0 ${inv}
+        group by c.id, c.name, c.phone order by days desc limit 5`) : Promise.resolve([]),
+      db.execute<{ overdue: number; ready: number; dues: number }>(sql`
+        select (select count(*)::int from orders o where o.organization_id = ${auth.orgId} and o.promised_at < now() and o.operational_status in ('received', 'in_processing', 'partially_ready') ${ord}) as overdue,
+               (select count(*)::int from orders o where o.organization_id = ${auth.orgId} and o.operational_status in ('ready', 'partially_ready') ${ord}) as ready,
+               ${financial ? sql`(select count(distinct i.customer_id)::int from invoices i where i.organization_id = ${auth.orgId} and i.status <> 'cancelled' and ${owed} > 0 ${inv})` : sql`0`} as dues`),
+      db.execute(sql`
+        select o.id, o.order_number as "orderNumber", c.name, ${itemsOf} as items, o.promised_at as "promisedAt", o.operational_status as status,
+               o.promised_at < now() and o.operational_status in ('received', 'in_processing', 'partially_ready') as late,
+               ${financial ? sql`o.grand_total` : sql`null`} as total
+        from orders o join customers c on c.id = o.customer_id
+        where o.organization_id = ${auth.orgId} ${ord} order by o.received_at desc limit 6`),
+    ]) : [[], [], [], [{ overdue: 0, ready: 0, dues: 0 }], []];
+
+    // The last 12 days, for the small bars, and the last 7 for the chart.
+    const trend = financial ? await db.execute<{ day: string; billed: string; collected: string; garments: number }>(sql`
+      with days as (select generate_series(${today} - 11, ${today}, interval '1 day')::date as d)
+      select d::text as day,
+        coalesce((select sum(i.grand_total) from invoices i where i.organization_id = ${auth.orgId} and i.status <> 'cancelled' and (i.issued_at at time zone ${tz})::date = d ${inv}), 0) as billed,
+        coalesce((select sum(p.amount) from payments p where p.organization_id = ${auth.orgId} and p.status = 'succeeded' and p.payment_method <> 'store_credit' and (p.received_at at time zone ${tz})::date = d ${branchSql(auth, "p.branch_id", branchId)}), 0) as collected,
+        (select count(*)::int from garments g where g.organization_id = ${auth.orgId} and g.current_status <> 'cancelled' and (g.created_at at time zone ${tz})::date = d ${gar}) as garments
+      from days order by d`) : await db.execute<{ day: string; billed: string; collected: string; garments: number }>(sql`
+      with days as (select generate_series(${today} - 11, ${today}, interval '1 day')::date as d)
+      select d::text as day, 0 as billed, 0 as collected,
+        (select count(*)::int from garments g where g.organization_id = ${auth.orgId} and g.current_status <> 'cancelled' and (g.created_at at time zone ${tz})::date = d ${gar}) as garments
+      from days order by d`);
+
+    const route = can(auth, "deliveries.manage") && (await hasFeature(auth.orgId, "deliveries")) ? await db.execute(sql`
+      select d.id, d.kind, d.status, d.time_slot as slot, d.address_json as address, ${seesPhone ? sql`coalesce(d.contact_phone, c.phone)` : sql`null`} as phone, c.name, u.name as driver
+      from pickup_deliveries d join customers c on c.id = d.customer_id left join users u on u.id = d.driver_user_id
+      where d.organization_id = ${auth.orgId} and d.scheduled_date = ${today}::text and d.status <> 'cancelled' ${branchSql(auth, "d.branch_id", branchId)}
+      order by d.time_slot, d.created_at limit 12`) : null;
+
+    return {
+      serverTime: new Date(),
+      targets: org?.settings.dashboardTargets ?? {},
+      production: { stages: stageCounts.filter((s) => s.stage), tags: stageTags, exceptions: exceptions.count, lateOrders: late.count },
+      attention: { overdue, ready: ready.map((r) => ({ ...r, balance: r.balance === null ? null : Number(r.balance) })), dues: dues.map((d) => ({ ...d, balance: Number(d.balance) })), counts },
+      recentOrders: recent.map((o) => ({ ...o, total: o.total === null ? null : Number(o.total) })),
+      trend: trend.map((d) => ({ day: d.day, billed: Number(d.billed), collected: Number(d.collected), garments: d.garments })),
+      route,
     };
   });
 

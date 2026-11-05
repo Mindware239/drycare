@@ -8,7 +8,7 @@ import { useSession } from "@/lib/session";
 import { dateOnly, money } from "@/lib/format";
 import { Alert, Badge, Button, Card, Field, Input, Modal, Select, Spinner, Table, Td } from "@/components/ui";
 
-type Plan = { id: string; name: string; price: number; durationDays: number; discountBps: number; active: boolean };
+type Plan = { id: string; name: string; price: number; durationDays: number; discountBps: number; freeExpress: boolean; perks: string[]; active: boolean };
 type Membership = { id: string; planId: string; planName: string; discountBps: number; freeExpress: boolean; perks: string[]; pricePaid: number; invoiceNumber: string | null; startsAt: string; endsAt: string; status: string; cancelReason: string | null; method: string | null; reference: string | null };
 const METHODS = ["cash", "upi", "card", "bank_transfer"] as const;
 
@@ -116,6 +116,13 @@ function Sell({ customerId, branchId, plans, initialPlanId, onClose, onDone }: {
             {plans.map((p) => <option key={p.id} value={p.id}>{p.name} · {money(p.price)} · {p.discountBps / 100}% off · {p.durationDays} days</option>)}
           </Select>
         </Field>
+        {plan && (
+          <ul className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+            <li>✓ {plan.discountBps / 100}% off every order</li>
+            {plan.freeExpress && <li>✓ Free express service</li>}
+            {plan.perks.map((perk) => <li key={perk}>✓ {perk}</li>)}
+          </ul>
+        )}
         {paid && <Field label="Received by"><Select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>{METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}</Select></Field>}
         {paid && method !== "cash" && <Field label="Transaction reference" required><Input required value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI / card / UTR ref" /></Field>}
         {paid && <p className="text-xs text-slate-500">This is money received now: it counts in today&apos;s collections and the cash drawer.</p>}

@@ -1,0 +1,1 @@
+ALTER TABLE "order_items" ADD COLUMN "stain_charge" integer DEFAULT 0 NOT NULL;

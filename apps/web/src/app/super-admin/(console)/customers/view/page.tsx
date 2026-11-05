@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { Alert, Badge, Button, Field, Input, Modal, Textarea } from "@/components/ui";
 import { DataTable, EmptyState, LoadingRows, Panel, StatusBadge, TrialBadge, actionLabel, dateLabel, dateTimeLabel, relativeDays, useAdminData } from "../../admin-ui";
-import { FeaturesPanel, ManagePlanModal } from "./AccountControls";
+import { FeaturesPanel, ManagePlanModal, RfidModulePanel } from "./AccountControls";
 
 type Detail = {
   organization: { id: string; name: string; legalName: string | null; slug: string; status: string; gstin: string | null; trialStartedAt: string | null; trialEndsAt: string | null; trialSource: string | null; createdAt: string; settings: Record<string, unknown> };
@@ -115,6 +115,7 @@ function CustomerDetailInner() {
       </div>
 
       <FeaturesPanel key={subscriptions[0]?.id ?? "none"} orgId={org.id} onChanged={() => void reload()} />
+      <RfidModulePanel orgId={org.id} onChanged={() => void reload()} />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel title="Team" description="Store users. Passwords are never visible to Drycare staff." padded={false}>

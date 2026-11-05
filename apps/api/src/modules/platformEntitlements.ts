@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { FEATURE_KEYS, resolveFeatures, type FeatureOverrides } from "@drycare/shared";
+import { PLAN_FEATURE_KEYS, resolveFeatures, type FeatureOverrides } from "@drycare/shared";
 import { db, schema } from "../db/client";
 import { audit } from "../lib/audit";
 import { requirePlatformAdmin } from "../lib/context";
@@ -48,7 +48,7 @@ export async function platformEntitlementRoutes(app: FastifyInstance) {
     const auth = requirePlatformAdmin(req);
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     const body = z.object({
-      overrides: z.partialRecord(z.enum(FEATURE_KEYS), z.boolean()),
+      overrides: z.partialRecord(z.enum(PLAN_FEATURE_KEYS as [string, ...string[]]), z.boolean()),
       /** Left out = keep as it is. Null = go back to what the plan says. */
       branchLimit: z.number().int().min(1).max(1000).nullable().optional(),
       reason,
@@ -123,7 +123,7 @@ export async function platformEntitlementRoutes(app: FastifyInstance) {
 
   app.put("/platform-admin/hardware", async (req) => {
     const auth = requirePlatformAdmin(req);
-    const body = z.object({ printers: models, scanners: models }).parse(req.body);
+    const body = z.object({ printers: models.default([]), scanners: models, rfidReaders: models.default([]), driverUrl: z.url("Enter a full web link").max(500).nullable().optional().or(z.literal("").transform(() => null)) }).parse(req.body);
     const before = await hardwarePolicy();
     await db.transaction(async (tx) => {
       await write(tx, HARDWARE_POLICY_KEY, body, auth.userId);

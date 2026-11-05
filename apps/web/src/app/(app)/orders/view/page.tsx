@@ -118,7 +118,7 @@ function CustomerApprovalActions({ orderId, approval, customerEmail, onUpdated }
 function OrderInner() {
   const params = useSearchParams();
   const id = params.get("id") ?? "";
-  const { can, branchId, readOnly } = useSession();
+  const { can, has, branchId, readOnly } = useSession();
   const [scheduling, setScheduling] = useState(false);
   const { data: o, error, loading, setData, reload } = useApi(`/orders/${id}`);
   const [modal, setModal] = useState<null | "pay" | "handover" | "cancel" | "discount" | { refund: any } | { verify: any }>(null);
@@ -239,6 +239,7 @@ function OrderInner() {
             </div>
             <div className="flex flex-col items-end gap-2">
               <a href={`/print/labels?id=${o.id}`} target="_blank" rel="noreferrer"><Button><Tags className="h-4 w-4" />Print bag label & {o.garments.length} tags</Button></a>
+              {has("rfid") && <Link href={`/rfid?order=${encodeURIComponent(o.orderNumber)}`}><Button variant="secondary">Link RFID tags</Button></Link>}
               <span className="text-xs text-emerald-900">Labels: {lastPrint ? <Badge color={lastPrint.status === "printed" ? "green" : lastPrint.status === "failed" ? "red" : "amber"}>{lastPrint.status}</Badge> : <Badge color="amber">not printed yet</Badge>}</span>
             </div>
           </div>
@@ -429,7 +430,7 @@ function OrderInner() {
                 <li key={i.id} className="flex items-start justify-between gap-3 px-4 py-3">
                   <span className="min-w-0">
                     <span className="block font-medium text-slate-800">{i.garmentTypeName}</span>
-                    <span className="mt-0.5 block text-xs text-slate-500">{i.serviceName} · Qty {i.quantity} × {money(i.unitPrice)}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{i.serviceName} · Qty {i.quantity} × {money(i.unitPrice)}{i.stainCharge > 0 ? ` · includes stain treatment ${money(i.stainCharge)}` : ""}</span>
                     {i.overrideReason && <span className="mt-1 block text-xs text-amber-700">Price override: {i.overrideReason}</span>}
                   </span>
                   <span className="shrink-0 text-right">

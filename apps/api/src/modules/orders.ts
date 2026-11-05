@@ -118,6 +118,8 @@ export async function buildQuote(tx: DbOrTx, auth: AuthContext, body: QuoteInput
       unitPrice = item.overrideUnitPrice;
     }
     if (unitPrice === undefined) throw unprocessable(`No price configured for ${gt.name} — ${svc.name}`, "PRICE_NOT_CONFIGURED");
+    // Treated like the rest of the garment's price: GST, discounts and express all apply to it.
+    unitPrice += item.stainCharge ?? 0;
     const calc = priceLine({
       unitPrice,
       quantity: item.quantity,
@@ -335,6 +337,7 @@ export async function orderRoutes(app: FastifyInstance) {
             unitPrice: l.unitPrice,
             listUnitPrice: l.price?.unitPrice ?? 0,
             overrideReason: l.item.overrideUnitPrice !== undefined ? l.item.overrideReason : null,
+            stainCharge: l.item.stainCharge ?? 0,
             surchargeAmount: l.calc.surcharge,
             discountAmount: l.calc.discount,
             taxBps: l.price?.taxBps ?? 0,

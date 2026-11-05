@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, Plus, Store } from "lucide-react";
-import { CORE_FEATURE_LABELS, FEATURES, FEATURE_KEYS } from "@drycare/shared";
+import { CORE_FEATURE_LABELS, FEATURES, PLAN_FEATURE_KEYS } from "@drycare/shared";
 import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { Alert, Badge, Button, Field, Input, Modal, Select } from "@/components/ui";
@@ -67,7 +67,7 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: (message: string) 
           branchLimit: Number(form.get("branchLimit")),
           sortOrder: Number(form.get("sortOrder")),
           published,
-          entitlements: Object.fromEntries(FEATURE_KEYS.map((key) => [key, form.get(`feature-${key}`) === "on"])),
+          entitlements: Object.fromEntries(PLAN_FEATURE_KEYS.map((key) => [key, form.get(`feature-${key}`) === "on"])),
         },
       });
       onSaved(`${String(form.get("name"))} saved${published ? " and visible on the pricing page" : ""}.`);
@@ -112,7 +112,7 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: (message: string) 
         <fieldset className="rounded-xl border border-slate-200 p-4">
           <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Included features</legend>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURE_KEYS.map((key) => (
+            {PLAN_FEATURE_KEYS.map((key) => (
               <label key={key} className="flex items-start gap-2 text-sm text-slate-700" title={FEATURES[key].description}>
                 <input name={`feature-${key}`} type="checkbox" defaultChecked={plan.entitlements[key] ?? FEATURES[key].whenUnset} className="mt-0.5 h-4 w-4 accent-brand-700" />
                 <span>{FEATURES[key].label}<span className="block text-xs text-slate-500">{FEATURES[key].description}</span></span>

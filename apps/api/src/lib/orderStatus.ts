@@ -1,3 +1,4 @@
+import { releaseRfidTag } from "./rfidRelease";
 import { eq, sql } from "drizzle-orm";
 import { deriveOrderStatus, type GarmentStage, type OrderStatus } from "@drycare/shared";
 import { schema, type Tx } from "../db/client";
@@ -40,6 +41,7 @@ export async function recordGarmentTransition(
     .where(sql`${schema.garments.id} = ${g.id} and ${schema.garments.currentStatus} = ${g.currentStatus}`)
     .returning({ id: schema.garments.id });
   if (updated.length === 0) return false;
+  if (to === "delivered" || to === "cancelled") await releaseRfidTag(tx, g.id, g.organizationId, actorUserId);
   await tx.insert(schema.garmentStatusHistory).values({
     organizationId: g.organizationId,
     garmentId: g.id,

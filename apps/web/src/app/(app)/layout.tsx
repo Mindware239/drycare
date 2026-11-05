@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -23,6 +23,7 @@ import {
   Receipt,
   ScanLine,
   Barcode,
+  Radio,
   Search,
   Settings,
   Shirt,
@@ -47,7 +48,7 @@ import type { FeatureKey, Permission } from "@drycare/shared";
 import { api } from "@/lib/api";
 import { SessionProvider, useSession, type Session } from "@/lib/session";
 import { Spinner, cx } from "@/components/ui";
-import { Logo, Wordmark } from "@/components/Brand";
+import { Logo } from "@/components/Brand";
 import { PlanBanner } from "@/components/PlanBanner";
 import { SyncStatus } from "@/components/SyncStatus";
 
@@ -71,6 +72,7 @@ const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; g
   { href: "/production", label: "Production board", icon: Factory, perm: "orders.read", group: "garments" },
   { href: "/scan", label: "Scan station", icon: ScanLine, perm: "garments.process", group: "garments" },
   { href: "/tags", label: "Tag tracking", icon: Barcode, perm: "orders.read", group: "garments" },
+  { href: "/rfid", label: "RFID", icon: Radio, perm: "orders.read", group: "garments", feature: "rfid" },
   { href: "/transfers", label: "Facility transfers", icon: Truck, perm: "orders.read", group: "garments" },
   { href: "/exceptions", label: "Garment exceptions", icon: TriangleAlert, perm: "orders.read", group: "garments" },
   { href: "/laundry", label: "Machines & live status", icon: WashingMachine, perm: "laundry.view", group: "laundry", feature: "laundry" },
@@ -111,6 +113,7 @@ function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState(INITIAL_GROUPS);
@@ -149,6 +152,16 @@ function Shell({ children }: { children: ReactNode }) {
     const here = NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
     if (here && ((here.perm && !can(here.perm)) || (here.feature && !has(here.feature))) && items[0]) router.replace(items[0].href);
   }, [pathname, can, has, items, router]);
+
+  // Ctrl K jumps to search from anywhere. Escape clears it.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
+      if (event.key === "Escape" && document.activeElement === searchRef.current) { setQuery(""); searchRef.current?.blur(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -198,7 +211,7 @@ function Shell({ children }: { children: ReactNode }) {
         compactNav ? "justify-center px-2" : "justify-between px-4",
         theme === "dark" ? "border-slate-800" : "border-slate-200",
       )}>
-        {compactNav ? <Logo className="h-6 w-auto" /> : <Wordmark dark={theme === "dark"} />}
+        {!compactNav && <span className="text-sm font-medium text-slate-500">Menu</span>}
         <button
           type="button"
           onClick={toggleSidebar}
@@ -288,10 +301,10 @@ function Shell({ children }: { children: ReactNode }) {
     : nestedSegments[0]?.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
   return (
-    <div className={cx("min-h-screen transition-[padding] duration-200", contentWidth)}>
-      <aside className={cx("no-print fixed inset-y-0 left-0 z-30 hidden border-r transition-[width] duration-200 lg:block", sidebarCollapsed ? "w-[4.25rem]" : "w-[16.25rem]", theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white")}>{nav}</aside>
+    <div className={cx("min-h-screen pt-16 transition-[padding] duration-200 print:pt-0", contentWidth)}>
+      <aside className={cx("no-print fixed bottom-0 left-0 top-16 z-30 hidden border-r transition-[width] duration-200 lg:block", sidebarCollapsed ? "w-[4.25rem]" : "w-[16.25rem]", theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white")}>{nav}</aside>
       {mobileNavOpen && (
-        <div className="no-print fixed inset-0 z-40 lg:hidden">
+        <div className="no-print fixed inset-0 z-50 lg:hidden">
           <button type="button" className="absolute inset-0 bg-slate-950/45" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation menu" />
           <aside className={cx("absolute inset-y-0 left-0 w-72 border-r", theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white")}>
             <button type="button" onClick={() => setMobileNavOpen(false)} className={cx("absolute right-3 top-5 z-10 rounded-md p-1", theme === "dark" ? "text-slate-400" : "text-slate-600")} aria-label="Close menu"><X className="h-5 w-5" /></button>
@@ -299,68 +312,63 @@ function Shell({ children }: { children: ReactNode }) {
           </aside>
         </div>
       )}
-      <header className={cx("no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b px-4 lg:px-6", theme === "dark" ? "border-slate-800 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900")}>
+      <header className={cx("no-print fixed inset-x-0 top-0 z-40 flex h-16 items-center gap-3 border-b px-4 lg:px-6", "border-black bg-[#151514] text-slate-100")}>
         <button type="button" className="rounded-md p-2 lg:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
-        <div className="flex shrink-0 items-center gap-2 lg:hidden">
-          <Logo className="h-6 w-auto" />
-          <span className={cx("text-sm font-semibold", theme === "dark" ? "text-slate-100" : "text-slate-800")}>Drycare</span>
-        </div>
-        <div className="hidden shrink-0 items-center gap-2 lg:flex">
-          <Logo className="h-6 w-auto" />
-          <span className={cx("text-sm font-semibold", theme === "dark" ? "text-slate-100" : "text-slate-800")}>Drycare</span>
-        </div>
+        <Link href="/dashboard" className="flex shrink-0 items-center gap-2" aria-label="Drycare home"><Logo dark className="h-7 w-auto" /><span className="hidden font-[Urbanist] text-lg font-bold tracking-tight text-white sm:inline">Drycare</span></Link>
         {(can("orders.read") || can("customers.read")) && (
           <form onSubmit={search} role="search" className="relative min-w-0 max-w-xl flex-1 lg:ml-2">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search customer, phone, order or garment tag"
-              className={cx("h-9 w-full rounded-md border py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20", theme === "dark" ? "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400")}
+              ref={searchRef} placeholder="Search customer, phone, order or tag number"
+              className={cx("h-10 w-full rounded-full border py-2 pl-9 pr-16 text-sm focus:border-[#3cbf5a] focus:outline-none focus:ring-4 focus:ring-[#3cbf5a]/25", "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500")}
               aria-label="Global search"
+              aria-keyshortcuts="Control+K"
             />
+            <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-2.5 hidden rounded border border-slate-600 px-1.5 text-[11px] font-semibold text-slate-300 sm:block">Ctrl K</kbd>
           </form>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {session.branches.length > 1 ? (
             <label className="flex items-center gap-2">
               <span className="hidden text-xs font-medium text-slate-500 xl:inline">Branch</span>
-              <select value={branchId} onChange={(event) => setBranchId(event.target.value)} className={cx("h-9 max-w-[96px] rounded-md border px-2 text-sm sm:max-w-52", theme === "dark" ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-800")} aria-label="Active branch">
+              <select value={branchId} onChange={(event) => setBranchId(event.target.value)} className={cx("h-9 max-w-[96px] rounded-md border px-2 text-sm sm:max-w-52", "border-slate-700 bg-slate-900 text-slate-100")} aria-label="Active branch">
                 {session.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>)}
               </select>
             </label>
-          ) : activeBranch && <span className={cx("hidden max-w-52 truncate text-sm sm:inline", theme === "dark" ? "text-slate-300" : "text-slate-600")}>{activeBranch.name}</span>}
+          ) : activeBranch && <span className={cx("hidden max-w-52 truncate text-sm sm:inline", "text-slate-300")}>{activeBranch.name}</span>}
           {session.organization.status === "trial" && <span className="hidden rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 md:inline">Trial</span>}
-          <SyncStatus dark={theme === "dark"} canManage={can("org.manage")} />
+          <SyncStatus dark canManage={can("org.manage")} />
           {can("audit.view") && (
-            <Link href="/audit" aria-label="Open audit log and customer messages" title="Audit & messages" className={cx("hidden h-9 w-9 items-center justify-center rounded-md sm:inline-flex", theme === "dark" ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100")}>
+            <Link href="/audit" aria-label="Open audit log and customer messages" title="Audit & messages" className={cx("hidden h-9 w-9 items-center justify-center rounded-md sm:inline-flex", "text-slate-300 hover:bg-slate-800")}>
               <Bell aria-hidden="true" className="h-[18px] w-[18px]" />
             </Link>
           )}
-          <button type="button" onClick={toggleTheme} className={cx("inline-flex h-9 items-center justify-center gap-2 rounded-md border px-2.5 text-sm font-medium", theme === "dark" ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+          <button type="button" onClick={toggleTheme} className={cx("inline-flex h-9 items-center justify-center gap-2 rounded-md border px-2.5 text-sm font-medium", "border-slate-700 text-slate-300 hover:bg-slate-800")} aria-label={`Switch to ${"light"} mode`} title={`Switch to ${"light"} mode`}>
             {theme === "dark" ? <Sun aria-hidden="true" className="h-4 w-4" /> : <Moon aria-hidden="true" className="h-4 w-4" />}
             <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
           </button>
           <details className="relative">
-            <summary className={cx("flex h-9 cursor-pointer list-none items-center gap-2 rounded-md px-2 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-500", theme === "dark" && "hover:bg-slate-800")} aria-label="Open user and session menu">
+            <summary className={cx("flex h-9 cursor-pointer list-none items-center gap-2 rounded-md px-2 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-500", "hover:bg-slate-800")} aria-label="Open user and session menu">
               <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-800">{session.user.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span>
-              <span className={cx("hidden max-w-36 truncate text-left text-sm font-medium md:block", theme === "dark" ? "text-slate-200" : "text-slate-700")}>{session.user.name}</span>
+              <span className={cx("hidden max-w-36 truncate text-left text-sm font-medium md:block", "text-slate-200")}>{session.user.name}</span>
               <ChevronDown aria-hidden="true" className="hidden h-3.5 w-3.5 text-slate-400 md:block" />
             </summary>
-            <div className={cx("absolute right-0 top-11 z-30 w-60 rounded-lg border p-2", theme === "dark" ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white")}>
+            <div className={cx("absolute right-0 top-11 z-30 w-60 rounded-lg border p-2", "border-slate-700 bg-slate-900")}>
               <div className="border-b border-slate-100 px-2 py-2">
-                <p className={cx("truncate text-sm font-medium", theme === "dark" ? "text-slate-100" : "text-slate-900")}>{session.user.name}</p>
+                <p className={cx("truncate text-sm font-medium", "text-slate-100")}>{session.user.name}</p>
                 <p className="truncate text-xs text-slate-500">{session.user.email}</p>
                 <p className="mt-1 text-xs text-slate-500">{session.role.name} · {session.organization.name}</p>
               </div>
-              <BusinessSwitcher dark={theme === "dark"} />
-              <button type="button" onClick={logout} className={cx("mt-1 flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm", theme === "dark" ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100")}><LogOut aria-hidden="true" className="h-4 w-4" />Sign out</button>
+              <BusinessSwitcher dark />
+              <button type="button" onClick={logout} className={cx("mt-1 flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm", "text-slate-200 hover:bg-slate-800")}><LogOut aria-hidden="true" className="h-4 w-4" />Sign out</button>
             </div>
           </details>
         </div>
       </header>
       <main className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-5 lg:px-7 lg:py-6">
-        <nav aria-label="Breadcrumb" className="mb-4 flex min-w-0 items-center gap-2 text-xs text-slate-500">
+        <nav aria-label="Breadcrumb" className={cx("mb-4 flex min-w-0 items-center gap-2 text-xs text-slate-500", currentItem?.href === "/dashboard" && "hidden")}>
           {showDashboardCrumb && <><Link href="/dashboard" className="shrink-0 hover:text-brand-700">Dashboard</Link><span aria-hidden="true">/</span></>}
           {activeGroupLabel && currentItem && <><span className="hidden shrink-0 sm:inline">{activeGroupLabel}</span><span className="hidden sm:inline" aria-hidden="true">/</span><Link href={currentItem.href} aria-current={pathname === currentItem.href ? "page" : undefined} className="truncate font-medium text-slate-700 hover:text-brand-700">{currentItem.label}</Link></>}
           {currentItem && nestedLabel && <><span aria-hidden="true">/</span><span className="truncate text-slate-600">{nestedLabel}</span></>}

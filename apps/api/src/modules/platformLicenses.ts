@@ -10,7 +10,8 @@ import { dirname, join } from "node:path";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { resolveFeatures, signedLicenseSchema } from "@drycare/shared";
-import { hardwarePolicy } from "../lib/entitlements";
+import { hardwarePolicy, rfidModuleActive } from "../lib/entitlements";
+import { soldPrintersFor } from "./printerRegistry";
 import { db, schema } from "../db/client";
 import { requirePlatformAdmin } from "../lib/context";
 import { audit } from "../lib/audit";
@@ -114,7 +115,7 @@ export async function platformLicenseRoutes(app: FastifyInstance) {
     }
     const grants = await grantsFor(body.plan, body.organizationId);
     if (!body.allowExtraPcs) await assertPcLimit(grants, body.organizationId, body.installationIds);
-    const issued = await issueKey(req, k, auth.userId, { organizationId: body.organizationId, customerName: body.customerName, plan: body.plan, expiresAt, installationIds: body.installationIds, note: body.note, features: body.features ?? grants?.features, limits: grants?.limits, renewalOf: null });
+    const issued = await issueKey(req, k, auth.userId, { organizationId: body.organizationId, customerName: body.customerName, plan: body.plan, expiresAt, installationIds: body.installationIds, note: body.note, features: body.features ?? (grants ? { ...grants.features, rfid: await rfidFor(body.organizationId) } : undefined), limits: grants?.limits, renewalOf: null });
     reply.code(201);
     return issued;
   });
@@ -134,11 +135,13 @@ export async function platformLicenseRoutes(app: FastifyInstance) {
     const grants = await grantsFor(plan, old.organizationId);
     const previous = verifySignedLicense(old.key, k.publicKeyPem);
     if (!body.allowExtraPcs) await assertPcLimit(grants, old.organizationId, old.installationIds);
-    const issued = await issueKey(req, k, auth.userId, { organizationId: old.organizationId ?? undefined, customerName: old.customerName, plan, expiresAt, installationIds: old.installationIds, note: body.note ?? old.note ?? undefined, features: grants?.features ?? previous?.features, limits: grants?.limits ?? previous?.limits, renewalOf: old.id });
+    const issued = await issueKey(req, k, auth.userId, { organizationId: old.organizationId ?? undefined, customerName: old.customerName, plan, expiresAt, installationIds: old.installationIds, note: body.note ?? old.note ?? undefined, features: grants ? { ...grants.features, rfid: previous?.features?.rfid === true || await rfidFor(old.organizationId) } : previous?.features, limits: grants?.limits ?? previous?.limits, renewalOf: old.id });
     reply.code(201);
     return issued;
   });
 }
+
+const rfidFor = async (organizationId?: string | null) => (organizationId ? rfidModuleActive(organizationId) : false);
 
 const expiresOnSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 
@@ -172,7 +175,7 @@ async function assertPcLimit(grants: Awaited<ReturnType<typeof grantsFor>>, orga
 async function issueKey(req: FastifyRequest, k: StoredSigningKey, userId: string, input: {
   organizationId?: string; customerName: string; plan: string; expiresAt: string | null; installationIds: string[]; note?: string; features?: Record<string, boolean>; limits?: { branches: number | null }; renewalOf: string | null;
 }) {
-  const payload = signedLicenseSchema.parse({ version: 1, licenseId: randomUUID(), plan: input.plan, issuedAt: new Date().toISOString(), expiresAt: input.expiresAt, installationIds: input.installationIds, features: input.features, limits: input.limits, hardware: await hardwarePolicy() });
+  const payload = signedLicenseSchema.parse({ version: 1, licenseId: randomUUID(), plan: input.plan, issuedAt: new Date().toISOString(), expiresAt: input.expiresAt, installationIds: input.installationIds, features: input.features, limits: input.limits, hardware: { ...(await hardwarePolicy()), soldPrinters: await soldPrintersFor(input.organizationId, input.customerName) } });
   const bytes = Buffer.from(JSON.stringify(payload));
   const signature = sign(null, bytes, createPrivateKey(openSecret(k.privateKeySealed)));
   const key = `DRYCARE1.${bytes.toString("base64url")}.${signature.toString("base64url")}`;

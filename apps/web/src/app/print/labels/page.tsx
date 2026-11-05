@@ -12,13 +12,14 @@ import { Alert, Badge, Button, Select, Spinner, cx } from "@/components/ui";
 import { BarcodeAdjust } from "@/components/BarcodeAdjust";
 import { BasicTagSetup } from "@/components/BasicTagSetup";
 import { LabelDesigner, type PrinterDetails } from "@/components/LabelDesigner";
+import { PrinterConnect } from "@/components/PrinterConnect";
 import { PrinterQueueStatus, usePrinterQueue } from "@/components/PrinterQueue";
 import { ScannerTest, sampleData, scannerSamples } from "@/components/ScannerTest";
 
 type Scope = "all" | "bag" | "garments";
 type PrintItem = { key: string; design: LabelDesign; data: LabelData };
 type Drawn = PrintItem & { label: RenderedLabel; url: string };
-type PrinterInfo = { available: boolean; restricted?: boolean; printers: (PrinterDetails & { approved?: boolean })[] };
+type PrinterInfo = { available: boolean; restricted?: boolean; needsConnecting?: boolean; printers: (PrinterDetails & { approved?: boolean })[] };
 
 /** The largest group sent to the printer at once: keeps each request small even for big bag labels. */
 const BATCH = 20;
@@ -319,8 +320,9 @@ function LabelsPageInner() {
           </div>
         </div>
         {mixedSizes && <Alert tone="amber">Your bag label is {settings.bagDesign.widthMm} × {settings.bagDesign.heightMm} mm and your garment tag is {settings.garmentDesign.widthMm} × {settings.garmentDesign.heightMm} mm. One roll cannot print both: set them to the same size, or print them separately.</Alert>}
-        {blockedPrinter && <Alert tone="amber">{blockedPrinter} is not on the approved printer list, so it cannot be used. Choose an approved printer or contact Drycare support.</Alert>}
-        {direct && printerInfo.data?.restricted && printers.length === 0 && <Alert tone="amber">None of the printers on this PC are approved. Approved models: {hardware.data?.printers.join(", ")}.</Alert>}
+        {blockedPrinter && <Alert tone="amber">{printerInfo.data?.needsConnecting ? `${blockedPrinter} is not connected yet. Enter its serial number and bill number below.` : `${blockedPrinter} is not on the approved printer list, so it cannot be used. Choose an approved printer or contact Drycare support.`}</Alert>}
+        {direct && printerInfo.data?.restricted && !printerInfo.data.needsConnecting && printers.length === 0 && <Alert tone="amber">None of the printers on this PC are approved. Approved models: {hardware.data?.printers.join(", ")}.</Alert>}
+        {(test || (direct && printerInfo.data?.needsConnecting && printers.length === 0)) && <PrinterConnect windowsPrinters={printerInfo.data?.printers ?? []} directAvailable={direct} required={!!printerInfo.data?.needsConnecting} onChanged={() => printerInfo.reload()} />}
         {error && <Alert>{error}</Alert>}
         {notice && <Alert tone="green">{notice}</Alert>}
         {confirmLarge && (

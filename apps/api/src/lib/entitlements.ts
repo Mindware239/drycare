@@ -11,10 +11,27 @@ import { isDesktop } from "../env";
 import { AppError } from "./errors";
 import { licenseGrants } from "./license";
 
-export type HardwarePolicy = { printers: string[]; scanners: string[] };
+export type SoldPrinter = { serial: string; bill: string; model: string };
+export type HardwarePolicy = { printers: string[]; scanners: string[]; rfidReaders: string[]; driverUrl: string | null; soldPrinters?: SoldPrinter[] };
 export const HARDWARE_POLICY_KEY = "hardware_policy";
 
+/** Whether this shop has a paid period of the RFID module running now. */
+export async function rfidModuleActive(orgId: string, tx: DbOrTx = db) {
+  const [row] = await tx.select({ id: schema.organizationAddons.id }).from(schema.organizationAddons)
+    .where(and(eq(schema.organizationAddons.organizationId, orgId), eq(schema.organizationAddons.addon, "rfid"), eq(schema.organizationAddons.status, "active"), sql`${schema.organizationAddons.endsAt} > now()`, sql`${schema.organizationAddons.startsAt} <= now()`)).limit(1);
+  return !!row;
+}
+
 export async function orgFeatures(orgId: string, tx: DbOrTx = db): Promise<FeatureMap> {
+  const features = await planFeatures(orgId, tx);
+  if (isDesktop) return features;
+  const org = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, orgId), columns: { settings: true } });
+  if (!org || org.settings.platformInternal || org.settings.syncSource === "device") return features;
+  // Sold separately, so a plan, a trial or an exception never includes it.
+  return { ...features, rfid: await rfidModuleActive(orgId, tx) };
+}
+
+async function planFeatures(orgId: string, tx: DbOrTx): Promise<FeatureMap> {
   if (isDesktop) {
     const fromKey = licenseGrants()?.features;
     return fromKey ? resolveFeatures(fromKey) : allFeatures();
@@ -49,6 +66,7 @@ const FEATURE_ROUTES: [RegExp, FeatureKey][] = [
   [/^\/api\/v1\/booking(\/|$)/, "onlineBooking"],
   [/^\/api\/v1\/(membership-plans|customer-memberships)(\/|$)/, "customerMemberships"],
   [/^\/api\/v1\/customers\/[^/]+\/memberships(\/|$)/, "customerMemberships"],
+  [/^\/api\/v1\/rfid(\/|$)/, "rfid"],
 ];
 
 export async function assertFeatureAllowed(req: FastifyRequest) {
@@ -89,8 +107,11 @@ export async function assertBranchAvailable(tx: DbOrTx, orgId: string) {
 
 /** Printers and scanners the software owner accepts. An empty printer list means no restriction has been set. */
 export async function hardwarePolicy(tx: DbOrTx = db): Promise<HardwarePolicy> {
-  if (isDesktop) return licenseGrants()?.hardware ?? { printers: [], scanners: [] };
+  if (isDesktop) {
+    const fromKey = licenseGrants()?.hardware;
+    return { printers: fromKey?.printers ?? [], scanners: fromKey?.scanners ?? [], rfidReaders: fromKey?.rfidReaders ?? [], driverUrl: fromKey?.driverUrl ?? null, soldPrinters: fromKey?.soldPrinters };
+  }
   const row = await tx.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, HARDWARE_POLICY_KEY) });
   const value = (row?.value ?? {}) as Partial<HardwarePolicy>;
-  return { printers: value.printers ?? [], scanners: value.scanners ?? [] };
+  return { printers: value.printers ?? [], scanners: value.scanners ?? [], rfidReaders: value.rfidReaders ?? [], driverUrl: value.driverUrl ?? null };
 }

@@ -1,12 +1,12 @@
 "use client";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarClock, Check, ChevronDown, MapPin, Minus, Plus, Search, Shirt, ShoppingCart, UserRound, Wallet, X } from "lucide-react";
+import { Check, ChevronDown, MapPin, Minus, Plus, Search, ShoppingCart, UserRound, X } from "lucide-react";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS } from "@drycare/shared";
 import { api, ApiError, newIdempotencyKey, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { money, rupeesToPaise } from "@/lib/format";
-import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Textarea, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, Select, Textarea, cx } from "@/components/ui";
 import { GarmentThumb } from "@/components/GarmentArt";
 
 interface Line {
@@ -21,6 +21,7 @@ interface Line {
   careInstructions: string;
   specialCareApprovalRequired: boolean;
   specialCareReason: string;
+  stainCharge: string;
 }
 
 const FLAGS: [string, string][] = [
@@ -32,12 +33,17 @@ const FLAGS: [string, string][] = [
   ["other", "Other"],
 ];
 
+const DISCOUNT_REASONS = ["Regular customer", "Service delay", "Festival offer", "Price match", "Other"];
+const readyLabel = (d: Date) => (isNaN(d.getTime()) ? "the chosen date" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }));
+
 const CATEGORY_ORDER = [
   "Men", "Women", "Ethnic", "Kids & Baby", "Household Linen", "Home Furnishing", "Accessories", "Premium & Delicate",
   "Footwear & Leather", "Commercial Linen", "Repair & Alterations",
   // Categories from earlier built-in lists, for stores that kept them.
   "Kids", "Woollens", "Household", "Footwear & Bags", "General", "Others",
 ];
+
+const stainPaise = (l: Line) => (l.conditionFlags.includes("stain") ? rupeesToPaise(l.stainCharge || "0") || 0 : 0);
 
 function localDateTimeValue(d: Date) {
   const off = d.getTimezoneOffset();
@@ -63,7 +69,9 @@ function PosInner() {
   const [garmentSearch, setGarmentSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [express, setExpress] = useState(false);
-  const [discountPct, setDiscountPct] = useState("");
+  const [discType, setDiscType] = useState<"amount" | "percent">("percent");
+  const [discValue, setDiscValue] = useState("");
+  const [discReason, setDiscReason] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [promisedAt, setPromisedAt] = useState(localDateTimeValue(new Date(Date.now() + turnaround * 3600_000)));
   const [notes, setNotes] = useState("");
@@ -76,7 +84,6 @@ function PosInner() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [openLine, setOpenLine] = useState<string | null>(null);
-  const [showOptions, setShowOptions] = useState(false);
   const cartScroll = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState<string | null>(null);
   // Phones and tablets: hide the floating "View cart" bar while the cart itself is on screen (it would cover the total).
@@ -100,7 +107,18 @@ function PosInner() {
     if (cid && !customer) api(`/customers/${cid}`).then(setCustomer).catch(() => {});
   }, [params, customer]);
 
-  const discountBps = Math.round((Number(discountPct) || 0) * 100);
+  const orgSettings = session.organization.settings as { expressSurchargeBps?: number; maxDiscountBpsWithoutApproval?: number };
+  const expressBps = orgSettings?.expressSurchargeBps ?? 5000;
+  const maxDiscountPct = (orgSettings?.maxDiscountBpsWithoutApproval ?? 1000) / 100;
+  /** The server takes a percentage, so a rupee discount becomes the percentage of the list price that gives it. */
+  const listTotal = lines.reduce((sum, l) => sum + ((priceOf(l.garmentTypeId, l.serviceId) ?? 0) + stainPaise(l)) * l.quantity, 0) * (express ? 1 + expressBps / 10000 : 1);
+  const discountBps = discType === "percent"
+    ? Math.min(10000, Math.round((Number(discValue) || 0) * 100))
+    : listTotal > 0 ? Math.min(10000, Math.round((((Number(discValue) || 0) * 100) / listTotal) * 10000)) : 0;
+  const pickSpeed = (isExpress: boolean) => {
+    setExpress(isExpress);
+    setPromisedAt(localDateTimeValue(new Date(Date.now() + (isExpress ? Math.max(1, Math.round(turnaround / 2)) : turnaround) * 3600_000)));
+  };
   const payload = useMemo(
     () => ({
       customerId: customer?.id,
@@ -109,7 +127,8 @@ function PosInner() {
       discountBps,
       couponCode: couponCode.trim() || undefined,
       deliveryMethod,
-      notes: notes || undefined,
+      // Orders have no field of their own for this, so the reason stays with the order in its notes.
+      notes: [notes.trim(), discountBps && discReason ? `Discount reason: ${discReason}` : ""].filter(Boolean).join("\n") || undefined,
       items: lines.map((l) => ({
         garmentTypeId: l.garmentTypeId,
         serviceId: l.serviceId,
@@ -121,9 +140,10 @@ function PosInner() {
         careInstructions: l.careInstructions || undefined,
         specialCareApprovalRequired: l.specialCareApprovalRequired,
         specialCareReason: l.specialCareApprovalRequired ? l.specialCareReason : undefined,
+        stainCharge: stainPaise(l) || undefined,
       })),
     }),
-    [customer, branchId, express, discountBps, couponCode, deliveryMethod, notes, lines],
+    [customer, branchId, express, discountBps, discReason, couponCode, deliveryMethod, notes, lines],
   );
 
   // Live server-side quote: the backend is the only source of prices.
@@ -146,14 +166,14 @@ function PosInner() {
   function addGarment(gtId: string) {
     if (!serviceId) return;
     setLines((ls) => {
-      const same = ls.find((l) => l.garmentTypeId === gtId && l.serviceId === serviceId && !l.colour && !l.brand && !l.conditionFlags.length && !l.conditionNotes && !l.careInstructions && !l.specialCareApprovalRequired && !l.specialCareReason);
+      const same = ls.find((l) => l.garmentTypeId === gtId && l.serviceId === serviceId && !l.colour && !l.brand && !l.conditionFlags.length && !l.conditionNotes && !l.careInstructions && !l.specialCareApprovalRequired && !l.specialCareReason && !l.stainCharge);
       if (same) {
         setFlash(same.key);
         return ls.map((l) => (l === same ? { ...l, quantity: l.quantity + 1 } : l));
       }
       const key = newIdempotencyKey();
       setFlash(key);
-      return [...ls, { key, garmentTypeId: gtId, serviceId, quantity: 1, colour: "", brand: "", conditionFlags: [], conditionNotes: "", careInstructions: "", specialCareApprovalRequired: false, specialCareReason: "" }];
+      return [...ls, { key, garmentTypeId: gtId, serviceId, quantity: 1, colour: "", brand: "", conditionFlags: [], conditionNotes: "", careInstructions: "", specialCareApprovalRequired: false, specialCareReason: "", stainCharge: "" }];
     });
   }
   /** Undo one tap on a garment tile for the current service, preferring a line without extra details. */
@@ -183,6 +203,7 @@ function PosInner() {
   const advance = payAmount ? rupeesToPaise(payAmount) : 0;
   const grand = quote?.totals.grandTotal ?? 0;
   const approvalHoldsRequired = Number(quote?.approvalsRequired ?? 0) > 0;
+  const balanceDue = Math.max(0, (quote ? grand : 0) - advance);
 
   async function save() {
     setError("");
@@ -231,124 +252,168 @@ function PosInner() {
   const garmentCount = lines.reduce((s, l) => s + l.quantity, 0);
   const serviceName = services.data?.find((s) => s.id === serviceId)?.name ?? "this service";
   // Catalogue prices only; the server quote (with GST, discounts and surcharges) replaces this once a customer is chosen.
-  const estimate = lines.reduce((sum, l) => sum + (priceOf(l.garmentTypeId, l.serviceId) ?? 0) * l.quantity, 0);
+  const estimate = lines.reduce((sum, l) => sum + ((priceOf(l.garmentTypeId, l.serviceId) ?? 0) + stainPaise(l)) * l.quantity, 0);
+  const problem = !customer ? "Step 1: select a customer"
+    : !lines.length ? "Step 2: add garments"
+    : quoteError ? "Fix the problem above to save"
+    : discountBps > 0 && !discReason && !couponCode ? "Choose a reason for the discount"
+    : isNaN(advance) ? "The advance amount is not valid"
+    : advance > grand && !!quote ? "The advance is more than the total"
+    : "";
+  const steps = [
+    { label: "Customer", done: !!customer, current: !customer },
+    { label: "Garments", done: lines.length > 0, current: !!customer && !lines.length },
+    { label: "Review & create", done: false, current: !!customer && lines.length > 0 },
+  ];
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
-        <div className="space-y-4">
-          <PageHeader title="New order" subtitle={`Receiving at ${branch?.name ?? "—"}`} />
+    <div className="dcd space-y-5 pb-20 xl:pb-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="dcd-h text-[clamp(28px,3vw,36px)] leading-tight">New order</h1>
+          <p className="text-[15px]" style={{ color: "var(--dc-sub)" }}>Receive garments at the counter. Prices come from the {branch?.name ?? "branch"} price list.</p>
+        </div>
+        <ol className="flex flex-wrap items-center gap-2" aria-label="Order steps">
+          {steps.map((s, i) => (
+            <li key={s.label} className="flex items-center gap-2" aria-current={s.current ? "step" : undefined}>
+              {i > 0 && <span aria-hidden="true" className="h-0.5 w-5 rounded" style={{ background: steps[i - 1].done ? "var(--dc-green)" : "var(--dc-line)" }} />}
+              <span className="flex min-h-10 items-center gap-2 rounded-full border pl-1.5 pr-3.5 text-sm font-semibold" style={{ borderColor: s.current ? "var(--dc-solid)" : s.done ? "#cfe9d6" : "var(--dc-line)", background: s.current ? "var(--dc-card)" : s.done ? "var(--dc-green-bg)" : "transparent", color: s.current || s.done ? "var(--dc-ink)" : "var(--dc-sub)" }}>
+                <span className="grid h-7 w-7 place-items-center rounded-full text-[13px]" style={{ background: s.done ? "var(--dc-green)" : s.current ? "var(--dc-solid)" : "transparent", color: s.done ? "#151514" : s.current ? "var(--dc-on-solid)" : "var(--dc-sub)", border: s.done || s.current ? 0 : "1.5px solid var(--dc-line)" }}>{s.done ? <Check className="h-4 w-4" /> : i + 1}</span>
+                {s.label}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
+        <div className="space-y-5">
           {pickupId && <Alert tone="blue">Booking the garments collected on a home pickup. Tag every garment from the pickup bag.</Alert>}
-          <CustomerPicker customer={customer} onChange={setCustomer} canCreate={can("customers.write")} />
+          <div>
+            <CustomerPicker customer={customer} onChange={setCustomer} canCreate={can("customers.write")} />
+          </div>
 
-          <Card
-            title={
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><Shirt className="h-4 w-4" /></span>
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Garments & services</h2>
-                  <p className="mt-0.5 text-xs font-normal text-slate-500">Choose a service, then add each garment</p>
-                </div>
+          <section className="dcd-card p-[clamp(18px,2.2vw,24px)]" aria-labelledby="gar-h">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <StepDot n={2} done={garmentCount > 0} />
+                <h2 id="gar-h" className="dcd-h text-[22px]">Garments</h2>
+                <span className="rounded-full px-2.5 py-0.5 text-[13px] font-semibold" style={{ background: garmentCount ? "var(--dc-green)" : "var(--dc-soft)", color: garmentCount ? "#151514" : "var(--dc-ink)" }}>{garmentCount} pc{garmentCount === 1 ? "" : "s"}</span>
               </div>
-            }
-            actions={garmentCount > 0 ? <Badge color="brand">{garmentCount} pcs</Badge> : undefined}
-          >
-            <div className="mb-4">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Default service for new garments</p>
-              <div className="flex flex-wrap gap-2">
-              {services.data
-                ?.filter((s) => s.active)
-                .map((s) => (
-                  <button
-                    type="button"
-                    key={s.id}
-                    onClick={() => setServiceId(s.id)}
-                    aria-pressed={serviceId === s.id}
-                    className={cx("rounded-full border px-3.5 py-2 text-sm font-medium transition", serviceId === s.id ? "border-brand-700 bg-brand-700 text-white shadow-sm shadow-brand-900/15" : "border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800")}
-                  >
-                    {s.name}
-                  </button>
-                ))}
+              <div role="radiogroup" aria-label="Service" className="flex flex-wrap gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
+                {services.data?.filter((s) => s.active).map((s) => {
+                  const on = serviceId === s.id;
+                  return <button type="button" key={s.id} role="radio" aria-checked={on} onClick={() => setServiceId(s.id)} className="dcd-pill min-h-10 cursor-pointer rounded-full px-4 text-sm font-semibold" style={{ background: on ? "var(--dc-solid)" : "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{s.name}</button>;
+                })}
               </div>
             </div>
-            <div className="space-y-3">
-              <label className="relative block">
-                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <Input value={garmentSearch} onChange={(event) => setGarmentSearch(event.target.value)} placeholder="Search garments, e.g. shirt, saree, blanket" className="pl-9" aria-label="Search garment types" />
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <label className="relative min-w-52 flex-1">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                <Input value={garmentSearch} onChange={(event) => setGarmentSearch(event.target.value)} placeholder="Find a garment" className="h-10 rounded-xl pl-10" aria-label="Find a garment" />
               </label>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter garments by category">
-                {["All", ...categories].map((category) => <button key={category} type="button" aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)} className={cx("shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition", categoryFilter === category ? "border-brand-700 bg-brand-700 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-800")}>{category}</button>)}
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter garments by category">
+                {["All", ...categories].map((category) => {
+                  const on = categoryFilter === category;
+                  return <button key={category} type="button" aria-pressed={on} onClick={() => setCategoryFilter(category)} className="dcd-pill min-h-10 cursor-pointer rounded-full border px-3.5 text-sm font-medium" style={{ borderColor: on ? "var(--dc-solid)" : "var(--dc-line)", background: on ? "var(--dc-solid)" : "var(--dc-card)", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{category}</button>;
+                })}
               </div>
-              {filteredGarments.length ? (
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-                  {filteredGarments.map((g) => {
-                    const qty = quantityFor(g.id);
-                    const price = priceOf(g.id, serviceId);
-                    const unpriced = price === undefined;
-                    return (
-                      <div key={g.id} className={cx("group relative flex flex-col overflow-hidden rounded-xl border bg-white text-center shadow-sm transition", qty ? "border-brand-500 ring-2 ring-brand-500/20" : "border-slate-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md", unpriced && "opacity-60")}>
-                        <button type="button" onClick={() => addGarment(g.id)} disabled={!serviceId || unpriced} title={unpriced ? `No ${serviceName} price set for ${g.name}. Add it in Services & prices.` : `Add ${g.name}`} className="flex flex-1 flex-col items-center gap-1 px-2 pb-2 pt-2.5 disabled:cursor-not-allowed">
-                          <span className="flex h-16 w-full items-center justify-center overflow-hidden rounded-lg p-1"><GarmentThumb garment={g} className="transition group-hover:scale-105" /></span>
-                          <span className="w-full truncate text-[13px] font-semibold text-slate-800">{g.name}</span>
-                          <span className={cx("text-[13px] font-bold tabular-nums", unpriced ? "text-[11px] font-medium text-amber-700" : "text-slate-900")}>{unpriced ? "Price not set" : money(price).replace(/\.00$/, "")}</span>
-                        </button>
-                        {qty > 0 && <span className="absolute right-1.5 top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1.5 text-[11px] font-bold text-white">{qty}</span>}
-                        {qty > 0 && (
-                          <div className="flex items-center border-t border-brand-100 bg-brand-50/60">
-                            <button type="button" onClick={() => removeOne(g.id)} aria-label={`Remove one ${g.name}`} className="flex h-8 flex-1 items-center justify-center text-brand-800 hover:bg-brand-100"><Minus className="h-4 w-4" /></button>
-                            <span className="w-8 text-sm font-semibold tabular-nums text-brand-900">{qty}</span>
-                            <button type="button" onClick={() => addGarment(g.id)} aria-label={`Add one ${g.name}`} className="flex h-8 flex-1 items-center justify-center text-brand-800 hover:bg-brand-100"><Plus className="h-4 w-4" /></button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {can("catalogue.manage") && (
-                    <a href="/catalogue" className="flex min-h-36 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-center text-slate-500 transition hover:border-brand-400 hover:text-brand-700">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm"><Plus className="h-4 w-4" /></span>
-                      <span className="text-[13px] font-semibold">Add garment</span>
-                      <span className="text-[11px]">or change prices</span>
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center"><p className="text-sm font-medium text-slate-700">No matching garments</p><p className="mt-1 text-xs text-slate-500">Try another search or choose a different category.</p></div>
-              )}
             </div>
-          </Card>
+            <p className="mt-3 text-sm" style={{ color: "var(--dc-sub)" }}>Use <strong>+</strong> to add as <strong style={{ color: "var(--dc-ink)" }}>{serviceName}</strong>. Switch service to add the same garment with a different service.</p>
+            {filteredGarments.length ? (
+              <div className="-mx-1 mt-3 grid max-h-[620px] grid-cols-2 gap-3 overflow-y-auto px-1 py-1 sm:grid-cols-3 lg:grid-cols-4">
+                {filteredGarments.map((g) => {
+                  const qty = quantityFor(g.id);
+                  const price = priceOf(g.id, serviceId);
+                  const unpriced = price === undefined;
+                  const also = lines.filter((l) => l.garmentTypeId === g.id && l.serviceId !== serviceId).map((l) => `${l.quantity} × ${services.data?.find((s) => s.id === l.serviceId)?.name ?? ""}`).join(", ");
+                  return (
+                    <div key={g.id} className={cx("dcd-lift flex flex-col overflow-hidden rounded-2xl border", unpriced && "opacity-60")} style={{ borderColor: qty ? "var(--dc-green)" : "var(--dc-line)", background: "var(--dc-card)", boxShadow: qty ? "0 6px 16px rgba(60,191,90,.18)" : undefined }}>
+                      <button type="button" onClick={() => addGarment(g.id)} disabled={!serviceId || unpriced} title={unpriced ? `No ${serviceName} price set for ${g.name}. Add it in Services & prices.` : `Add ${g.name}`} className="flex flex-1 items-start gap-2 px-3.5 pb-2 pt-3 text-left disabled:cursor-not-allowed">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--dc-sub)" }}>{g.category}</span>
+                          <span className="block truncate text-[15px] font-semibold" title={g.name}>{g.name}</span>
+                          <span className={cx("dcd-h mt-1 block tabular-nums", unpriced ? "text-xs font-medium text-amber-700" : "text-lg")}>{unpriced ? "Price not set" : money(price).replace(/\.00$/, "")}</span>
+                        </span>
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg"><GarmentThumb garment={g} /></span>
+                      </button>
+                      {also && <p className="truncate px-3.5 pb-1 text-[11px]" style={{ color: "var(--dc-sub)" }} title={`Also in order: ${also}`}>Also: {also}</p>}
+                      <div className="flex items-center gap-1 border-t p-2" style={{ borderColor: qty ? "#d7ecdc" : "var(--dc-line2)", background: qty ? "var(--dc-green-bg)" : "var(--dc-soft2)" }}>
+                        <button type="button" onClick={() => removeOne(g.id)} disabled={!qty} aria-label={`Remove one ${g.name}`} className="grid h-9 w-9 place-items-center rounded-lg border disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: qty ? "var(--dc-solid)" : "var(--dc-line)", background: "var(--dc-card)" }}><Minus className="h-4 w-4" /></button>
+                        <span className="flex-1 text-center text-sm font-medium" style={{ color: qty ? "var(--dc-ink)" : "var(--dc-sub)" }}>{qty ? `${qty} in order` : "Add"}</span>
+                        <button type="button" onClick={() => addGarment(g.id)} disabled={!serviceId || unpriced} aria-label={`Add one ${g.name}`} className="grid h-9 w-9 place-items-center rounded-lg disabled:cursor-not-allowed disabled:opacity-40" style={{ background: "var(--dc-solid)", color: "var(--dc-on-solid)" }}><Plus className="h-4 w-4" strokeWidth={2.6} /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {can("catalogue.manage") && (
+                  <a href="/catalogue" className="dcd-lift flex min-h-36 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed p-3 text-center" style={{ borderColor: "var(--dc-line)", color: "var(--dc-sub)" }}>
+                    <Plus className="h-5 w-5" />
+                    <span className="text-[13px] font-semibold">Add garment</span>
+                    <span className="text-[11px]">or change prices</span>
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl border border-dashed px-4 py-8 text-center" style={{ borderColor: "var(--dc-line)" }}><p className="text-sm font-medium">No matching garments</p><button type="button" onClick={() => { setGarmentSearch(""); setCategoryFilter("All"); }} className="mt-1 text-sm font-semibold underline underline-offset-4">Clear the search</button></div>
+            )}
+          </section>
 
+          <section className="dcd-card p-[clamp(18px,2.2vw,24px)]" aria-labelledby="ready-h">
+            <div className="flex items-center gap-2.5"><StepDot n={3} done={false} /><h2 id="ready-h" className="dcd-h text-[22px]">Ready date &amp; handover</h2></div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {([[false, "Standard", turnaround], [true, `Express +${expressBps / 100}%`, Math.max(1, Math.round(turnaround / 2))]] as [boolean, string, number][]).map(([isExpress, label, hours]) => {
+                const on = express === isExpress;
+                return (
+                  <button key={label} type="button" aria-pressed={on} onClick={() => pickSpeed(isExpress)} className="dcd-lift cursor-pointer rounded-2xl border-[1.5px] p-3.5 text-left" style={{ borderColor: on ? "var(--dc-solid)" : "var(--dc-line)", background: on ? "var(--dc-soft)" : "var(--dc-card)" }}>
+                    <span className="block text-[15px] font-semibold">{label}{isExpress && quote?.membership?.freeExpress ? " · free for this member" : ""}</span>
+                    <span className="block text-sm" style={{ color: "var(--dc-sub)" }}>Ready {readyLabel(new Date(Date.now() + hours * 3600_000))}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Ready by, exact date and time"><Input type="datetime-local" value={promisedAt} onChange={(e) => setPromisedAt(e.target.value)} /></Field>
+              <div>
+                <span className="mb-1 block text-sm font-medium text-slate-700">Handover</span>
+                <div role="radiogroup" aria-label="Handover" className="flex gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
+                  {([["counter", "Counter pickup"], ["home_delivery", "Home delivery"]] as const).map(([value, label]) => {
+                    const on = deliveryMethod === value;
+                    return <button key={value} type="button" role="radio" aria-checked={on} onClick={() => setDeliveryMethod(value)} className="dcd-pill min-h-10 flex-1 cursor-pointer rounded-full text-sm font-semibold" style={{ background: on ? "var(--dc-solid)" : "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{label}</button>;
+                  })}
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-sm" style={{ color: "var(--dc-sub)" }}>{deliveryMethod === "counter" ? `Customer collects from the store from ${readyLabel(new Date(promisedAt))}.` : `Delivered on or after ${readyLabel(new Date(promisedAt))}. Schedule the stop in Pickups & deliveries when it is ready.`}</p>
+            <div className="mt-3"><Field label="Order notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field></div>
+          </section>
         </div>
 
-        <aside id="pos-cart" className="scroll-mt-20 xl:sticky xl:top-20 xl:self-start">
-          <section className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white xl:max-h-[calc(100vh-7rem)]">
-            <header className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><ShoppingCart className="h-4 w-4" /></span>
+        <aside id="pos-cart" className="scroll-mt-20 xl:sticky xl:top-20">
+          <section aria-label="Order ticket" className="flex flex-col overflow-hidden rounded-3xl border-[1.5px] shadow-lg xl:max-h-[calc(100vh-6rem)]" style={{ borderColor: "#151514", background: "var(--dc-card)" }}>
+            <header className="flex items-center gap-2 px-5 py-4 text-[#faf8f4]" style={{ background: "#151514" }}>
               <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-semibold text-slate-900">Cart</h2>
-                <p className="truncate text-xs text-slate-500">{customer ? customer.name : "No customer selected yet"}</p>
+                <h2 className="dcd-h text-xl text-[#faf8f4]">Order ticket</h2>
+                <p className="truncate text-[13px] text-[#cfccc4]">{customer ? `${customer.name} · ${deliveryMethod === "counter" ? "counter pickup" : "home delivery"}` : "No customer selected yet"}</p>
               </div>
-              <Badge color={garmentCount ? "brand" : "slate"}>{garmentCount} pc{garmentCount === 1 ? "" : "s"}</Badge>
-              {lines.length > 0 && <button type="button" onClick={() => { setLines([]); setOpenLine(null); }} className="rounded px-1.5 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600">Clear</button>}
+              {lines.length > 0 && <button type="button" onClick={() => { setLines([]); setOpenLine(null); }} className="rounded px-1.5 py-1 text-xs font-medium text-[#cfccc4] hover:text-white">Clear</button>}
+              <span className="rounded-full bg-[#3cbf5a] px-2.5 py-1 text-[13px] font-semibold text-[#151514]">{garmentCount} pc{garmentCount === 1 ? "" : "s"}</span>
             </header>
 
             <div ref={cartScroll} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
               {!lines.length ? (
-                <div className="px-4 py-8 text-center">
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Shirt className="h-5 w-5" /></div>
-                  <p className="mt-3 text-sm font-medium text-slate-700">Cart is empty</p>
-                  <p className="mt-1 text-xs text-slate-500">Tap garments on the left to add them.</p>
-                </div>
+                <div className="px-5 py-7 text-center"><p className="text-[15px] font-semibold">No garments yet</p><p className="mt-1 text-sm" style={{ color: "var(--dc-sub)" }}>Use + on a garment to add it here.</p></div>
               ) : (
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y" style={{ borderColor: "var(--dc-line2)" }}>
                   {lines.map((l, idx) => {
                     const q = quote?.lines?.[idx];
                     const gt = gtById(l.garmentTypeId);
                     const unit = priceOf(l.garmentTypeId, l.serviceId);
-                    const amount = q ? q.total : unit !== undefined ? unit * l.quantity : null;
+                    const amount = q ? q.total : unit !== undefined ? (unit + stainPaise(l)) * l.quantity : null;
                     const detailCount = (l.colour ? 1 : 0) + (l.brand ? 1 : 0) + l.conditionFlags.length + (l.careInstructions ? 1 : 0) + (l.specialCareApprovalRequired ? 1 : 0);
                     const open = openLine === l.key;
                     return (
-                      <li key={l.key} data-line={l.key} className={cx("px-3 py-2.5 transition-colors duration-500", open && "bg-slate-50", flash === l.key && "bg-brand-50")}>
+                      <li key={l.key} data-line={l.key} className={cx("px-4 py-2.5 transition-colors duration-500", open && "bg-slate-50", flash === l.key && "bg-brand-50")}>
                         <div className="flex items-start gap-2.5">
                           {gt && <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-50 p-0.5"><GarmentThumb garment={gt} /></span>}
                           <div className="min-w-0 flex-1">
@@ -371,7 +436,7 @@ function PosInner() {
                               </button>
                             </div>
                             {!open && (l.colour || l.brand || l.conditionFlags.length > 0) && (
-                              <p className="mt-1 truncate text-[11px] text-slate-500">{[l.colour, l.brand, ...l.conditionFlags.map((f) => FLAGS.find(([k]) => k === f)?.[1])].filter(Boolean).join(" · ")}</p>
+                              <p className="mt-1 truncate text-[11px] text-slate-500">{[l.colour, l.brand, ...l.conditionFlags.map((f) => (f === "stain" && stainPaise(l) ? `Stain +${money(stainPaise(l)).replace(/\.00$/, "")} each` : FLAGS.find(([k]) => k === f)?.[1]))].filter(Boolean).join(" · ")}</p>
                             )}
                           </div>
                         </div>
@@ -387,6 +452,12 @@ function PosInner() {
                                 return <button type="button" key={k} onClick={() => update(l.key, { conditionFlags: on ? l.conditionFlags.filter((f) => f !== k) : [...l.conditionFlags, k] })} className={cx("rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset", on ? "bg-amber-100 text-amber-900 ring-amber-300" : "text-slate-600 ring-slate-200 hover:bg-slate-50")}>{label}</button>;
                               })}
                             </div>
+                            {l.conditionFlags.includes("stain") && (
+                              <label className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
+                                Stain treatment charge, per piece
+                                <Input inputMode="decimal" value={l.stainCharge} onChange={(e) => update(l.key, { stainCharge: e.target.value.replace(/[^0-9.]/g, "") })} placeholder="₹ 0" aria-label="Stain treatment charge per piece" className="h-8 w-24 py-1 text-right text-xs" />
+                              </label>
+                            )}
                             {(l.conditionFlags.length > 0 || l.conditionNotes) && <Input placeholder="Where is the damage / stain? (shown to QC)" value={l.conditionNotes} onChange={(e) => update(l.key, { conditionNotes: e.target.value })} className="h-8 py-1 text-xs" />}
                             <Input placeholder="Care instructions (optional)" value={l.careInstructions} onChange={(e) => update(l.key, { careInstructions: e.target.value })} className="h-8 py-1 text-xs" />
                             <label className="flex items-center gap-2 text-[11px] font-medium text-amber-800">
@@ -402,76 +473,51 @@ function PosInner() {
                 </ul>
               )}
 
-              <div className="border-t border-slate-100">
-                <button type="button" onClick={() => setShowOptions(!showOptions)} aria-expanded={showOptions} className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-slate-50">
-                  <CalendarClock className="h-4 w-4 shrink-0 text-slate-400" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-slate-700">Delivery, discount &amp; notes</span>
-                    <span className="block truncate text-[11px] text-slate-500">
-                      Ready {new Date(promisedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })} · {deliveryMethod === "counter" ? "Counter collection" : "Home delivery"}{express ? " · Express" : ""}{discountPct ? ` · ${discountPct}% off` : ""}{couponCode ? ` · ${couponCode}` : ""}
-                    </span>
-                  </span>
-                  <ChevronDown className={cx("h-4 w-4 shrink-0 text-slate-400 transition", showOptions && "rotate-180")} />
-                </button>
-                {showOptions && (
-                  <div className="space-y-3 px-4 pb-4">
-                    <Field label="Promised ready by" required>
-                      <Input type="datetime-local" value={promisedAt} onChange={(e) => setPromisedAt(e.target.value)} />
-                    </Field>
-                    <div className="flex items-end gap-4">
-                      <label className="flex items-center gap-2 pb-2.5 text-sm">
-                        <input type="checkbox" checked={express} onChange={(e) => setExpress(e.target.checked)} /> Express
-                        {quote?.surchargeBps ? <Badge color="amber">+{quote.surchargeBps / 100}%</Badge> : null}
-                      </label>
-                      <Field label="Discount %" className="ml-auto w-28">
-                        <Input inputMode="decimal" value={discountPct} onChange={(e) => { setDiscountPct(e.target.value.replace(/[^0-9.]/g, "")); if (e.target.value) setCouponCode(""); }} placeholder="0" disabled={!!couponCode} />
-                      </Field>
-                    </div>
-                    <Field label="Coupon code" hint={couponCode ? "Clear the coupon to enter a manual discount" : undefined}>
-                      <Input value={couponCode} onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); if (e.target.value) setDiscountPct(""); }} placeholder="Enter coupon code" autoCapitalize="characters" />
-                    </Field>
-                    <Field label="Collection">
-                      <Select value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value as any)}>
-                        <option value="counter">Customer collects at counter</option>
-                        <option value="home_delivery">Home delivery</option>
-                      </Select>
-                    </Field>
-                    <Field label="Order notes">
-                      <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-                    </Field>
+              <div className="space-y-2 border-t px-5 py-4" style={{ borderColor: "var(--dc-line2)" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">Discount <span className="font-normal" style={{ color: "var(--dc-sub)" }}>(optional · up to {maxDiscountPct}%)</span></p>
+                  <div role="radiogroup" aria-label="Discount type" className="flex gap-0.5 rounded-full p-0.5" style={{ background: "var(--dc-soft)" }}>
+                    {([["amount", "₹"], ["percent", "%"]] as const).map(([value, label]) => {
+                      const on = discType === value;
+                      return <button key={value} type="button" role="radio" aria-checked={on} aria-label={value === "amount" ? "Fixed amount" : "Percentage"} onClick={() => { setDiscType(value); setDiscValue(""); }} className="h-8 w-9 cursor-pointer rounded-full text-sm font-bold" style={{ background: on ? "var(--dc-solid)" : "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{label}</button>;
+                    })}
                   </div>
-                )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input inputMode="decimal" value={discValue} onChange={(e) => { setDiscValue(e.target.value.replace(/[^0-9.]/g, "")); if (e.target.value) setCouponCode(""); }} placeholder={discType === "amount" ? "₹ 0" : "0 %"} disabled={!!couponCode} aria-label="Discount" />
+                  <Select value={discReason} onChange={(e) => setDiscReason(e.target.value)} aria-label="Discount reason" disabled={!discountBps}>
+                    <option value="">Reason…</option>
+                    {DISCOUNT_REASONS.map((r) => <option key={r}>{r}</option>)}
+                  </Select>
+                </div>
+                <Input value={couponCode} onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); if (e.target.value) setDiscValue(""); }} placeholder="Or a coupon code" autoCapitalize="characters" aria-label="Coupon code" />
               </div>
 
               {can("payments.collect") && (
-                <div className="space-y-2 border-t border-slate-100 px-4 py-3">
-                  <p className="flex items-center gap-2 text-xs font-semibold text-slate-700"><Wallet className="h-4 w-4 text-slate-400" />Advance payment</p>
+                <div className="space-y-2 border-t px-5 py-4" style={{ borderColor: "var(--dc-line2)" }}>
+                  <p className="text-sm font-semibold">Advance payment</p>
                   {approvalHoldsRequired && <Alert>Advance collection is disabled while approval is pending.</Alert>}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Payment method">
+                    {PAYMENT_METHODS.map((m) => {
+                      const on = payMethod === m;
+                      const off = approvalHoldsRequired || (m === "store_credit" && !walletBalance);
+                      return <button key={m} type="button" role="radio" aria-checked={on} disabled={off} onClick={() => setPayMethod(m)} className="dcd-pill min-h-10 cursor-pointer rounded-xl border px-1 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: on ? "var(--dc-solid)" : "var(--dc-line)", background: on ? "var(--dc-solid)" : "var(--dc-card)", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{m === "store_credit" ? `Wallet ${money(walletBalance).replace(/\.00$/, "")}` : PAYMENT_METHOD_LABELS[m]}</button>;
+                    })}
+                  </div>
+                  <div className={cx("grid gap-2", payMethod !== "cash" && payMethod !== "store_credit" && "grid-cols-2")}>
                     <Input inputMode="decimal" value={payAmount} onChange={(e) => setPayAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="Amount ₹" aria-label="Advance amount" disabled={approvalHoldsRequired} />
-                    <Select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} disabled={approvalHoldsRequired} aria-label="Payment method">
-                      {PAYMENT_METHODS.map((m) => (
-                        <option key={m} value={m} disabled={m === "store_credit" && !walletBalance}>
-                          {m === "store_credit" ? `Customer wallet (${money(walletBalance)})` : PAYMENT_METHOD_LABELS[m]}
-                        </option>
-                      ))}
-                    </Select>
-                    {payMethod !== "cash" && payMethod !== "store_credit" && (
-                      <Input className="col-span-2" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="UPI / card reference no." aria-label="Transaction reference" disabled={approvalHoldsRequired} />
-                    )}
+                    {payMethod !== "cash" && payMethod !== "store_credit" && <Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Reference no." aria-label="Transaction reference" disabled={approvalHoldsRequired} />}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    <Button variant="secondary" size="sm" onClick={() => setPayAmount((grand / 100).toFixed(2))} disabled={!grand || approvalHoldsRequired}>Full amount</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setPayAmount("")}>No advance</Button>
-                    {walletBalance > 0 && (
-                      <Button variant="secondary" size="sm" disabled={!grand || approvalHoldsRequired} onClick={() => { setPayMethod("store_credit"); setPayAmount((Math.min(walletBalance, grand) / 100).toFixed(2)); }}>Use wallet {money(walletBalance)}</Button>
-                    )}
+                    <button type="button" onClick={() => setPayAmount((grand / 100).toFixed(2))} disabled={!grand || approvalHoldsRequired} className="dcd-pill min-h-9 cursor-pointer rounded-full border px-3 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: "var(--dc-line)" }}>Paid in full</button>
+                    <button type="button" onClick={() => setPayAmount("")} className="dcd-pill min-h-9 cursor-pointer rounded-full border px-3 text-[13px] font-semibold" style={{ borderColor: "var(--dc-line)" }}>No advance</button>
+                    {walletBalance > 0 && <button type="button" disabled={!grand || approvalHoldsRequired} onClick={() => { setPayMethod("store_credit"); setPayAmount((Math.min(walletBalance, grand) / 100).toFixed(2)); }} className="dcd-pill min-h-9 cursor-pointer rounded-full border px-3 text-[13px] font-semibold disabled:opacity-40" style={{ borderColor: "var(--dc-line)" }}>Use wallet</button>}
                   </div>
                 </div>
               )}
             </div>
 
-            <footer className="space-y-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <footer className="space-y-2 border-t border-dashed px-5 py-4" style={{ borderColor: "var(--dc-line)", background: "var(--dc-soft2)" }}>
               {approvalHoldsRequired && <Alert>This order will be held for customer approval. Production and payment collection unlock after approval is recorded on the order.</Alert>}
               {quoteError && <Alert>{quoteError}</Alert>}
               {quote?.membership && (
@@ -483,38 +529,45 @@ function PosInner() {
                 </p>
               )}
               {quote ? (
-                <dl className="space-y-0.5 text-xs text-slate-600">
-                  <Row label="Subtotal" value={money(quote.totals.subtotal)} />
-                  {quote.totals.surchargeTotal ? <Row label="Express surcharge" value={money(quote.totals.surchargeTotal)} /> : null}
-                  {quote.totals.discountTotal ? <Row label="Discount" value={`− ${money(quote.totals.discountTotal)}`} /> : null}
-                  <Row label="GST" value={money(quote.totals.taxTotal)} />
+                <dl className="space-y-0.5 text-sm" style={{ color: "var(--dc-sub)" }}>
+                  <Row label={`Subtotal · ${garmentCount} piece${garmentCount === 1 ? "" : "s"}`} value={money(quote.totals.subtotal)} />
+                  {lines.some(stainPaise) ? <Row label="Includes stain treatment" value={money(lines.reduce((sum, l) => sum + stainPaise(l) * l.quantity, 0))} /> : null}
+                  {quote.totals.surchargeTotal ? <Row label="Express surcharge" value={`+ ${money(quote.totals.surchargeTotal)}`} /> : null}
+                  {quote.totals.discountTotal ? <Row label={`Discount${discReason ? ` · ${discReason}` : ""}`} value={`− ${money(quote.totals.discountTotal)}`} /> : null}
+                  <Row label="GST" value={`+ ${money(quote.totals.taxTotal)}`} />
                 </dl>
               ) : lines.length > 0 ? (
-                <p className="text-[11px] leading-4 text-slate-500">{customer ? "Calculating the final bill…" : "Estimate from your price list. Select a customer to see the final bill with GST and discounts."}</p>
+                <p className="text-xs" style={{ color: "var(--dc-sub)" }}>{customer ? "Calculating the final bill…" : "Estimate from your price list. Select a customer to see the final bill with GST and discounts."}</p>
               ) : null}
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-semibold text-slate-700">{quote ? "Total" : "Estimate"}</span>
-                <span className="text-xl font-bold tabular-nums text-slate-900">{money(quote ? grand : estimate)}</span>
+              <div className="flex items-baseline justify-between border-t pt-2" style={{ borderColor: "var(--dc-line)" }}>
+                <span className="text-[15px] font-semibold">{quote ? "Total" : "Estimate"}</span>
+                <span className="dcd-h text-[28px] tabular-nums">{money(quote ? grand : estimate).replace(/\.00$/, "")}</span>
               </div>
-              {advance > 0 && grand > 0 && <p className="text-xs text-slate-600">Advance {money(advance)} · balance at collection <strong className="tabular-nums">{money(Math.max(0, grand - advance))}</strong></p>}
+              {advance > 0 && <div className="flex justify-between text-sm" style={{ color: "var(--dc-sub)" }}><span>Advance ({payMethod === "store_credit" ? "Wallet" : PAYMENT_METHOD_LABELS[payMethod as keyof typeof PAYMENT_METHOD_LABELS]})</span><span>− {money(advance)}</span></div>}
+              <div className="flex items-center justify-between rounded-xl px-3 py-2.5 text-[15px] font-semibold" style={{ background: balanceDue > 0 ? "var(--dc-red-bg)" : "var(--dc-green-bg)", color: balanceDue > 0 ? "var(--dc-red-fg)" : "var(--dc-green-fg)" }}><span>Balance due at handover</span><span className="dcd-h text-xl tabular-nums">{money(balanceDue).replace(/\.00$/, "")}</span></div>
               {error && <Alert>{error}</Alert>}
-              <Button size="lg" className="w-full" onClick={save} loading={saving} disabled={!customer || !lines.length || !!quoteError}>
-                {!customer ? "Select a customer to continue" : !lines.length ? "Add garments to continue" : `Create order · ${garmentCount} pc${garmentCount === 1 ? "" : "s"}`}
-              </Button>
+              <button type="button" onClick={() => void save()} disabled={saving || !!problem} className="dcd-lift flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full text-base font-semibold text-[#151514] disabled:cursor-not-allowed disabled:hover:transform-none" style={{ background: problem ? "#cdebd5" : "#3cbf5a" }}>
+                {saving ? "Saving order…" : `Save order · ${money(quote ? grand : estimate).replace(/\.00$/, "")}`}
+              </button>
+              <p className="text-center text-[13px]" style={{ color: "var(--dc-sub)" }}>{problem || `${garmentCount} piece${garmentCount === 1 ? "" : "s"} for ${customer?.name}`}</p>
             </footer>
           </section>
         </aside>
       </div>
 
       {lines.length > 0 && !cartInView && (
-        <a href="#pos-cart" className="fixed inset-x-3 bottom-3 z-30 flex items-center gap-3 rounded-xl bg-brand-800 px-4 py-3 text-white shadow-lg shadow-brand-900/30 xl:hidden">
+        <a href="#pos-cart" className="fixed inset-x-3 bottom-3 z-30 flex items-center gap-3 rounded-xl bg-[#151514] px-4 py-3 text-white shadow-lg xl:hidden">
           <ShoppingCart className="h-5 w-5" />
           <span className="flex-1 text-sm font-semibold">{garmentCount} pc{garmentCount === 1 ? "" : "s"} · {money(quote ? grand : estimate)}</span>
-          <span className="text-sm font-semibold">View cart →</span>
+          <span className="text-sm font-semibold">View ticket →</span>
         </a>
       )}
     </div>
   );
+}
+
+function StepDot({ n, done }: { n: number; done: boolean }) {
+  return <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-bold" style={{ background: done ? "var(--dc-green)" : "var(--dc-solid)", color: done ? "#151514" : "var(--dc-on-solid)" }}>{done ? <Check className="h-4 w-4" /> : n}</span>;
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -569,6 +622,10 @@ function CustomerPicker({ customer, onChange, canCreate }: { customer: any; onCh
   const [busy, setBusy] = useState(false);
   const [addressBusy, setAddressBusy] = useState(false);
   const [addingAddress, setAddingAddress] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const recent = useApi<{ items: any[] }>(customer ? null : "/customers?limit=4");
+  const choose = (id: string) => api(`/customers/${id}`).then(onChange);
+  useEffect(() => setHighlight(0), [results]);
 
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -701,12 +758,9 @@ function CustomerPicker({ customer, onChange, canCreate }: { customer: any; onCh
   return (
     <Card
       title={
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><UserRound className="h-4 w-4" /></span>
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">Customer</h2>
-            <p className="mt-0.5 text-xs font-normal text-slate-500">Select an existing profile or create a new one</p>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <StepDot n={1} done={false} />
+          <span className="dcd-h text-[22px]">Customer</span>
         </div>
       }
     >
@@ -714,13 +768,19 @@ function CustomerPicker({ customer, onChange, canCreate }: { customer: any; onCh
         <div className="space-y-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by mobile, name, email or customer code" className="h-11 rounded-xl bg-slate-50 pl-9 focus:bg-white" />
+            <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
+              if (e.key === "ArrowDown" && results.length) { e.preventDefault(); setHighlight((highlight + 1) % results.length); }
+              else if (e.key === "ArrowUp" && results.length) { e.preventDefault(); setHighlight((highlight - 1 + results.length) % results.length); }
+              else if (e.key === "Enter" && results[highlight]) { e.preventDefault(); void choose(results[highlight].id); }
+              else if (e.key === "Escape") setQ("");
+            }} placeholder="Mobile number, name, email or customer code" aria-label="Find customer" className="h-12 rounded-xl pl-9" />
           </div>
+          <p className="text-[13px] text-slate-500">Type at least 2 letters or digits. ↑ ↓ to move, Enter to select.</p>
           {results.length > 0 && (
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
-              {results.map((c) => (
+              {results.map((c, i) => (
                 <li key={c.id}>
-                  <button type="button" onClick={() => api(`/customers/${c.id}`).then(onChange)} className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition hover:bg-brand-50/60">
+                  <button type="button" onClick={() => void choose(c.id)} className={cx("flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition hover:bg-brand-50/60", i === highlight && "bg-slate-100")}>
                     <span className="flex min-w-0 items-center gap-3">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">{c.name?.slice(0, 1)?.toUpperCase()}</span>
                       <span className="min-w-0">
@@ -750,6 +810,12 @@ function CustomerPicker({ customer, onChange, canCreate }: { customer: any; onCh
             >
               <Plus className="h-4 w-4" /> New customer
             </Button>
+          )}
+          {!q.trim() && !!recent.data?.items.length && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-sm text-slate-500">Recent</span>
+              {recent.data.items.map((c) => <button key={c.id} type="button" onClick={() => void choose(c.id)} aria-label={`Select recent customer ${c.name}`} className="dcd-pill min-h-10 cursor-pointer rounded-full border border-slate-200 px-3.5 text-sm font-medium text-slate-800">{c.name}</button>)}
+            </div>
           )}
         </div>
       ) : (

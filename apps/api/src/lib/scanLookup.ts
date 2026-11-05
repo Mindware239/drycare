@@ -1,6 +1,7 @@
 import { and, eq, like } from "drizzle-orm";
-import { MAX_SCAN_DIGITS, MIN_SCAN_DIGITS, branchCheck, digitsAsShortTag, expandScanCode, parseScanNumber } from "@drycare/shared";
+import { MAX_SCAN_DIGITS, MIN_SCAN_DIGITS, branchCheck, digitsAsShortTag, expandScanCode, normalizeEpc, parseScanNumber } from "@drycare/shared";
 import { schema, type db, type Tx } from "../db/client";
+import { hasFeature } from "./entitlements";
 import { AppError } from "./errors";
 
 /**
@@ -9,6 +10,13 @@ import { AppError } from "./errors";
  */
 export async function resolveScanCode(tx: Tx | typeof db, orgId: string, raw: string) {
   const code = expandScanCode(raw);
+  // An RFID reader at any scanning screen works like a barcode scanner, once the shop has the module.
+  const epc = normalizeEpc(code);
+  if (epc) {
+    const [tag] = await tx.select({ code: schema.garments.tagCode }).from(schema.rfidTags).innerJoin(schema.garments, eq(schema.garments.id, schema.rfidTags.garmentId))
+      .where(and(eq(schema.rfidTags.organizationId, orgId), eq(schema.rfidTags.epc, epc))).limit(1);
+    if (tag && (await hasFeature(orgId, "rfid", tx))) return tag.code;
+  }
   const isNumber = /^\d+$/.test(code);
   if (isNumber && code.length >= MIN_SCAN_DIGITS && code.length <= MAX_SCAN_DIGITS) {
     const [bags, garments] = await Promise.all([

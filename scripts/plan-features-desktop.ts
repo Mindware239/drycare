@@ -33,7 +33,9 @@ function makeKey(extra: object) {
 
 const org = await db.query.organizations.findFirst({ where: (o, { like }) => like(o.name, "Feature Flow a %"), orderBy: (o, { desc }) => [desc(o.createdAt)] });
 if (!org) throw new Error("Run plan-features-flow first: it creates the test shop.");
-const member = (await db.query.memberships.findFirst({ where: (m, { eq }) => eq(m.organizationId, org.id) }))!;
+// The owner: the shop also has counter staff, who may not change these settings.
+const ownerRole = (await db.query.roles.findFirst({ where: (r, { and, eq }) => and(eq(r.organizationId, org.id), eq(r.key, "owner")) }))!;
+const member = (await db.query.memberships.findFirst({ where: (m, { and, eq }) => and(eq(m.organizationId, org.id), eq(m.roleId, ownerRole.id)) }))!;
 const token = randomBytes(32).toString("base64url");
 const sessionId = createHash("sha256").update(token).digest("hex");
 await db.insert(schema.sessions).values({ id: sessionId, userId: member.userId, organizationId: org.id, expiresAt: new Date(Date.now() + 3600_000) });
@@ -74,6 +76,22 @@ try {
   writeFileSync(licenseFile, makeKey({ limits: { branches: 1 } }));
   r = await req("POST", "/branches", { name: "Second Branch", branchCode: "PCSECOND" });
   check("the branch limit in the key is enforced, with no internet", r.status === 403 && r.json.error.code === "BRANCH_LIMIT_REACHED", r.json);
+
+  // Printers sold by Mindware: the key lists them, so connecting works with no internet.
+  writeFileSync(licenseFile, makeKey({ hardware: { printers: [], scanners: [], soldPrinters: [{ serial: "SN100", bill: "B200", model: "Sold Model" }] } }));
+  r = await req("POST", "/labels/shop-printers", { serial: "SN100", bill: "NOPE", printerName: "Any" });
+  check("the wrong numbers are refused, with no internet", r.status === 403 && r.json.error.code === "PRINTER_NOT_SOLD_BY_MINDWARE", r.json);
+  r = await req("POST", "/labels/shop-printers", { serial: "SN100", bill: "B200" });
+  check("on a PC, the Windows printer must be chosen", r.status === 400, r.json);
+  r = await req("POST", "/labels/shop-printers", { serial: "SN100", bill: "B200", printerName: "Counter Printer" });
+  check("the right numbers connect it, with no internet", r.status === 201 && r.json.model === "Sold Model", r.json);
+  await req("DELETE", `/labels/shop-printers/${r.json.id}`);
+  writeFileSync(licenseFile, makeKey({ features: { rfid: true } }));
+  r = await req("GET", "/rfid/summary");
+  check("the RFID module follows the key", r.status === 200, r.json);
+  writeFileSync(licenseFile, makeKey({ features: {} }));
+  r = await req("GET", "/rfid/summary");
+  check("a key without it refuses it", r.status === 403, r.json);
 
   writeFileSync(licenseFile, makeKey({ features: { labelDesigner: false }, hardware: { printers: ["NoSuchPrinterModel"], scanners: [] } }));
   if (process.platform === "win32") {

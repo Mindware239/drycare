@@ -98,8 +98,8 @@ export async function trackingRoutes(app: FastifyInstance) {
       db.query.users.findFirst({ where: eq(schema.users.id, order.createdBy), columns: { name: true } }),
       db.execute<{ id: string; bagId: string | null }>(sql`
         select g.id, g.scan_code as "scanCode", g.tag_code as "tagCode", g.current_status as status, g.location, g.bag_id as "bagId", g.created_at as "createdAt",
-               oi.garment_type_name as garment, oi.service_name as service, oi.colour, oi.brand, sl.code as rack
-        from garments g join order_items oi on oi.id = g.order_item_id left join storage_locations sl on sl.id = g.storage_location_id
+               oi.garment_type_name as garment, oi.service_name as service, oi.colour, oi.brand, sl.code as rack, rt.epc as rfid
+        from garments g join order_items oi on oi.id = g.order_item_id left join storage_locations sl on sl.id = g.storage_location_id left join rfid_tags rt on rt.garment_id = g.id
         where g.order_id = ${order.id} order by g.tag_code`),
       db.execute(sql`
         select b.id, b.scan_code as "scanCode", b.bag_code as "bagCode", b.location, b.created_at as "createdAt",
@@ -113,7 +113,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     const garmentIds = garment ? [garment.id] : tags.filter((t) => t.bagId === bag!.id).map((t) => t.id);
     const list = uuidList(garmentIds);
     const labelList = uuidList(garment ? [garment.id] : [bag!.id, ...garmentIds]);
-    const [statuses, scans, deliveries, prints] = await Promise.all([
+    const [statuses, scans, deliveries, prints, rfid] = await Promise.all([
       db.execute<Event>(sql`
         select h.id, h.occurred_at as at, h.previous_status as "from", h.new_status as "to", h.transition_kind as kind, h.notes, h.new_location as location, u.name as actor, g.tag_code as "tagCode"
         from garment_status_history h join garments g on g.id = h.garment_id left join users u on u.id = h.actor_user_id
@@ -129,6 +129,10 @@ export async function trackingRoutes(app: FastifyInstance) {
       db.execute<{ id: string; at: Date; scope: string; label_count: number; status: string; error: string | null; garment_ids: string[] | null; actor: string | null }>(sql`
         select j.id, j.created_at as at, j.scope, j.label_count, j.status, j.error, j.garment_ids, u.name as actor
         from label_print_jobs j left join users u on u.id = j.requested_by where j.order_id = ${order.id}`),
+      db.execute<Event>(sql`
+        select e.id, e.occurred_at as at, e.action, e.epc, e.notes, u.name as actor
+        from rfid_events e left join users u on u.id = e.actor_user_id
+        where e.garment_id = any(${list}::uuid[]) order by e.occurred_at desc limit 100`),
     ]);
     const printedHere = prints.filter((p) => {
       if (p.scope === "all") return true;
@@ -140,6 +144,7 @@ export async function trackingRoutes(app: FastifyInstance) {
       ...statuses.map((s) => ({ type: "status" as const, ...s })),
       ...scans.map((s) => ({ type: "scan" as const, ...s })),
       ...deliveries.map((d) => ({ type: "delivery" as const, ...d })),
+      ...rfid.map((e) => ({ type: "rfid" as const, ...e })),
       ...printedHere.map((p) => ({ type: "print" as const, id: p.id, at: p.at, scope: p.scope, labels: p.label_count, status: p.status, error: p.error, actor: p.actor })),
     ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 

@@ -6,6 +6,23 @@ Last updated: 29 Oct 2026 · Source documents: *DRYCARE-SRS-001 v1.0*, *Complete
 
 **Legend:** ✅ Done & tested · 🟡 Partial (works, but missing pieces listed) · ⬜ Not started
 
+## Bill templates, RFID module, printers sold by Mindware, new order design (5 Nov 2026): not deployed
+
+Migration `0034_rfid_printers_addons`; the dev DB was backed up first to `.local/backups/before-0034-*.sql`.
+
+- **Bill templates** (Business settings): ready-made 80 mm, 58 mm, A4 (three), A5, A5 landscape and Letter, plus any custom size. Editing makes the shop's own copy: order and visibility of sections, columns, font, colour, text size, margins, own words. `settings.billTemplates`. The bill page prints, saves as PDF through the print window, opens WhatsApp with the shop's wording, and queues an email in text. Laundry and membership receipts are not covered yet.
+- **RFID module** (`modules/rfid.ts`, `/rfid`): reusable tags linked to garments, released automatically at delivery or cancellation; basket billing that uses the normal payment and handover routes; tracking; tag pool. Every scanning screen also accepts a tag. Built for handheld terminals (Chainway, Seuic, Zebra, Honeywell, Unitech and others) and USB readers set to keyboard output: handles a held trigger's bursts and repeats, numbers ending in Enter, Tab, a space or nothing, and refuses to link when two new tags are read together. Fixed readers or a vendor's own SDK would need a separate app or bridge. Software and tags are sold separately: `organization_addons`, each with its own GST invoice. A plan, a trial or an exception never includes the software; on a PC it comes from the key. Tag invoices use the seller's SAC code and rate, which an accountant should check, since tags are goods.
+- **Printers** (`modules/printerRegistry.ts`, Printers & scanners console): any model sold by Mindware is recorded by serial and bill number; driver first, then those numbers connect it. A key lists the printers sold to that customer, by organization or the same customer name, so connecting works offline and only connected printers print. Keys issued before this keep their old rule. The numbers are what was sold; the software cannot read a serial from the printer, so it trusts the numbers typed. The browser print dialog cannot be restricted.
+- **New order** rebuilt to the owner's design, keeping garment pictures, line details, coupon, wallet, approvals and pickups. A rupee discount becomes the percentage that gives it, so it can differ by a few paise. The discount reason is kept in the order's notes. Stain treatment varies with the stain, so ticking Stain on a line asks for that line's charge per piece; it goes inside the unit price, so GST and discounts apply, and the bill shows it (`order_items.stain_charge`). Not built from the design: a delivery address form on this screen.
+
+## Dashboard rebuilt to the owner's design (5 Nov 2026): not deployed
+
+Built from `Drycare Dashboard (2) (1).html`, on real data (`GET /dashboard/live`). The dark full-width top bar with Ctrl K applies to every screen. Stage names follow the real workflow: Cleaning and Finishing, where the design says Washing and Ironing.
+
+- **Same as the design:** progress ring, jump cards that glide and outline their section, period tabs with count-up numbers, rings and small bars, clickable production stages and belt, billed vs collected chart, Needs attention tabs, recent orders, today's route.
+- **Added:** owner-set targets (`settings.dashboardTargets`), a Custom period, branch switch, refresh every minute, hover effects, dark mode. Call opens the phone. Notify and Remind open WhatsApp with the message written, so staff still press send. More numbers, Sales by branch and Counter-wise takings keep what the old dashboard showed.
+- **Differences from the design:** Outstanding dues has no change chip, because past dues are not stored. Rings stay hidden until a target is set. The rider marker is a looping animation, not GPS. The route does not advance by itself as the prototype did: it follows real stop statuses. The top search still opens results instead of filtering recent orders as you type.
+
 ## Tag tracking, barcode length, membership benefits (5 Nov 2026): not deployed
 
 Migration `0033_membership_benefits_print_detail` is additive; the dev DB was backed up first to `.local/backups/before-0033-*.sql`.

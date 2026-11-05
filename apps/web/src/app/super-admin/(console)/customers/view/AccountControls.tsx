@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { CalendarClock, Check, CircleSlash, SlidersHorizontal } from "lucide-react";
-import { CORE_FEATURE_LABELS, FEATURES, FEATURE_KEYS, type FeatureKey, type FeatureMap, type FeatureOverrides } from "@drycare/shared";
+import { CalendarClock, Check, CircleSlash, Radio, SlidersHorizontal } from "lucide-react";
+import { CORE_FEATURE_LABELS, FEATURES, PLAN_FEATURE_KEYS as FEATURE_KEYS, type FeatureKey, type FeatureMap, type FeatureOverrides } from "@drycare/shared";
 import { api } from "@/lib/api";
 import { Alert, Badge, Button, Field, Input, Modal, Select, Textarea } from "@/components/ui";
 import { LoadingRows, Panel, dateLabel, useAdminData } from "../../admin-ui";
@@ -100,6 +100,117 @@ export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: 
 const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 
 /** Renew, extend or change the plan without a payment record, or cancel it. Paid renewals go through "Record payment". */
+type RfidAddon = { id: string; startsAt: string; endsAt: string; pricePaise: number; status: string };
+
+/** The RFID module is charged on its own: its own period, its own payments, its own GST invoice. */
+export function RfidModulePanel({ orgId, onChanged }: { orgId: string; onChanged: () => void }) {
+  const { data, error, reload } = useAdminData<{ current: RfidAddon | null; history: RfidAddon[] }>(`/platform-admin/organizations/${orgId}/addons/rfid`);
+  const [months, setMonths] = useState("12");
+  const [amount, setAmount] = useState("");
+  const [reference, setReference] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [notice, setNotice] = useState("");
+  const latest = data?.history.filter((a) => a.status === "active").sort((a, b) => b.endsAt.localeCompare(a.endsAt))[0];
+  async function pay(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setSaveError("");
+    setNotice("");
+    try {
+      const r = await api<{ invoice: { number: string } | null }>(`/platform-admin/organizations/${orgId}/addons/rfid`, { body: { months: Number(months), amountPaise: Math.round(Number(amount || 0) * 100), reference: reference.trim() || undefined } });
+      setNotice(r.invoice ? `Saved. RFID module is on. Invoice ${r.invoice.number} issued.` : "Saved. RFID module is on, free of charge.");
+      setAmount("");
+      setReference("");
+      await reload();
+      onChanged();
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function stop() {
+    const reason = window.prompt("Why is the RFID module being stopped for this shop?");
+    if (!reason) return;
+    setSaveError("");
+    try {
+      await api(`/platform-admin/organizations/${orgId}/addons/rfid/stop`, { body: { reason } });
+      await reload();
+      onChanged();
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : "Could not stop it.");
+    }
+  }
+  return (
+    <Panel title={<span className="flex items-center gap-2"><Radio className="h-4 w-4 text-brand-700" />RFID software and tags</span>} description="Sold separately from the plan. Each payment gets its own invoice.">
+      {error && <Alert>{error}</Alert>}
+      {saveError && <Alert>{saveError}</Alert>}
+      {notice && <Alert tone="green">{notice}</Alert>}
+      {!data ? <LoadingRows rows={2} /> : (
+        <div className="space-y-4">
+          <p className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+            {data.current ? <Badge color="green">On</Badge> : <Badge color="slate">Off</Badge>}
+            {latest && new Date(latest.endsAt) > new Date() ? `Paid until ${dateLabel(latest.endsAt)}` : "No paid period running."}
+            {latest && new Date(latest.endsAt) > new Date() && <button type="button" onClick={() => void stop()} className="font-semibold text-red-700 underline underline-offset-2">Stop</button>}
+          </p>
+          <form onSubmit={pay} className="grid items-end gap-3 sm:grid-cols-4">
+            <Field label="Period"><Select value={months} onChange={(e) => setMonths(e.target.value)}>{[[1, "1 month"], [3, "3 months"], [6, "6 months"], [12, "1 year"], [24, "2 years"]].map(([m, label]) => <option key={m} value={m}>{label}</option>)}</Select></Field>
+            <Field label="Amount received incl. GST (₹)"><Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0 for free" /></Field>
+            <Field label="Payment reference"><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UTR / UPI / cheque" /></Field>
+            <Button type="submit" loading={saving} disabled={Number(amount) > 0 && !reference.trim()}>Record & switch on</Button>
+          </form>
+          <p className="text-xs text-slate-500">A shop on the PC edition also needs its license key renewed to get this.</p>
+          <RfidTagSales orgId={orgId} />
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** Selling the tags themselves: its own invoice, and it does not switch the software on. */
+function RfidTagSales({ orgId }: { orgId: string }) {
+  const { data, reload } = useAdminData<{ id: string; pricePaise: number; note: string | null; createdAt: string }[]>(`/platform-admin/organizations/${orgId}/addons/rfid-tags`);
+  const [quantity, setQuantity] = useState("");
+  const [amount, setAmount] = useState("");
+  const [reference, setReference] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  async function sell(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const r = await api<{ invoice: { number: string } | null }>(`/platform-admin/organizations/${orgId}/addons/rfid-tags`, { body: { quantity: Number(quantity), amountPaise: Math.round(Number(amount) * 100), reference: reference.trim() } });
+      setNotice(`Saved. Invoice ${r.invoice?.number ?? ""} issued for ${Number(quantity).toLocaleString("en-IN")} tags.`);
+      setQuantity("");
+      setAmount("");
+      setReference("");
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="space-y-3 border-t border-slate-100 pt-4">
+      <h3 className="text-sm font-semibold text-slate-900">RFID tags sold</h3>
+      {error && <Alert>{error}</Alert>}
+      {notice && <Alert tone="green">{notice}</Alert>}
+      <form onSubmit={sell} className="grid items-end gap-3 sm:grid-cols-4">
+        <Field label="Number of tags"><Input inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ""))} /></Field>
+        <Field label="Amount received incl. GST (₹)"><Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} /></Field>
+        <Field label="Payment reference"><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UTR / UPI / cheque" /></Field>
+        <Button type="submit" variant="secondary" loading={saving} disabled={!Number(quantity) || !Number(amount) || !reference.trim()}>Record tag sale</Button>
+      </form>
+      {!!data?.length && <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">{data.map((sale) => <li key={sale.id} className="flex justify-between gap-3 px-3 py-2"><span>{sale.note}</span><span className="text-slate-500">₹{(sale.pricePaise / 100).toLocaleString("en-IN")} · {dateLabel(sale.createdAt)}</span></li>)}</ul>}
+    </div>
+  );
+}
+
 export function ManagePlanModal({ orgId, orgName, current, onClose, onDone }: { orgId: string; orgName: string; current: { planId?: string; endsAt: string | null } | null; onClose: () => void; onDone: (message: string) => void }) {
   const plans = useAdminData<Plan[]>("/platform-admin/plans");
   const [mode, setMode] = useState<"set" | "cancel">("set");

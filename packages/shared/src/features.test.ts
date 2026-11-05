@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { FEATURE_KEYS, isPrinterApproved, resolveFeatures, splitInclusiveTax } from "./features";
+import { FEATURE_KEYS, PLAN_FEATURE_KEYS, isPrinterApproved, resolveFeatures, splitInclusiveTax } from "./features";
+import { BILL_PRESETS, billPaperSize, billTemplateSchema, chooseBillTemplate, renderBillMessage } from "./billTemplates";
+import { normalizeEpc } from "./scanCodes";
 import { DEFAULT_LABEL_SETTINGS, LABEL_PRESETS, branchUpdateSchema, code128DigitBars, fitBarcodeToDigits, isLineBarcode, withBasicTag, withScanDigits } from "./schemas";
 import { signedLicenseSchema } from "./license";
 
@@ -90,6 +92,40 @@ describe("barcode length", () => {
     const qr = LABEL_PRESETS.find((p) => p.design.barcode.type === "qrcode")!.design;
     expect(fitBarcodeToDigits(qr, 13)).toEqual(qr);
     expect(withBasicTag({ ...DEFAULT_LABEL_SETTINGS, scanDigits: 13 }).garmentDesign.barcode.moduleDots).toBe(2);
+  });
+});
+
+describe("bill templates", () => {
+  it("every ready-made template is valid and lands on its paper", () => {
+    for (const t of BILL_PRESETS) {
+      expect(billTemplateSchema.safeParse(t).success, t.name).toBe(true);
+      expect(billPaperSize(t).widthMm, t.name).toBeGreaterThan(0);
+    }
+    expect(billPaperSize(BILL_PRESETS[0])).toEqual({ widthMm: 80, heightMm: 0 });
+  });
+  it("uses the one asked for, then the shop's default, then the paper chosen before templates existed", () => {
+    const mine = { ...BILL_PRESETS[2], id: "mine" };
+    expect(chooseBillTemplate({ templates: [mine], defaultId: "mine" }, "80mm").id).toBe("mine");
+    expect(chooseBillTemplate({ templates: [mine], defaultId: "mine" }, "80mm", "preset-a5").id).toBe("preset-a5");
+    expect(chooseBillTemplate(null, "a4").id).toBe("preset-a4-gst");
+    expect(chooseBillTemplate(null, null, "a5").id).toBe("preset-a5");
+    expect(chooseBillTemplate(null).id).toBe("preset-thermal-80");
+  });
+  it("fills in a message and leaves out what it does not know", () => {
+    expect(renderBillMessage("Hi {{customer}}, {{ balance }} due {{nonsense}}", { customer: "Asha", balance: "₹10" })).toBe("Hi Asha, ₹10 due ");
+  });
+});
+
+describe("rfid", () => {
+  it("reads a tag number however the reader types it", () => {
+    expect(normalizeEpc(" e2 80-11:60 6000 0209 ")).toBe("E280116060000209");
+    expect(normalizeEpc("0xABCD1234")).toBe("ABCD1234");
+    expect(normalizeEpc("not a tag")).toBeNull();
+    expect(normalizeEpc("12")).toBeNull();
+  });
+  it("is never part of a plan", () => {
+    expect(PLAN_FEATURE_KEYS).not.toContain("rfid");
+    expect(resolveFeatures({}).rfid).toBe(false);
   });
 });
 

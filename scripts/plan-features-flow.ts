@@ -17,6 +17,7 @@ function check(label: string, cond: boolean, extra?: unknown) {
 }
 const section = (t: string) => results.push(`\n${t}`);
 
+const { BILL_PRESETS } = await import("../packages/shared/src/billTemplates");
 class Client {
   cookie = "";
   async req(method: string, url: string, body?: unknown, headers: Record<string, string> = {}) {
@@ -229,6 +230,144 @@ try {
   check("the tag list finds tags by customer, and counts sales", r.status === 200 && r.json.rows.length >= 1 && r.json.summary.sales > 0, r.json.summary);
   r = await shop.req("GET", `/customers/${customerId}/garments`);
   check("the customer's record lists barcode numbers", r.status === 200 && r.json.some((g: { scan_code: string }) => g.scan_code === createdGarment.scanCode), r.json);
+
+  // ---- Dashboard: live panels and targets
+  r = await shop.req("GET", "/dashboard/live");
+  check("the dashboard shows the production line and today's numbers", r.status === 200 && r.json.production.stages.some((s: { stage: string; count: number }) => s.stage === "received" && s.count >= 1) && r.json.trend.length === 12 && r.json.recentOrders.length >= 1 && typeof r.json.recentOrders[0].total === "number", r.json);
+  check("its stage lists hold real tags", r.json.production.tags.some((t: { scanCode: string }) => t.scanCode === createdGarment.scanCode), r.json.production.tags);
+  r = await shop.req("PATCH", "/organizations/current", { settings: { dashboardTargets: { billingPerDay: 2_000_000, duesLimit: 500_000, garmentsPerDay: 80 } } });
+  check("an owner can set dashboard targets", r.status === 200, r.json);
+  r = await shop.req("GET", "/dashboard/live");
+  check("the dashboard uses them", r.json.targets.garmentsPerDay === 80, r.json.targets);
+  const shortAgo = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  r = await shop.req("GET", `/dashboard?from=${shortAgo}&to=${shortAgo}&compareFrom=2020-01-01&compareTo=2020-01-07`);
+  check("the dashboard compares with the period it is asked to", r.status === 200 && r.json.previous.from === "2020-01-01" && r.json.previous.to === "2020-01-07" && r.json.garments.handled >= 0, r.json.previous);
+  await shop.req("POST", "/staff", { name: "Counter", email: `rec-feat-${runId}@test.local`, password: `Staff-${runId}-Password1`, roleKey: "reception", branchIds: [branchId] });
+  const counter = new Client();
+  await counter.req("POST", "/auth/login", { email: `rec-feat-${runId}@test.local`, password: `Staff-${runId}-Password1` });
+  r = await counter.req("GET", "/dashboard/live");
+  check("staff who may not see money get none from the dashboard", r.status === 200 && r.json.trend.every((d: { billed: number; collected: number }) => d.billed === 0 && d.collected === 0) && r.json.attention.dues.length === 0 && r.json.attention.ready.every((o: { balance: number | null }) => o.balance === null) && r.json.recentOrders.every((o: { total: number | null }) => o.total === null), r.json);
+  r = await counter.req("GET", `/dashboard?from=${shortAgo}&to=${shortAgo}`);
+  check("nor from its period numbers", r.status === 200 && r.json.sales === null && r.json.collections === null && r.json.financialVisible === false, r.json);
+
+  // ---- Stain treatment: a charge staff enter, because it varies with the stain
+  const stained = (stainCharge?: number, quantity = 1) => ({ customerId, branchId, items: [{ garmentTypeId, serviceId, quantity, ...(stainCharge ? { stainCharge, conditionFlags: ["stain"] } : {}) }] });
+  const plainTotal = (await shop.req("POST", "/orders/quote", stained())).json.totals.subtotal;
+  r = await shop.req("POST", "/orders/quote", stained(4000));
+  check("a stain charge adds to the bill", r.status === 200 && r.json.totals.subtotal === plainTotal + 4000, r.json.totals);
+  r = await shop.req("POST", "/orders/quote", stained(7500, 2));
+  check("each line can have its own charge, per piece", r.json.totals.subtotal === (plainTotal + 7500) * 2, r.json.totals);
+  r = await shop.req("POST", "/orders/quote", { customerId, branchId, items: [{ garmentTypeId, serviceId, quantity: 1, stainCharge: -100 }] });
+  check("a stain charge cannot be negative", r.status === 400, r.json);
+  r = await shop.req("POST", "/orders", { ...stained(4000), promisedAt: new Date(Date.now() + 864e5).toISOString(), payments: [] }, { "idempotency-key": `stain-${runId}` });
+  check("the order keeps the charge for the bill", r.status === 201 && r.json.items[0].stainCharge === 4000 && r.json.items[0].unitPrice === plainTotal + 4000, r.json.items?.[0]);
+
+  // ---- RFID module: sold separately
+  const EPC = `E280${runId.replace(/[^0-9a-f]/gi, "0").toUpperCase()}0000000001`.slice(0, 24);
+  const EPC2 = `${EPC.slice(0, -1)}2`;
+  r = await shop.req("GET", "/rfid/summary");
+  check("the RFID module is off until it is paid for, whatever the plan", r.status === 403 && r.json.error.code === "FEATURE_NOT_IN_PLAN", r.json);
+  r = await shop.req("GET", "/auth/session");
+  check("the shop's features say so", r.json.features.rfid === false, r.json.features);
+  r = await sa.req("PUT", `/platform-admin/organizations/${orgId}/entitlements`, { overrides: { rfid: true }, reason: REASON });
+  check("it cannot be given as a plan exception", r.status === 400, r.json);
+  const rfidRef = `RFID-${runId}`;
+  r = await sa.req("POST", `/platform-admin/organizations/${orgId}/addons/rfid`, { months: 12, amountPaise: 1180000 });
+  check("a paid period needs a payment reference", r.status === 400, r.json);
+  r = await sa.req("POST", `/platform-admin/organizations/${orgId}/addons/rfid`, { months: 12, amountPaise: 1180000, reference: rfidRef });
+  check("recording a payment switches it on, with its own invoice", r.status === 201 && !!r.json.invoice?.number && r.json.invoice.planId === null && String(r.json.invoice.lines[0].description).includes("RFID"), r.json);
+  r = await sa.req("POST", `/platform-admin/organizations/${orgId}/addons/rfid`, { months: 1, amountPaise: 100000, reference: rfidRef });
+  check("the same payment cannot be recorded twice", r.status === 409, r.json);
+  r = await shop.req("GET", "/rfid/summary");
+  check("the shop can now use it", r.status === 200, r.json);
+  const rfidOrder = (await shop.req("POST", "/orders", { ...quoteBody({ items: [{ garmentTypeId, serviceId, quantity: 2 }] }), promisedAt: new Date(Date.now() + 864e5).toISOString(), payments: [] }, { "idempotency-key": `rfid-${runId}` })).json;
+  const [g1, g2] = rfidOrder.garments;
+  r = await shop.req("GET", `/rfid/order?code=${rfidOrder.orderNumber}`);
+  check("an order's garments are found by order number", r.status === 200 && r.json.garments.length === 2, r.json);
+  r = await shop.req("POST", "/rfid/link", { garmentId: g1.id, epc: EPC.toLowerCase() });
+  check("reading a new tag links it to a garment", r.status === 201 && r.json.epc === EPC && r.json.status === "linked", r.json);
+  r = await shop.req("POST", "/rfid/link", { garmentId: g2.id, epc: EPC });
+  check("a tag cannot be on two garments", r.status === 409 && r.json.error.code === "RFID_IN_USE", r.json);
+  r = await shop.req("POST", "/rfid/link", { garmentId: g1.id, epc: EPC2 });
+  check("a garment cannot have two tags", r.status === 409 && r.json.error.code === "GARMENT_HAS_RFID", r.json);
+  await shop.req("POST", "/rfid/link", { garmentId: g2.id, epc: EPC2 });
+  r = await shop.req("GET", `/scan/resolve?code=${EPC}`);
+  check("every scanning screen understands the RFID tag", r.status === 200 && r.json.garmentId === g1.id, r.json);
+  r = await shop.req("POST", "/rfid/read", { epcs: [EPC], place: "Rack A" });
+  check("tracking shows what a tag is on", r.status === 200 && r.json.items[0].state === "linked" && r.json.items[0].orderNumber === rfidOrder.orderNumber, r.json);
+  r = await shop.req("GET", `/tags/trace?code=${EPC}`);
+  check("the garment's history shows the RFID reads", r.status === 200 && r.json.timeline.some((e: { type: string; action?: string; notes?: string }) => e.type === "rfid" && e.action === "read" && e.notes === "Rack A"), r.json.timeline);
+  await sqlClient`update garments set current_status = 'ready', qc_passed_at = now() where id = ${g1.id}`;
+  r = await shop.req("POST", "/rfid/basket", { epcs: [EPC, "ABCDEF0123456789"] });
+  const basket = r.json.orders?.[0];
+  check("the basket shows the order, what is due, and what was not read", r.status === 200 && basket.balance > 0 && basket.missing === 1 && basket.notReady === 0 && r.json.others[0].state === "unknown", r.json);
+  r = await shop.req("POST", `/orders/${rfidOrder.id}/handover`, { garmentIds: [g1.id] });
+  check("handover keeps its rule: money first", r.status === 422 && r.json.error.code === "BALANCE_DUE", r.json);
+  r = await shop.req("POST", `/orders/${rfidOrder.id}/payments`, { payments: [{ amount: basket.balance, method: "cash" }] }, { "idempotency-key": `rfid-pay-${runId}` });
+  check("the balance can be collected", r.status === 201, r.json);
+  r = await shop.req("POST", `/orders/${rfidOrder.id}/handover`, { garmentIds: [g1.id], notes: "Billed by RFID" });
+  check("then the garment is handed over", r.status === 200, r.json);
+  r = await shop.req("POST", "/rfid/read", { epcs: [EPC] });
+  check("its tag goes back to the pool for the next garment", r.json.items[0].state === "free", r.json);
+  r = await shop.req("POST", `/rfid/tags/${EPC}/retire`, { reason: "Lost" });
+  check("a lost tag can be retired", r.status === 200 && r.json.status === "retired", r.json);
+  r = await shop.req("POST", "/rfid/link", { garmentId: g2.id, epc: EPC });
+  check("a retired tag cannot be used again", r.status === 409, r.json);
+  const tagRef = `TAGS-${runId}`;
+  const moduleInvoice = (await sa.req("POST", `/platform-admin/organizations/${orgId}/addons/rfid-tags`, { quantity: 1000, amountPaise: 590000, reference: tagRef })).json;
+  check("selling RFID tags gets its own invoice", String(moduleInvoice.invoice?.lines?.[0]?.description).includes("RFID tags × 1,000") && moduleInvoice.invoice.totalPaise === 590000, moduleInvoice);
+  r = await sa.req("POST", `/platform-admin/organizations/${orgId}/addons/rfid-tags`, { quantity: 1000, amountPaise: 590000, reference: tagRef });
+  check("the same tag payment cannot be recorded twice", r.status === 409, r.json);
+  r = await sa.req("POST", `/platform-admin/organizations/${orgId}/addons/rfid/stop`, { reason: "Customer stopped the RFID module" });
+  check("the module can be stopped", r.status === 200, r.json);
+  r = await sa.req("POST", `/platform-admin/organizations/${orgId}/addons/rfid-tags`, { quantity: 10, amountPaise: 5900, reference: `${tagRef}-2` });
+  check("buying tags does not switch the software on", r.status === 201 && (await shop.req("GET", "/rfid/summary")).status === 403, r.json);
+  r = await shop.req("GET", "/rfid/summary");
+  check("then the shop cannot use it", r.status === 403, r.json);
+  r = await shop.req("GET", `/scan/resolve?code=${EPC2}`);
+  check("and its tags stop scanning", r.status === 404, r.json);
+
+  // ---- Printers sold by Mindware
+  const serial = `SN-${runId}`.toUpperCase();
+  const bill = `BILL-${runId}`.toUpperCase();
+  r = await shop.req("POST", "/labels/shop-printers", { serial, bill });
+  check("a printer Mindware has not recorded cannot be connected", r.status === 403 && r.json.error.code === "PRINTER_NOT_SOLD_BY_MINDWARE", r.json);
+  r = await sa.req("POST", "/platform-admin/sold-printers", { serialNumber: serial, billNumber: bill, model: "Any Model 200" });
+  check("the software owner records a printer sold", r.status === 201, r.json);
+  const soldId = r.json.id;
+  r = await sa.req("POST", "/platform-admin/sold-printers", { serialNumber: serial, billNumber: "OTHER", model: "Any Model 200" });
+  check("one serial number cannot be recorded twice", r.status === 409, r.json);
+  r = await shop.req("POST", "/labels/shop-printers", { serial, bill: "WRONG" });
+  check("the wrong bill number is refused", r.status === 403, r.json);
+  r = await shop.req("POST", "/labels/shop-printers", { serial: serial.toLowerCase(), bill: ` ${bill.toLowerCase()} ` });
+  check("the right numbers connect it, typed any way", r.status === 201 && r.json.model === "Any Model 200", r.json);
+  const shopPrinterId = r.json.id;
+  r = await shop.req("POST", "/labels/shop-printers", { serial, bill });
+  check("it cannot be connected twice", r.status === 409, r.json);
+  r = await sa.req("GET", "/platform-admin/sold-printers");
+  check("the owner sees it connected", r.json.find((p: { id: string }) => p.id === soldId)?.connectedAt != null, r.json[0]);
+  r = await shop.req("DELETE", `/labels/shop-printers/${shopPrinterId}`);
+  check("a shop can disconnect a printer", r.status === 200, r.json);
+  await sa.req("POST", `/platform-admin/sold-printers/${soldId}/status`, { status: "revoked" });
+  r = await shop.req("POST", "/labels/shop-printers", { serial, bill });
+  check("a blocked printer cannot be connected", r.status === 403, r.json);
+
+  // ---- Bill templates
+  const myTemplate = { ...BILL_PRESETS[2], id: `mine-${runId}`, name: "Our bill", accent: "#123456" };
+  const messages = { whatsapp: "Hi {{customer}}", emailSubject: "Bill {{invoice}} from {{shop}}", emailBody: "Dear {{customer}}, balance {{balance}}" };
+  r = await shop.req("PATCH", "/organizations/current", { settings: { billTemplates: { templates: [{ ...myTemplate, accent: "red" }], defaultId: null, messages } } });
+  check("a template with a bad value is refused", r.status === 400, r.json);
+  r = await shop.req("PATCH", "/organizations/current", { settings: { billTemplates: { templates: [myTemplate], defaultId: myTemplate.id, messages } } });
+  check("a shop saves its own template and default", r.status === 200 && r.json.settings.billTemplates.defaultId === myTemplate.id, r.json);
+  r = await shop.req("GET", "/auth/session");
+  check("the bill screen can read it", r.json.organization.settings.billTemplates?.templates[0].name === "Our bill", r.json.organization.settings);
+  r = await shop.req("POST", `/orders/${rfidOrder.id}/send-bill`, { channel: "email" });
+  check("a customer with no email is explained", r.status === 422 && r.json.error.code === "NO_EMAIL", r.json);
+  await sqlClient`update customers set email = ${`bill-${runId}@test.local`} where id = ${customerId}`;
+  r = await shop.req("POST", `/orders/${rfidOrder.id}/send-bill`, { channel: "email" });
+  check("a bill can be emailed", r.status === 200 && r.json.to === `bill-${runId}@test.local`, r.json);
+  const mail = await sqlClient`select subject, body, status from notification_jobs where organization_id = ${orgId} and event_type = 'bill.sent'`;
+  check("the email uses the shop's own wording", mail.length === 1 && mail[0].subject.startsWith("Bill INV") && mail[0].body.startsWith("Dear Member Customer, balance") && !mail[0].body.includes("{{"), mail);
 
   // ---- Barcode length: whatever the shop chooses
   const orderBody = () => ({ ...quoteBody(), promisedAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), payments: [] });

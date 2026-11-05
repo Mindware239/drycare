@@ -12,7 +12,14 @@ export const signedLicenseSchema = z.object({
    * neither field and keep full access. Older app versions ignore both.
    */
   features: z.record(z.string(), z.boolean()).optional(),
-  hardware: z.object({ printers: z.array(z.string().max(120)).max(200), scanners: z.array(z.string().max(120)).max(200) }).optional(),
+  hardware: z.object({
+    printers: z.array(z.string().max(120)).max(200),
+    scanners: z.array(z.string().max(120)).max(200),
+    /** Printers Mindware sold to this customer. When present, only these can be connected and printed to. */
+    soldPrinters: z.array(z.object({ serial: z.string().max(80), bill: z.string().max(80), model: z.string().max(120) })).max(500).optional(),
+    rfidReaders: z.array(z.string().max(120)).max(200).optional(),
+    driverUrl: z.string().max(500).nullable().optional(),
+  }).optional(),
   limits: z.object({ branches: z.number().int().min(1).nullable() }).optional(),
 });
 

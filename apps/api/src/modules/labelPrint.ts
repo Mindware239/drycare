@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { BASIC_TAG_SIZE, buildTsplJob, bytesPerRow, isPrinterApproved } from "@drycare/shared";
+import { db, schema } from "../db/client";
 import { env } from "../env";
 import { requireAuth, requirePermission } from "../lib/context";
 import { hardwarePolicy, hasFeature } from "../lib/entitlements";
@@ -149,13 +151,24 @@ const printBody = z.object({
   labels: z.array(z.object({ widthDots: z.number().int().min(8).max(1600), heightDots: z.number().int().min(8).max(1600), data: z.string().min(1) })).min(1).max(30),
 });
 
+async function connectedPrinterNames(orgId: string) {
+  const rows = await db.query.shopPrinters.findMany({ where: eq(schema.shopPrinters.organizationId, orgId), columns: { printerName: true } });
+  return new Set(rows.map((r) => r.printerName).filter(Boolean));
+}
+
 export async function labelPrintRoutes(app: FastifyInstance) {
   /** Direct printing exists only in the PC edition, where the server and the printer share a computer. */
   app.get("/labels/printers", async (req) => {
-    requirePermission(req, "orders.read");
+    const auth = requirePermission(req, "orders.read");
     if (!available()) return { available: false, printers: [] };
-    const { printers: approved } = await hardwarePolicy();
-    return { available: true, restricted: approved.length > 0, printers: (await listPrinters()).map((p) => ({ ...p, approved: isPrinterApproved(p, approved) })) };
+    const policy = await hardwarePolicy();
+    const list = await listPrinters();
+    // A key listing Mindware's sold printers: only those connected with their serial and bill number may print.
+    if (policy.soldPrinters) {
+      const connected = await connectedPrinterNames(auth.orgId);
+      return { available: true, restricted: true, needsConnecting: true, printers: list.map((p) => ({ ...p, approved: connected.has(p.name) })) };
+    }
+    return { available: true, restricted: policy.printers.length > 0, needsConnecting: false, printers: list.map((p) => ({ ...p, approved: isPrinterApproved(p, policy.printers) })) };
   });
 
   /** The printer and scanner models the software owner accepts, for the setup screens. */
@@ -210,7 +223,9 @@ export async function labelPrintRoutes(app: FastifyInstance) {
     if (earlier) return { sent: earlier.sent, duplicate: true };
     const printer = (await listPrinters()).find((p) => p.name === body.printer);
     if (!printer) throw badRequest(`Printer "${body.printer}" was not found on this PC.`);
-    if (!isPrinterApproved(printer, (await hardwarePolicy()).printers)) throw new AppError(403, "PRINTER_NOT_APPROVED", `${printer.name} is not on the approved printer list. Contact Drycare support to have this printer approved.`);
+    const policy = await hardwarePolicy();
+    if (policy.soldPrinters && !(await connectedPrinterNames(auth.orgId)).has(printer.name)) throw new AppError(403, "PRINTER_NOT_APPROVED", `${printer.name} is not connected. Enter the serial number and bill number of this Mindware printer first.`);
+    if (!policy.soldPrinters && !isPrinterApproved(printer, policy.printers)) throw new AppError(403, "PRINTER_NOT_APPROVED", `${printer.name} is not on the approved printer list. Contact Drycare support to have this printer approved.`);
     if (printer.offline) throw new AppError(409, "PRINTER_OFFLINE", `${printer.name} is offline. Check that it is switched on and its USB cable is connected, then try again.`);
 
     const job = buildTsplJob({

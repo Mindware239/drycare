@@ -53,9 +53,16 @@ export function compactTagCode(tagCode: string) {
 /** Turns whatever a scanner typed into the stored code, where that needs no lookup. Digits-only numbers pass through. */
 export function expandScanCode(raw: string) {
   const code = raw.trim().toUpperCase();
-  if (code.includes("-") || /^\d+$/.test(code)) return code;
+  // Long numbers and RFID tag numbers (letters A to F and digits) are whole codes, never the old short form.
+  if (code.includes("-") || /^\d+$/.test(code) || /^[0-9A-F]{16,}$/.test(code)) return code;
   const m = SHORT_TAG.exec(code);
   return m ? `${m[1]}-20${m[2]}-${m[3]}-${m[4]}` : code;
+}
+
+/** An RFID tag's number in one form, whatever the reader typed around it. Null if it cannot be one. */
+export function normalizeEpc(raw: string) {
+  const epc = raw.trim().toUpperCase().replace(/^0X/, "").replace(/[\s:-]/g, "");
+  return /^[0-9A-F]{8,64}$/.test(epc) ? epc : null;
 }
 
 /** The old short form when a branch code was all digits: only worth trying after a number lookup finds nothing. */

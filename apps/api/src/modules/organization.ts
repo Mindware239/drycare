@@ -9,7 +9,7 @@ import { audit } from "../lib/audit";
 import { conflict, notFound, badRequest, forbidden, unprocessable } from "../lib/errors";
 import { tagNumbersUsed } from "../lib/sequences";
 import { issueToken, linkFor } from "../lib/tokens";
-import { DEFAULT_LABEL_SETTINGS, GSTIN_PATTERN, billingProfileSchema, labelSettingsSchema } from "@drycare/shared";
+import { DEFAULT_LABEL_SETTINGS, GSTIN_PATTERN, billTemplateSettingsSchema, billingProfileSchema, labelSettingsSchema } from "@drycare/shared";
 import { assertBranchAvailable, hasFeature } from "../lib/entitlements";
 import bwipjs from "bwip-js";
 import { orgView } from "../lib/orgView";
@@ -29,6 +29,8 @@ const orgUpdateSchema = z.object({
       maxDiscountBpsWithoutApproval: z.number().int().min(0).max(10000).optional(),
       expressSurchargeBps: z.number().int().min(0).max(20000).optional(),
       defaultTurnaroundHours: z.number().int().min(1).max(720).optional(),
+      billTemplates: billTemplateSettingsSchema.optional(),
+      dashboardTargets: z.object({ billingPerDay: z.number().int().min(0).max(100_000_000_000).optional(), duesLimit: z.number().int().min(0).max(100_000_000_000).optional(), garmentsPerDay: z.number().int().min(0).max(1_000_000).optional() }).optional(),
       invoiceFooter: z.string().max(500).optional(),
       requireFullPaymentBeforeHandover: z.boolean().optional(),
       customerDuplicateMatch: z.array(z.enum(["phone", "email"])).max(2).optional(),
