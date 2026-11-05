@@ -211,6 +211,20 @@
       "when": 1793263556034,
       "tag": "0029_staged_commit",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793858280329,
+      "tag": "0030_plan_features_memberships",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793860656392,
+      "tag": "0031_plan_limits_membership_invoices",
+      "breakpoints": true
     }
   ]
 }

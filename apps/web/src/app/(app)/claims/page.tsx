@@ -316,8 +316,10 @@ function NoteModal({ claim, onClose, onDone }: { claim: any; onClose: () => void
 }
 
 function DecideModal({ claim, onClose, onDone }: { claim: any; onClose: () => void; onDone: () => void }) {
+  const { has } = useSession();
+  const walletOn = has("wallet");
   const [outcome, setOutcome] = useState<"approve" | "reject">("approve");
-  const [resolution, setResolution] = useState<ClaimResolution>(claim.kind === "stain" || claim.kind === "late" ? "reclean" : "wallet_credit");
+  const [resolution, setResolution] = useState<ClaimResolution>(claim.kind === "stain" || claim.kind === "late" ? "reclean" : walletOn ? "wallet_credit" : "cash");
   const [amount, setAmount] = useState(claim.customerAsk ? String(claim.customerAsk / 100) : "");
   const [note, setNote] = useState("");
   const { err, busy, run } = useSubmit(onDone);
@@ -341,7 +343,7 @@ function DecideModal({ claim, onClose, onDone }: { claim: any; onClose: () => vo
         <>
           <Field label="How will you make it right?">
             <div className="grid gap-2 sm:grid-cols-3">
-              {(["wallet_credit", "cash", "reclean"] as const).map((r) => (
+              {(["wallet_credit", "cash", "reclean"] as const).filter((r) => r !== "wallet_credit" || walletOn).map((r) => (
                 <button key={r} type="button" onClick={() => setResolution(r)} className={cx("rounded-lg border px-3 py-2 text-left text-sm", resolution === r ? "border-brand-600 bg-brand-50 font-medium text-brand-800 ring-1 ring-brand-600" : "border-slate-200 text-slate-700")}>
                   {CLAIM_RESOLUTIONS[r]}
                   <span className="block text-xs font-normal text-slate-500">{r === "wallet_credit" ? "Customer uses it on future orders" : r === "cash" ? "Cash, UPI or bank transfer now" : "No money changes hands"}</span>

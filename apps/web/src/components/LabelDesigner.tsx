@@ -24,7 +24,7 @@ export function Stepper({ label, value, unit, onChange, min, max, step = 1 }: { 
   return (
     <div className="flex items-center gap-1" role="group" aria-label={label}>
       <button type="button" aria-label={`Decrease ${label}`} disabled={value <= min} onClick={() => onChange(clamp(value - step, min, max))} className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-40"><Minus className="h-3.5 w-3.5" /></button>
-      <span className="min-w-[52px] text-center text-sm font-semibold tabular-nums">{value}{unit ?? ""}</span>
+      <span className="min-w-13 text-center text-sm font-semibold tabular-nums">{value}{unit ?? ""}</span>
       <button type="button" aria-label={`Increase ${label}`} disabled={value >= max} onClick={() => onChange(clamp(value + step, min, max))} className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-40"><Plus className="h-3.5 w-3.5" /></button>
     </div>
   );
@@ -74,7 +74,7 @@ function Ruler({ lengthMm, scale, vertical, from, to }: { lengthMm: number; scal
 function DesignCard({ name, url, active, onClick }: { name: string; url?: string; active: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={active} className={cx("group w-full rounded-xl border p-2 text-left transition-colors", active ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:border-slate-400")}>
-      <span className="block h-[86px] overflow-hidden rounded-lg bg-slate-100 p-1.5">
+      <span className="block h-21.5 overflow-hidden rounded-lg bg-slate-100 p-1.5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {url ? <img src={url} alt="" className="h-full w-full object-contain" /> : <span className="text-xs text-slate-400">…</span>}
       </span>
@@ -359,7 +359,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
           {directAvailable && (
             <div className="rounded-xl border border-slate-200 bg-white lg:col-span-2">
               <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 p-4">
-                <div className="min-w-[260px] flex-1"><Field label="Tag printer"><Select value={settings.printerName} onChange={(e) => onChange({ ...settings, printerName: e.target.value })}><option value="">Choose a printer</option>{printers.map((p) => <option key={p.name} value={p.name}>{p.name}{p.offline ? " (offline)" : ""}</option>)}</Select></Field></div>
+                <div className="min-w-65 flex-1"><Field label="Tag printer"><Select value={settings.printerName} onChange={(e) => onChange({ ...settings, printerName: e.target.value })}><option value="">Choose a printer</option>{printers.map((p) => <option key={p.name} value={p.name}>{p.name}{p.offline ? " (offline)" : ""}</option>)}</Select></Field></div>
                 <Button variant="secondary" onClick={onRefreshPrinters}><RefreshCw className="h-4 w-4" />Refresh</Button>
               </div>
               <div className="space-y-3 p-4">
@@ -398,7 +398,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               {([["designs", "Designs"], ["add", "Add"], ["layers", "Layers"]] as const).map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={leftTab === k} onClick={() => setLeftTab(k)} className={cx("flex-1 rounded-md px-2 py-1.5 text-sm font-semibold", leftTab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100")}>{name}</button>)}
             </div>
             {leftTab === "designs" && (
-              <div className="max-h-[720px] overflow-y-auto">
+              <div className="max-h-180 overflow-y-auto">
                 <Section title="Ready-made">
                   <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">{presets.map((p) => <DesignCard key={p.id} name={p.name} url={thumbs[p.id]} active={JSON.stringify(p.design) === designKey} onClick={() => { setDesign(p.design); setSelected("barcode"); }} />)}</div>
                 </Section>
@@ -429,7 +429,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               </div>
             )}
             {leftTab === "add" && (
-              <div className="max-h-[720px] overflow-y-auto">
+              <div className="max-h-180 overflow-y-auto">
                 <Section title="Shapes and text">
                   <div className="grid grid-cols-3 gap-2">
                     {([["Text", <Type key="t" className="h-5 w-5" />, () => addElement({ ...el(16, 16, 24), text: "Your text" }, "custom")], ["Line", <Minus key="l" className="h-5 w-5" />, () => addElement({ ...el(16, Math.round(heightDots / 2), 8), type: "line", w: widthDots - 32, h: 2 }, "line")], ["Box", <Square key="b" className="h-5 w-5" />, () => addElement({ ...el(16, 16, 8), type: "box", w: 120, h: 60 }, "box")]] as [string, ReactNode, () => void][]).map(([name, icon, add]) => <button key={name} type="button" onClick={add} className="grid justify-items-center gap-1 rounded-xl border border-slate-200 py-3 text-xs font-medium text-slate-800 hover:border-slate-400">{icon}{name}</button>)}
@@ -445,7 +445,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               </div>
             )}
             {leftTab === "layers" && (
-              <div className="max-h-[720px] overflow-y-auto p-2">
+              <div className="max-h-180 overflow-y-auto p-2">
                 <p className="px-2 pb-2 text-xs text-slate-500">Top of the list prints on top.</p>
                 {[...layers.map((key) => ({ key, name: nameOf(key), show: design.elements[key].show, locked: design.elements[key].locked, type: design.elements[key].type as string })), { key: "barcode", name: "Barcode", show: code.show, locked: code.locked, type: "barcode" }].map((layer) => (
                   <div key={layer.key} className={cx("flex items-center rounded-lg pl-2", selected === layer.key ? "bg-slate-100" : "hover:bg-slate-50")}>
@@ -475,9 +475,9 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               <label className="flex items-center gap-1.5 px-1 text-xs font-medium text-slate-700"><input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />Snap to 0.5 mm</label>
               <div className="ml-auto flex items-center gap-1.5">
                 <div className="w-36"><Select aria-label="Tag size" value={LABEL_SIZES.some(([w, h]) => `${w}x${h}` === sizeValue) ? sizeValue : ""} onChange={(e) => { if (!e.target.value) return; const [w, h] = e.target.value.split("x").map(Number); setDesign({ ...design, widthMm: w, heightMm: h }); }}><option value="">Custom size</option>{LABEL_SIZES.map(([w, h]) => <option key={`${w}x${h}`} value={`${w}x${h}`}>{w} × {h} mm</option>)}</Select></div>
-                <div className="w-[72px]"><Input aria-label="Tag width in mm" type="number" min={20} max={150} value={design.widthMm} onChange={(e) => setDesign({ ...design, widthMm: clamp(Number(e.target.value) || 20, 20, 150) })} /></div>
+                <div className="w-18"><Input aria-label="Tag width in mm" type="number" min={20} max={150} value={design.widthMm} onChange={(e) => setDesign({ ...design, widthMm: clamp(Number(e.target.value) || 20, 20, 150) })} /></div>
                 <span className="text-xs text-slate-500">×</span>
-                <div className="w-[72px]"><Input aria-label="Tag height in mm" type="number" min={15} max={150} value={design.heightMm} onChange={(e) => setDesign({ ...design, heightMm: clamp(Number(e.target.value) || 15, 15, 150) })} /></div>
+                <div className="w-18"><Input aria-label="Tag height in mm" type="number" min={15} max={150} value={design.heightMm} onChange={(e) => setDesign({ ...design, heightMm: clamp(Number(e.target.value) || 15, 15, 150) })} /></div>
               </div>
             </div>
             <div ref={panelRef} className="flex flex-1 overflow-auto p-3" style={{ backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)", backgroundSize: "16px 16px" }}>

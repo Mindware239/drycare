@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ClipboardList,
   CreditCard,
+  Crown,
   Factory,
   LayoutDashboard,
   LogOut,
@@ -41,7 +42,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { Permission } from "@drycare/shared";
+import type { FeatureKey, Permission } from "@drycare/shared";
 import { api } from "@/lib/api";
 import { SessionProvider, useSession, type Session } from "@/lib/session";
 import { Spinner, cx } from "@/components/ui";
@@ -61,7 +62,7 @@ const NAV_GROUPS: { id: NavGroupId; label: string; icon: LucideIcon }[] = [
   { id: "admin", label: "Administration", icon: Settings },
 ];
 
-const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; group: NavGroupId }[] = [
+const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; group: NavGroupId; feature?: FeatureKey }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: "reports.view", group: "store" },
   { href: "/pos", label: "New order", icon: ShoppingBag, perm: "orders.create", group: "store" },
   { href: "/orders", label: "Orders", icon: ClipboardList, perm: "orders.read", group: "store" },
@@ -70,19 +71,20 @@ const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; g
   { href: "/scan", label: "Scan station", icon: ScanLine, perm: "garments.process", group: "garments" },
   { href: "/transfers", label: "Facility transfers", icon: Truck, perm: "orders.read", group: "garments" },
   { href: "/exceptions", label: "Garment exceptions", icon: TriangleAlert, perm: "orders.read", group: "garments" },
-  { href: "/laundry", label: "Machines & live status", icon: WashingMachine, perm: "laundry.view", group: "laundry" },
-  { href: "/laundry/new", label: "New self-service order", icon: CirclePlus, perm: "laundry.operate", group: "laundry" },
-  { href: "/laundry/orders", label: "Self-service orders", icon: ClipboardList, perm: "laundry.view", group: "laundry" },
-  { href: "/laundry/reports", label: "Laundry reports", icon: ChartColumn, perm: "laundry.view", group: "laundry" },
-  { href: "/laundry/settings", label: "Laundry setup & pricing", icon: SlidersHorizontal, perm: "laundry.manage", group: "laundry" },
-  { href: "/deliveries", label: "Pickups & deliveries", icon: Truck, perm: "deliveries.manage", group: "logistics" },
-  { href: "/driver", label: "My deliveries", icon: Bike, perm: "deliveries.drive", group: "logistics" },
+  { href: "/laundry", label: "Machines & live status", icon: WashingMachine, perm: "laundry.view", group: "laundry", feature: "laundry" },
+  { href: "/laundry/new", label: "New self-service order", icon: CirclePlus, perm: "laundry.operate", group: "laundry", feature: "laundry" },
+  { href: "/laundry/orders", label: "Self-service orders", icon: ClipboardList, perm: "laundry.view", group: "laundry", feature: "laundry" },
+  { href: "/laundry/reports", label: "Laundry reports", icon: ChartColumn, perm: "laundry.view", group: "laundry", feature: "laundry" },
+  { href: "/laundry/settings", label: "Laundry setup & pricing", icon: SlidersHorizontal, perm: "laundry.manage", group: "laundry", feature: "laundry" },
+  { href: "/deliveries", label: "Pickups & deliveries", icon: Truck, perm: "deliveries.manage", group: "logistics", feature: "deliveries" },
+  { href: "/driver", label: "My deliveries", icon: Bike, perm: "deliveries.drive", group: "logistics", feature: "deliveries" },
   { href: "/cashier", label: "Cashier & shifts", icon: Wallet, perm: "payments.collect", group: "finance" },
   { href: "/expenses", label: "Expenses", icon: Receipt, perm: "expenses.manage", group: "finance" },
-  { href: "/inventory", label: "Stock & purchasing", icon: Boxes, perm: "inventory.manage", group: "finance" },
+  { href: "/inventory", label: "Stock & purchasing", icon: Boxes, perm: "inventory.manage", group: "finance", feature: "inventory" },
   { href: "/reports", label: "Reports", icon: ChartColumn, perm: "reports.view", group: "finance" },
+  { href: "/memberships", label: "Memberships", icon: Crown, perm: "customers.read", group: "engagement", feature: "customerMemberships" },
   { href: "/claims", label: "Claims & complaints", icon: ShieldAlert, perm: "complaints.manage", group: "engagement" },
-  { href: "/campaigns", label: "Marketing campaigns", icon: Megaphone, perm: "org.manage", group: "engagement" },
+  { href: "/campaigns", label: "Marketing campaigns", icon: Megaphone, perm: "org.manage", group: "engagement", feature: "marketing" },
   { href: "/catalogue", label: "Services & prices", icon: Tags, perm: "catalogue.manage", group: "admin" },
   { href: "/integrations", label: "Integrations & notifications", icon: Mail, perm: "org.manage", group: "admin" },
   { href: "/staff", label: "Staff & roles", icon: UserCog, perm: "staff.manage", group: "admin" },
@@ -102,7 +104,7 @@ const INITIAL_GROUPS: Record<NavGroupId, boolean> = {
 };
 
 function Shell({ children }: { children: ReactNode }) {
-  const { session, can, branchId, setBranchId } = useSession();
+  const { session, can, has, branchId, setBranchId } = useSession();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -111,8 +113,8 @@ function Shell({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState(INITIAL_GROUPS);
   const items = useMemo(
-    () => NAV.filter((item) => (!item.perm || can(item.perm)) && (item.href !== "/campaigns" || session.role.key === "owner")),
-    [can, session.role.key],
+    () => NAV.filter((item) => (!item.perm || can(item.perm)) && (!item.feature || has(item.feature)) && (item.href !== "/campaigns" || session.role.key === "owner")),
+    [can, has, session.role.key],
   );
   const visibleGroups = useMemo(
     () => NAV_GROUPS.map((group) => ({ ...group, items: items.filter((item) => item.group === group.id) })).filter((group) => group.items.length > 0),
@@ -143,8 +145,8 @@ function Shell({ children }: { children: ReactNode }) {
   }, [activeGroup, pathname]);
   useEffect(() => {
     const here = NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-    if (here?.perm && !can(here.perm) && items[0]) router.replace(items[0].href);
-  }, [pathname, can, items, router]);
+    if (here && ((here.perm && !can(here.perm)) || (here.feature && !has(here.feature))) && items[0]) router.replace(items[0].href);
+  }, [pathname, can, has, items, router]);
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

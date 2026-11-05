@@ -1,14 +1,15 @@
 "use client";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CheckCircle2, CircleAlert, Copy, Download, Fingerprint, KeyRound, LockKeyhole, MonitorDown, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { CheckCircle2, CircleAlert, Copy, Download, Fingerprint, KeyRound, LockKeyhole, MonitorDown, RefreshCw, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { FEATURES, FEATURE_KEYS, resolveFeatures, type FeatureKey, type FeatureMap } from "@drycare/shared";
 import { api } from "@/lib/api";
-import { Alert, Button, Field, Input, Select, Textarea, cx } from "@/components/ui";
+import { Alert, Button, Field, Input, Modal, Select, Textarea, cx } from "@/components/ui";
 import { ConsoleHeader, CsvButton, DataTable, EmptyState, LoadingRows, Panel, dateLabel, exportCsv, useAdminData } from "../admin-ui";
 
 type SigningKey = { exists: boolean; fingerprint?: string; createdAt?: string; publicKeyPem?: string; desktopFile?: string | null };
 type License = { id: string; organizationId: string | null; customerName: string; plan: string; installationIds: string[]; expiresAt: string | null; key: string; note: string | null; issuedAt: string; issuedBy: string | null };
-type Plan = { id: string; name: string; published: boolean; code: string };
+type Plan = { id: string; name: string; published: boolean; code: string; entitlements: Record<string, boolean> };
 type Customer = { id: string; name: string; ownerEmail: string | null };
 type System = { appVersion: string; licensing: { enforced: boolean; publicKeyConfigured: boolean } };
 
@@ -35,7 +36,7 @@ export default function LicensesPage() {
               <p className="text-sm text-slate-600">Create the signing key on the right first. After that you can issue keys here in seconds.</p>
             </Panel>
           )}
-          <Register licenses={licenses.data} error={licenses.error} />
+          <Register licenses={licenses.data} error={licenses.error} canRenew={!!key.data?.exists} onRenewed={() => void licenses.reload()} />
         </div>
         <div className="space-y-6">
           <SigningKeyPanel state={key.data} onChange={() => void key.reload()} />
@@ -53,7 +54,7 @@ export default function LicensesPage() {
                 <li key={i} className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">{i + 1}</span>{t}</li>
               ))}
             </ol>
-            <p className="mt-4 flex gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />An issued key cannot be switched off remotely; it stops at its expiry date. For a replaced PC, issue a new key for the new request code.</p>
+            <p className="mt-4 flex gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />An issued key cannot be switched off remotely; it stops at its expiry date. For that reason, prefer keys with an end date. To change a PC's features or approved hardware, renew its key. For a replaced PC, issue a new key for the new request code.</p>
           </Panel>
         </div>
       </div>
@@ -141,6 +142,9 @@ function IssueKey({ onIssued }: { onIssued: () => void }) {
   const [orgId, setOrgId] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [plan, setPlan] = useState("Standard");
+  /** Set once the admin changes a tick. Until then the server uses the plan's list and this customer's exceptions. */
+  const [customFeatures, setCustomFeatures] = useState<FeatureMap | null>(null);
+  const [allowExtraPcs, setAllowExtraPcs] = useState(false);
   const [term, setTerm] = useState<"1y" | "6m" | "1m" | "never" | "custom">("1y");
   const [custom, setCustom] = useState("");
   const [codes, setCodes] = useState("");
@@ -159,13 +163,16 @@ function IssueKey({ onIssued }: { onIssued: () => void }) {
   const planNames = useMemo(() => [...new Set(["Standard", ...(plans.data ?? []).filter((p) => p.published).map((p) => p.name)])], [plans.data]);
   const expiresOn = term === "never" ? null : term === "custom" ? custom : new Date(Date.now() + ({ "1y": 365, "6m": 182, "1m": 30 } as const)[term] * 86_400_000).toISOString().slice(0, 10);
   const ids = codes.split(/[\s,;]+/).map((c) => c.trim()).filter(Boolean);
+  const matchedPlan = plans.data?.find((p) => p.name === plan.trim());
+  const features = customFeatures ?? resolveFeatures(matchedPlan?.entitlements ?? null);
+  const toggle = (key: FeatureKey, on: boolean) => setCustomFeatures({ ...features, [key]: on });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setIssuing(true);
     setError("");
     try {
-      const r = await api<{ key: string }>("/platform-admin/licenses", { body: { organizationId: orgId || undefined, customerName: customerName.trim(), plan: plan.trim(), expiresOn, installationIds: ids, note: note.trim() || undefined } });
+      const r = await api<{ key: string }>("/platform-admin/licenses", { body: { organizationId: orgId || undefined, customerName: customerName.trim(), plan: plan.trim(), expiresOn, installationIds: ids, note: note.trim() || undefined, allowExtraPcs, ...(customFeatures ? { features: customFeatures } : {}) } });
       setIssued({ key: r.key, customer: customerName.trim() });
       setCodes("");
       setNote("");
@@ -206,7 +213,7 @@ function IssueKey({ onIssued }: { onIssued: () => void }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name on the license" required><Input required value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Shop name" /></Field>
           <Field label="Plan" required>
-            <Input list="license-plans" value={plan} onChange={(e) => setPlan(e.target.value)} required />
+            <Input list="license-plans" value={plan} onChange={(e) => { setPlan(e.target.value); setCustomFeatures(null); }} required />
             <datalist id="license-plans">{planNames.map((n) => <option key={n} value={n} />)}</datalist>
           </Field>
           <Field label="Valid for">
@@ -220,6 +227,14 @@ function IssueKey({ onIssued }: { onIssued: () => void }) {
         <Field label="PC request codes" required hint="From each PC's activation screen. One per line, or separated by commas.">
           <Textarea rows={3} value={codes} onChange={(e) => setCodes(e.target.value)} className="font-mono text-xs" placeholder="3f9c2a7e-1b2c-4d5e-8f90-123456789abc" />
         </Field>
+        <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={allowExtraPcs} onChange={(e) => setAllowExtraPcs(e.target.checked)} className="h-4 w-4 accent-brand-700" />Allow more PCs than the plan includes</label>
+        <fieldset className="rounded-xl border border-slate-200 p-3">
+          <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Features in this key</legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {FEATURE_KEYS.map((key) => <label key={key} className="flex items-center gap-2 text-sm text-slate-700" title={FEATURES[key].description}><input type="checkbox" checked={features[key]} onChange={(e) => toggle(key, e.target.checked)} className="h-4 w-4 accent-brand-700" />{FEATURES[key].label}</label>)}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">{matchedPlan ? `Filled in from the ${matchedPlan.name} plan.` : "This name is not one of your plans, so everything is on unless you untick it."} The key also carries your approved printers and scanners.</p>
+        </fieldset>
         <Field label="Internal note (optional)"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Paid UTR 4302…, 2 counters" maxLength={300} /></Field>
         <Button type="submit" loading={issuing} disabled={!ids.length || !customerName.trim() || (term === "custom" && !custom)}><ShieldCheck className="h-4 w-4" />Sign key for {ids.length || "…"} PC{ids.length === 1 ? "" : "s"}</Button>
       </form>
@@ -227,8 +242,58 @@ function IssueKey({ onIssued }: { onIssued: () => void }) {
   );
 }
 
-function Register({ licenses, error }: { licenses: License[] | null; error: string }) {
+function RenewKey({ license, onClose, onRenewed }: { license: License; onClose: () => void; onRenewed: () => void }) {
+  const plans = useAdminData<Plan[]>("/platform-admin/plans");
+  const base = license.expiresAt && new Date(license.expiresAt) > new Date() ? new Date(license.expiresAt) : new Date();
+  const [plan, setPlan] = useState(license.plan);
+  const [expiresOn, setExpiresOn] = useState(new Date(base.getTime() + 365 * 86_400_000).toISOString().slice(0, 10));
+  const [allowExtraPcs, setAllowExtraPcs] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [key, setKey] = useState("");
+  const [copied, setCopied] = useState(false);
+  const names = [...new Set([license.plan, ...(plans.data ?? []).filter((p) => p.published).map((p) => p.name)])];
+
+  async function renew(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const r = await api<{ key: string }>(`/platform-admin/licenses/${license.id}/renew`, { body: { plan, expiresOn, allowExtraPcs } });
+      setKey(r.key);
+      onRenewed();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not renew the key.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open title={`Renew key · ${license.customerName}`} onClose={onClose}
+      footer={key ? <Button onClick={onClose}>Done</Button> : <><Button variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit" form="renew-key" loading={saving} disabled={!expiresOn}>Sign new key</Button></>}>
+      {key ? (
+        <div className="space-y-3">
+          <Alert tone="green">New key ready. Send it to the customer to paste into the activation screen.</Alert>
+          <code className="block max-h-36 overflow-y-auto break-all rounded-lg bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-800">{key}</code>
+          <Button size="sm" onClick={() => { void navigator.clipboard.writeText(key); setCopied(true); setTimeout(() => setCopied(false), 2000); }}><Copy className="h-4 w-4" />{copied ? "Copied" : "Copy key"}</Button>
+        </div>
+      ) : (
+        <form id="renew-key" onSubmit={renew} className="space-y-4">
+          {error && <Alert>{error}</Alert>}
+          <p className="text-sm text-slate-600">Works on the same {license.installationIds.length} PC{license.installationIds.length === 1 ? "" : "s"}, with today&apos;s plan features and approved hardware.</p>
+          <Field label="Plan" required><Select value={plan} onChange={(e) => setPlan(e.target.value)}>{names.map((n) => <option key={n} value={n}>{n}</option>)}</Select></Field>
+          <Field label="Valid until" required hint={license.expiresAt ? `Current key ends ${dateLabel(license.expiresAt)}` : "Current key has no end date"}><Input type="date" required min={new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)} value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} /></Field>
+          <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={allowExtraPcs} onChange={(e) => setAllowExtraPcs(e.target.checked)} className="h-4 w-4 accent-brand-700" />Allow more PCs than the plan includes</label>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+function Register({ licenses, error, canRenew, onRenewed }: { licenses: License[] | null; error: string; canRenew: boolean; onRenewed: () => void }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const [renewing, setRenewing] = useState<License | null>(null);
   const status = (l: License) => {
     if (!l.expiresAt) return { text: "Perpetual", tone: "text-emerald-700" };
     const d = Math.ceil((new Date(l.expiresAt).getTime() - Date.now()) / 86_400_000);
@@ -250,12 +315,16 @@ function Register({ licenses, error }: { licenses: License[] | null; error: stri
                 <td className="px-5 py-3 tabular-nums" title={l.installationIds.join("\n")}>{l.installationIds.length}</td>
                 <td className={cx("px-5 py-3 text-sm font-medium", st.tone)}>{st.text}</td>
                 <td className="px-5 py-3 text-xs text-slate-500">{dateLabel(l.issuedAt)}<br />{l.issuedBy ?? ""}</td>
-                <td className="px-5 py-3"><Button size="sm" variant="secondary" onClick={() => { void navigator.clipboard.writeText(l.key); setCopied(l.id); setTimeout(() => setCopied(null), 2000); }}><Copy className="h-4 w-4" />{copied === l.id ? "Copied" : "Copy key"}</Button></td>
+                <td className="px-5 py-3"><div className="flex flex-wrap gap-2">
+                  {canRenew && <Button size="sm" onClick={() => setRenewing(l)}><RefreshCw className="h-4 w-4" />Renew</Button>}
+                  <Button size="sm" variant="secondary" onClick={() => { void navigator.clipboard.writeText(l.key); setCopied(l.id); setTimeout(() => setCopied(null), 2000); }}><Copy className="h-4 w-4" />{copied === l.id ? "Copied" : "Copy key"}</Button>
+                </div></td>
               </tr>
             );
           })}
         </DataTable>
       )}
+      {renewing && <RenewKey license={renewing} onClose={() => setRenewing(null)} onRenewed={onRenewed} />}
     </Panel>
   );
 }

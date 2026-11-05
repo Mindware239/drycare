@@ -1,6 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, Plus, Store } from "lucide-react";
+import { CORE_FEATURE_LABELS, FEATURES, FEATURE_KEYS } from "@drycare/shared";
 import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { Alert, Badge, Button, Field, Input, Modal, Select } from "@/components/ui";
@@ -10,20 +11,6 @@ type Plan = {
   id: string; code: string; name: string; description: string | null; pricePaise: number; currency: string; interval: string;
   gstInclusive: boolean; trialEligible: boolean; deviceLimit: number; branchLimit: number; entitlements: Record<string, boolean>;
   published: boolean; sortOrder: number; updatedAt: string;
-};
-
-const FEATURE_LABELS: Record<string, string> = {
-  pos: "Point of sale (counter billing)",
-  orders: "Orders & order tracking",
-  customers: "Customer records",
-  garment_tracking: "Garment tags & production tracking",
-  billing: "GST invoices & receipts",
-  basic_reports: "Essential reports",
-  advanced_reports: "Advanced reports & exports",
-  inventory: "Inventory",
-  deliveries: "Pickup & delivery",
-  staff_roles: "Staff roles & permissions",
-  organization_controls: "Multi-branch controls",
 };
 
 export default function PlansPage() {
@@ -80,7 +67,7 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: (message: string) 
           branchLimit: Number(form.get("branchLimit")),
           sortOrder: Number(form.get("sortOrder")),
           published,
-          entitlements: Object.fromEntries(Object.keys(FEATURE_LABELS).map((key) => [key, form.get(`feature-${key}`) === "on"])),
+          entitlements: Object.fromEntries(FEATURE_KEYS.map((key) => [key, form.get(`feature-${key}`) === "on"])),
         },
       });
       onSaved(`${String(form.get("name"))} saved${published ? " and visible on the pricing page" : ""}.`);
@@ -124,11 +111,15 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: (message: string) 
         </div>
         <fieldset className="rounded-xl border border-slate-200 p-4">
           <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Included features</legend>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {Object.entries(FEATURE_LABELS).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-sm text-slate-700"><input name={`feature-${key}`} type="checkbox" defaultChecked={plan.entitlements[key] ?? false} className="h-4 w-4 accent-brand-700" />{label}</label>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURE_KEYS.map((key) => (
+              <label key={key} className="flex items-start gap-2 text-sm text-slate-700" title={FEATURES[key].description}>
+                <input name={`feature-${key}`} type="checkbox" defaultChecked={plan.entitlements[key] ?? FEATURES[key].whenUnset} className="mt-0.5 h-4 w-4 accent-brand-700" />
+                <span>{FEATURES[key].label}<span className="block text-xs text-slate-500">{FEATURES[key].description}</span></span>
+              </label>
             ))}
           </div>
+          <p className="mt-3 text-xs text-slate-500">Every plan includes: {CORE_FEATURE_LABELS.join(", ")}. To make an exception for one shop, open it under Customers.</p>
         </fieldset>
       </div>
     </form>

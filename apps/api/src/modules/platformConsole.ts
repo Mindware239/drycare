@@ -236,7 +236,7 @@ export async function platformConsoleRoutes(app: FastifyInstance) {
           (select max(created_at) from orders where organization_id = ${id}) as "lastOrderAt",
           (select count(*)::int from garments where organization_id = ${id}) as garments`),
       db.execute(sql`
-        select s.id, s.status, s.provider, s.provider_reference as reference, s.starts_at as "startsAt", s.ends_at as "endsAt",
+        select s.id, s.plan_id as "planId", s.status, s.provider, s.provider_reference as reference, s.starts_at as "startsAt", s.ends_at as "endsAt",
           s.canceled_at as "canceledAt", s.created_at as "createdAt", p.name as "planName", p.price_paise as "pricePaise", p.interval
         from commercial_subscriptions s join commercial_plans p on p.id = s.plan_id
         where s.organization_id = ${id} order by s.created_at desc`),

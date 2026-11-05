@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Building2, ChartColumn, Download, FileSpreadsheet, IndianRupee, Printer, Search, Shirt, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BarChart3, Building2, ChartColumn, Download, FileSpreadsheet, IndianRupee, Lock, Printer, Search, Shirt, UserRound, Users, type LucideIcon } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { dateOnly, dateTime, money, todayISO } from "@/lib/format";
 import { Alert, Button, Input, PageHeader, Spinner, cx } from "@/components/ui";
 
 type Col = { key: string; label: string; type: "text" | "money" | "int" | "date" | "datetime" | "pct"; total?: boolean };
-type Entry = { key: string; group: string; title: string; description: string; columns: Col[]; usesDates: boolean };
+type Entry = { key: string; locked: boolean; group: string; title: string; description: string; columns: Col[]; usesDates: boolean };
 type Result = { key: string; title: string; description: string; columns: Col[]; rows: Record<string, unknown>[]; totals: Record<string, number> | null; range: { from: string; to: string } };
 
 const GROUP_ICONS: Record<string, LucideIcon> = { Sales: ChartColumn, Money: IndianRupee, Customers: Users, Operations: Shirt, Staff: UserRound };
@@ -51,7 +51,7 @@ export default function ReportsPage() {
   const [days, setDays] = useState(60);
   const [filter, setFilter] = useState("");
   useEffect(() => {
-    if (!active && catalogue.data?.length) setActive(new URLSearchParams(window.location.search).get("r") ?? catalogue.data[0].key);
+    if (!active && catalogue.data?.length) setActive(new URLSearchParams(window.location.search).get("r") ?? (catalogue.data.find((r) => !r.locked) ?? catalogue.data[0]).key);
   }, [catalogue.data, active]);
   const entry = catalogue.data?.find((r) => r.key === active);
   const qs = new URLSearchParams({ from, to, ...(scope === "branch" && branchId ? { branchId } : {}), ...(active === "inactive-customers" ? { days: String(days) } : {}) });
@@ -84,7 +84,7 @@ export default function ReportsPage() {
                   <p className="flex items-center gap-2 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400"><Icon className="h-3.5 w-3.5" />{group}</p>
                   {items.map((r) => (
                     <button key={r.key} type="button" onClick={() => { setActive(r.key); setFilter(""); }}
-                      className={cx("block w-full rounded-lg px-3 py-2 text-left text-sm transition", active === r.key ? "bg-brand-50 font-semibold text-brand-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}>{r.title}</button>
+                      className={cx("block w-full rounded-lg px-3 py-2 text-left text-sm transition", active === r.key ? "bg-brand-50 font-semibold text-brand-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}><span className="flex items-center justify-between gap-2">{r.title}{r.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="Not in your plan" />}</span></button>
                   ))}
                 </div>
               );

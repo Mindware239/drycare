@@ -1,8 +1,9 @@
 "use client";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Permission } from "@drycare/shared";
+import type { FeatureKey, FeatureMap, Permission } from "@drycare/shared";
 
 export interface Session {
+  features?: FeatureMap;
   user: { id: string; name: string; email: string };
   isPlatformAdmin: boolean;
   organization: { id: string; name: string; status: string; currency: string; gstin?: string; settings?: Record<string, unknown> };
@@ -14,6 +15,8 @@ export interface Session {
 interface Ctx {
   session: Session;
   can: (p: Permission) => boolean;
+  /** Whether this shop's plan includes a feature. The server enforces this too. */
+  has: (feature: FeatureKey) => boolean;
   /** Cloud copy of a shop PC: everything is visible, nothing can be changed here (the server enforces this too). */
   readOnly: boolean;
   branchId: string;
@@ -41,6 +44,7 @@ export function SessionProvider({ session, children }: { session: Session; child
       session,
       readOnly,
       can: (p) => session.permissions.includes(p) && (!readOnly || VIEW_ONLY_PERMISSIONS.has(p)),
+      has: (feature) => session.features?.[feature] ?? true,
       branchId,
       branch: session.branches.find((b) => b.id === branchId),
       setBranchId: (id) => {

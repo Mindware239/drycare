@@ -13,6 +13,7 @@ import { audit } from "../lib/audit";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { nextNumber, pad } from "../lib/sequences";
 import { accessState } from "../lib/subscriptionAccess";
+import { hasFeature } from "../lib/entitlements";
 import { env, isDesktop } from "../env";
 import { normalizePhone } from "./customers";
 
@@ -22,7 +23,7 @@ const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice
 async function publicShop(slug: string) {
   const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.slug, slug) });
   const ob = org?.settings.onlineBooking;
-  if (!org || org.settings.platformInternal || !ob?.enabled) return null;
+  if (!org || org.settings.platformInternal || !ob?.enabled || !(await hasFeature(org.id, "onlineBooking"))) return null;
   const branch = ob.branchId
     ? await db.query.branches.findFirst({ where: and(eq(schema.branches.id, ob.branchId), eq(schema.branches.organizationId, org.id)) })
     : await db.query.branches.findFirst({ where: eq(schema.branches.organizationId, org.id), orderBy: (b, { asc }) => asc(b.createdAt) });

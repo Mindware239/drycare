@@ -27,6 +27,7 @@
     "laundry-test": "pnpm --filter @drycare/api laundry-test",
     "billing-test": "pnpm --filter @drycare/api billing-test",
     "license-test": "pnpm --filter @drycare/api license-test",
+    "features-test": "pnpm --filter @drycare/api features-test",
     "reports-test": "pnpm --filter @drycare/api reports-test",
     "wallet-test": "pnpm --filter @drycare/api wallet-test",
     "inventory-test": "pnpm --filter @drycare/api inventory-test",

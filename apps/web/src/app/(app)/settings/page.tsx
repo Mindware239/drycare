@@ -7,7 +7,7 @@ import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Spinner, 
 import { BillingSettings } from "@/components/BillingSettings";
 
 export default function SettingsPage() {
-  const { can, branchId } = useSession();
+  const { can, has, branchId } = useSession();
   const org = useApi("/organizations/current");
   const branches = useApi<any[]>("/branches");
   const [locBranch, setLocBranch] = useState(branchId);
@@ -49,9 +49,9 @@ export default function SettingsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Tags and barcodes</h2>
-            <p className="text-sm text-slate-500">Design your garment tags, choose the printer and test your scanner.</p>
+            <p className="text-sm text-slate-500">{has("labelDesigner") ? "Design your garment tags, choose the printer and test your scanner." : "Choose the printer for your taffeta tags and test your scanner."}</p>
           </div>
-          <a href="/print/labels?test=1" target="_blank" rel="noreferrer"><Button>Open tag designer</Button></a>
+          <a href="/print/labels?test=1" target="_blank" rel="noreferrer"><Button>{has("labelDesigner") ? "Open tag designer" : "Open tag setup"}</Button></a>
         </div>
       )}
       {can("org.manage") && <DesktopCards />}

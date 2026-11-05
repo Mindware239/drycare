@@ -51,6 +51,14 @@ journal.entries = journal.entries.slice(0, syncIdx);
 writeFileSync(journalFile, JSON.stringify(journal));
 await applyMigrationFiles(db, before0027);
 rmSync(before0027, { recursive: true, force: true });
+// Today's code creates the "existing" business data below, and it expects what later migrations add, so that is
+// put in place for now and removed before migrating, leaving the real migrations to add it.
+await sqlClient.unsafe(`
+  alter table organizations add column feature_overrides_json jsonb not null default '{}'::jsonb, add column branch_limit_override integer;
+  alter table orders add column customer_membership_id uuid;
+  create table customer_memberships (id uuid, organization_id uuid, customer_id uuid, plan_id uuid, branch_id uuid, plan_name text, discount_bps integer, price_paid integer, tax_bps integer, tax_amount integer, invoice_number text, payment_id uuid,
+    starts_at timestamptz, ends_at timestamptz, status text, cancelled_at timestamptz, cancel_reason text, created_by uuid, created_at timestamptz, updated_at timestamptz);
+`);
 
 const app = await buildServer();
 class Client {
@@ -89,6 +97,11 @@ const fingerprint = async () => {
 const beforeFp = await fingerprint();
 check("business data exists before the sync migration", Number(beforeFp.orders.split(":")[0]) === 1 && Number(beforeFp.payments.split(":")[0]) === 1, beforeFp);
 
+await sqlClient.unsafe(`
+  alter table organizations drop column feature_overrides_json, drop column branch_limit_override;
+  alter table orders drop column customer_membership_id;
+  drop table customer_memberships;
+`);
 await runMigrations(db, migrations);
 const afterFp = await fingerprint();
 check("migration 0027 leaves every business record unchanged", JSON.stringify(afterFp) === JSON.stringify(beforeFp), { beforeFp, afterFp });

@@ -474,6 +474,14 @@ function PosInner() {
             <footer className="space-y-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
               {approvalHoldsRequired && <Alert>This order will be held for customer approval. Production and payment collection unlock after approval is recorded on the order.</Alert>}
               {quoteError && <Alert>{quoteError}</Alert>}
+              {quote?.membership && (
+                <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                  <strong>{quote.membership.planName} member.</strong>{" "}
+                  {quote.membership.applied
+                    ? `${quote.membership.discountBps / 100}% off applied.${couponCode ? " Discounts do not add up, so the coupon was not used." : ""}`
+                    : `A bigger discount is being used instead of the ${quote.membership.discountBps / 100}% membership discount.`}
+                </p>
+              )}
               {quote ? (
                 <dl className="space-y-0.5 text-xs text-slate-600">
                   <Row label="Subtotal" value={money(quote.totals.subtotal)} />

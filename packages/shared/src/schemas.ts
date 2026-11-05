@@ -587,9 +587,20 @@ export const labelSettingsSchema = z.object({
   showHumanReadable: z.boolean().default(true),
   showColour: z.boolean().default(true),
   copies: z.number().int().min(1).max(5).default(1),
+  /** Line barcode or QR code on the ready-made tag, for shops without the tag designer. */
+  basicTagStyle: z.enum(["line", "qr"]).default("line"),
 });
 export type LabelSettings = z.infer<typeof labelSettingsSchema>;
 export const DEFAULT_LABEL_SETTINGS: LabelSettings = labelSettingsSchema.parse({});
+
+/**
+ * What a shop without the tag designer prints: the ready-made taffeta tag. Its saved designs are left alone
+ * in the stored settings, so they come back if the shop upgrades.
+ */
+export function withBasicTag(settings: LabelSettings): LabelSettings {
+  const qr = settings.basicTagStyle === "qr";
+  return { ...settings, garmentDesign: qr ? GARMENT_DESIGN_38_QR : GARMENT_DESIGN_38_LINE, bagDesign: qr ? BAG_DESIGN_38_QR : BAG_DESIGN_38_LINE };
+}
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal("").transform(() => undefined));
 const optionalPattern = (re: RegExp, message: string) =>

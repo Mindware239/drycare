@@ -24,7 +24,7 @@ export async function applySubscriptionPayment(tx: DbOrTx, input: {
     orderBy: [desc(schema.commercialSubscriptions.createdAt)],
   });
   if (existing && existing.planId !== plan.id) {
-    throw conflict("This business already has an active subscription on a different plan. Use “Change plan” on the customer page, or record the payment after the current period ends.", "ACTIVE_SUBSCRIPTION_EXISTS");
+    throw conflict("This business already has an active subscription on a different plan. Use “Manage plan” on the customer page, or record the payment after the current period ends.", "ACTIVE_SUBSCRIPTION_EXISTS");
   }
   const now = new Date();
   const durationDays = plan.interval === "year" ? 365 : 30;

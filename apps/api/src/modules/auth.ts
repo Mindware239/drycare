@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emailConfigured, sendEmail } from "../lib/mailer";
 import { accessState } from "../lib/subscriptionAccess";
+import { orgFeatures } from "../lib/entitlements";
 
 const newPassword = z.string().min(10, "Password must be at least 10 characters").max(200);
 
@@ -377,6 +378,7 @@ export async function authRoutes(app: FastifyInstance) {
       organization: { id: auth.orgId, name: auth.orgName, status: auth.orgStatus, currency: org?.defaultCurrency, gstin: org?.gstin, settings: org?.settings, hasLogo: Boolean(org?.logoData && org?.logoMimeType) },
       role: { key: auth.roleKey, name: auth.roleName },
       permissions: [...auth.permissions],
+      features: await orgFeatures(auth.orgId),
       branches: branches
         .filter((b) => auth.branchIds.length === 0 || auth.branchIds.includes(b.id))
         .map((b) => ({ id: b.id, name: b.name, code: b.branchCode, status: b.status })),

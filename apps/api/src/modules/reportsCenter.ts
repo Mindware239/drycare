@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { Permission } from "@drycare/shared";
 import { db } from "../db/client";
 import { can, requirePermission, type AuthContext } from "../lib/context";
+import { hasFeature, requireFeature } from "../lib/entitlements";
 import { badRequest, forbidden, notFound } from "../lib/errors";
 import { invoiceCreditSql, invoicePaidSql } from "../lib/balances";
 import { branchSql } from "./reports";
@@ -52,14 +53,22 @@ const REPORTS: Report[] = [
   {
     key: "gst-summary", group: "Sales", title: "GST summary", description: "Taxable value and GST by rate, split B2B (customer GSTIN) and B2C, for GSTR-1 / 3B", perm: "reports.financial", usesDates: true,
     columns: [{ key: "rate", label: "GST rate", type: "text" }, { key: "invoices", label: "Invoices", type: "int", total: true }, { key: "b2b_taxable", label: "B2B taxable", type: "money", total: true }, { key: "b2c_taxable", label: "B2C taxable", type: "money", total: true }, { key: "taxable", label: "Taxable value", type: "money", total: true }, { key: "tax", label: "GST", type: "money", total: true }, { key: "total", label: "Invoice value", type: "money", total: true }],
+    // Membership fees are sales too, so they belong in the filing figures alongside order invoices.
     run: (c) => rows(sql`
-      select (ii.tax_rate_bps_snapshot / 100.0)::numeric(5,2)::text || '%' as rate, count(distinct i.id)::int as invoices,
-        coalesce(sum(ii.line_total - ii.tax_amount) filter (where cu.gstin is not null and cu.gstin <> ''),0) as b2b_taxable,
-        coalesce(sum(ii.line_total - ii.tax_amount) filter (where cu.gstin is null or cu.gstin = ''),0) as b2c_taxable,
-        sum(ii.line_total - ii.tax_amount) as taxable, sum(ii.tax_amount) as tax, sum(ii.line_total) as total
-      from invoice_items ii join invoices i on i.id = ii.invoice_id join customers cu on cu.id = i.customer_id
-      where i.organization_id = ${c.auth.orgId} and i.status <> 'cancelled' and ${inRange("i.issued_at", c)} ${br(c, "i.branch_id")}
-      group by ii.tax_rate_bps_snapshot order by ii.tax_rate_bps_snapshot`),
+      select (x.bps / 100.0)::numeric(5,2)::text || '%' as rate, count(distinct x.doc)::int as invoices,
+        coalesce(sum(x.taxable) filter (where x.gstin is not null and x.gstin <> ''),0) as b2b_taxable,
+        coalesce(sum(x.taxable) filter (where x.gstin is null or x.gstin = ''),0) as b2c_taxable,
+        sum(x.taxable) as taxable, sum(x.tax) as tax, sum(x.total) as total
+      from (
+        select ii.tax_rate_bps_snapshot as bps, i.id as doc, ii.line_total - ii.tax_amount as taxable, ii.tax_amount as tax, ii.line_total as total, cu.gstin
+        from invoice_items ii join invoices i on i.id = ii.invoice_id join customers cu on cu.id = i.customer_id
+        where i.organization_id = ${c.auth.orgId} and i.status <> 'cancelled' and ${inRange("i.issued_at", c)} ${br(c, "i.branch_id")}
+        union all
+        select m.tax_bps, m.id, m.price_paid - m.tax_amount, m.tax_amount, m.price_paid, cu.gstin
+        from customer_memberships m join customers cu on cu.id = m.customer_id
+        where m.organization_id = ${c.auth.orgId} and m.price_paid > 0 and ${inRange("m.created_at", c)} ${br(c, "m.branch_id")}
+      ) x
+      group by x.bps order by x.bps`),
   },
   {
     key: "discounts", group: "Sales", title: "Discounts & credit notes", description: "Order discounts, coupons and collection credit notes", perm: "reports.financial", usesDates: true,
@@ -193,10 +202,14 @@ const REPORTS: Report[] = [
   },
 ];
 
+/** Needs the Advanced reports feature. Everyday sales, money, dues, GST and pending-garment reports are in every plan. */
+const ADVANCED_REPORTS = new Set(["sales-service", "sales-garment", "sales-branch", "discounts", "top-customers", "inactive-customers", "new-customers", "cancelled-orders", "staff-productivity", "user-activity"]);
+
 export async function reportsCenterRoutes(app: FastifyInstance) {
   app.get("/reports/catalogue", async (req) => {
     const auth = requirePermission(req, "reports.view");
-    return REPORTS.filter((r) => can(auth, r.perm)).map(({ key, group, title, description, columns, usesDates }) => ({ key, group, title, description, columns, usesDates: Boolean(usesDates) }));
+    const advanced = await hasFeature(auth.orgId, "advancedReports");
+    return REPORTS.filter((r) => can(auth, r.perm)).map(({ key, group, title, description, columns, usesDates }) => ({ key, locked: !advanced && ADVANCED_REPORTS.has(key), group, title, description, columns, usesDates: Boolean(usesDates) }));
   });
 
   app.get("/reports/run/:key", async (req) => {
@@ -205,6 +218,7 @@ export async function reportsCenterRoutes(app: FastifyInstance) {
     const report = REPORTS.find((r) => r.key === key);
     if (!report) throw notFound("Report");
     if (!can(auth, report.perm)) throw forbidden("You do not have access to this report");
+    if (ADVANCED_REPORTS.has(key)) await requireFeature(auth.orgId, "advancedReports");
     const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
     const q = z.object({ from: z.iso.date().default(today), to: z.iso.date().default(today), branchId: z.uuid().optional(), days: z.coerce.number().int().min(7).max(730).default(60) }).parse(req.query);
     if (q.from > q.to) throw badRequest("The start date must be before the end date");

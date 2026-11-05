@@ -59,6 +59,10 @@ export const organizations = pgTable("organizations", {
   logoData: bytea("logo_data"),
   logoMimeType: text("logo_mime_type"),
   settings: jsonb("settings_json").$type<OrgSettings>().notNull().default(sql`'{}'::jsonb`),
+  /** The software owner's exceptions to this shop's plan. Kept out of `settings`, which shop owners can edit. */
+  featureOverrides: jsonb("feature_overrides_json").$type<import("@drycare/shared").FeatureOverrides>().notNull().default(sql`'{}'::jsonb`),
+  /** The software owner's exception to the plan's branch limit. Null means the plan decides. */
+  branchLimitOverride: integer("branch_limit_override"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -206,6 +210,64 @@ export const customerWalletEntries = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("wallet_entries_customer_idx").on(t.customerId, t.createdAt), index("wallet_entries_org_idx").on(t.organizationId)],
+);
+
+/** Membership plans a shop sells to its own customers. */
+export const customerMembershipPlans = pgTable(
+  "customer_membership_plans",
+  {
+    id: id(),
+    organizationId: orgId(),
+    name: text("name").notNull(),
+    description: text("description"),
+    price: integer("price").notNull().default(0), // paise, including GST
+    taxBps: integer("tax_bps").notNull().default(0),
+    durationDays: integer("duration_days").notNull(),
+    discountBps: integer("discount_bps").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("customer_membership_plans_name_uq").on(t.organizationId, t.name),
+    check("customer_membership_plans_discount_check", sql`${t.discountBps} between 1 and 10000`),
+    check("customer_membership_plans_duration_check", sql`${t.durationDays} > 0`),
+    check("customer_membership_plans_price_check", sql`${t.price} >= 0`),
+  ],
+);
+
+/** One purchase or renewal. Name and discount are copied, so changing a plan never alters what a customer already bought. */
+export const customerMemberships = pgTable(
+  "customer_memberships",
+  {
+    id: id(),
+    organizationId: orgId(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id),
+    planId: uuid("plan_id").notNull().references(() => customerMembershipPlans.id),
+    branchId: uuid("branch_id").references(() => branches.id),
+    planName: text("plan_name").notNull(),
+    discountBps: integer("discount_bps").notNull(),
+    pricePaid: integer("price_paid").notNull().default(0), // paise, including GST
+    taxBps: integer("tax_bps").notNull().default(0),
+    taxAmount: integer("tax_amount").notNull().default(0), // paise, part of pricePaid
+    /** Invoice number for a paid sale. No more than 16 characters, as GST invoices require. */
+    invoiceNumber: text("invoice_number"),
+    paymentId: uuid("payment_id").references(() => payments.id),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    status: text("status").notNull().default("active"), // active | cancelled (expiry is worked out from endsAt)
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelReason: text("cancel_reason"),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("customer_memberships_customer_idx").on(t.customerId, t.endsAt),
+    index("customer_memberships_org_idx").on(t.organizationId, t.endsAt),
+    uniqueIndex("customer_memberships_invoice_uq").on(t.organizationId, t.invoiceNumber),
+    check("customer_memberships_status_check", sql`${t.status} in ('active', 'cancelled')`),
+  ],
 );
 
 /** Offline activation keys issued for DryCare for Windows from the super admin console. */
@@ -522,6 +584,8 @@ export const orders = pgTable(
     grandTotal: money("grand_total"),
     discountBps: integer("discount_bps").notNull().default(0),
     couponId: uuid("coupon_id").references(() => marketingCoupons.id),
+    /** Set when this order's discount came from the customer's membership. */
+    customerMembershipId: uuid("customer_membership_id").references(() => customerMemberships.id),
     currency: text("currency").notNull().default("INR"),
     notes: text("notes"),
     version: integer("version").notNull().default(1),

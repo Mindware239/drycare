@@ -147,7 +147,8 @@ export async function platformAdminRoutes(app: FastifyInstance) {
     const { entitlements, ...values } = body;
     const [after] = await db.transaction(async (tx) => {
       const [updated] = await tx.update(schema.commercialPlans)
-        .set({ ...values, ...(entitlements ? { entitlements } : {}), updatedAt: new Date() })
+        // Merged, so entries this request does not mention (such as cloudSync) are kept.
+        .set({ ...values, ...(entitlements ? { entitlements: { ...before.entitlements, ...entitlements } } : {}), updatedAt: new Date() })
         .where(eq(schema.commercialPlans.id, id))
         .returning();
       await audit(tx, req, {

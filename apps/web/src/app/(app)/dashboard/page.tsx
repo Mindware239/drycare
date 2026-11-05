@@ -139,7 +139,7 @@ function SectionTitle({ icon: Icon, title, subtitle, tone = "bg-brand-50 text-br
 }
 
 export default function DashboardPage() {
-  const { session, branchId, branch, can } = useSession();
+  const { session, branchId, branch, can, has } = useSession();
   const [from, setFrom] = useState(todayISO());
   const [to, setTo] = useState(todayISO());
   const [period, setPeriod] = useState("Today");
@@ -264,9 +264,9 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 gap-3">
                 {can("orders.create") && <QuickTile href="/pos" icon={FileText} title="Create an order" text="Start a customer drop-off" tone="teal" />}
                 {can("garments.process") && <QuickTile href="/scan" icon={ScanLine} title="Scan a garment" text="Move items to production" tone="blue" />}
-                {can("deliveries.manage") && <QuickTile href="/deliveries" icon={Truck} title="Schedule a stop" text="Arrange pickup or delivery" tone="amber" />}
+                {can("deliveries.manage") && has("deliveries") && <QuickTile href="/deliveries" icon={Truck} title="Schedule a stop" text="Arrange pickup or delivery" tone="amber" />}
                 {can("customers.read") && <QuickTile href="/customers" icon={Users} title="Find a customer" text="View customer profiles" tone="violet" />}
-                {can("laundry.operate") && <QuickTile href="/laundry/new" icon={WashingMachine} title="Self-service order" text="Wash, dry & iron" tone="cyan" />}
+                {can("laundry.operate") && has("laundry") && <QuickTile href="/laundry/new" icon={WashingMachine} title="Self-service order" text="Wash, dry & iron" tone="cyan" />}
                 {can("payments.collect") && <QuickTile href="/cashier" icon={Wallet} title="Cashier & shift" text="Count the drawer" tone="emerald" />}
               </div>
             </Card>

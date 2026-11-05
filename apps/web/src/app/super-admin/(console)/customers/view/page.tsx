@@ -7,13 +7,14 @@ import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { Alert, Badge, Button, Field, Input, Modal, Textarea } from "@/components/ui";
 import { DataTable, EmptyState, LoadingRows, Panel, StatusBadge, TrialBadge, actionLabel, dateLabel, dateTimeLabel, relativeDays, useAdminData } from "../../admin-ui";
+import { FeaturesPanel, ManagePlanModal } from "./AccountControls";
 
 type Detail = {
   organization: { id: string; name: string; legalName: string | null; slug: string; status: string; gstin: string | null; trialStartedAt: string | null; trialEndsAt: string | null; trialSource: string | null; createdAt: string; settings: Record<string, unknown> };
   users: { id: string; name: string; email: string; phone: string | null; status: string; emailVerifiedAt: string | null; lastLoginAt: string | null; membershipStatus: string; roleName: string; roleKey: string; joinedAt: string }[];
   branches: { id: string; name: string; branchCode: string; phone: string | null; status: string; address: Record<string, string>; createdAt: string }[];
   usage: { customers: number; orders: number; orders30: number; lastOrderAt: string | null; garments: number };
-  subscriptions: { id: string; status: string; provider: string; reference: string | null; startsAt: string; endsAt: string | null; canceledAt: string | null; planName: string; pricePaise: number; interval: string }[];
+  subscriptions: { id: string; planId?: string; status: string; provider: string; reference: string | null; startsAt: string; endsAt: string | null; canceledAt: string | null; planName: string; pricePaise: number; interval: string }[];
   payments: { id: string; provider: string; reference: string; amountPaise: number; status: string; createdAt: string }[];
   timeline: { id: string; action: string; createdAt: string; actorEmail: string | null; after: Record<string, unknown> | null }[];
 };
@@ -29,6 +30,7 @@ function CustomerDetailInner() {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
+  const [managing, setManaging] = useState(false);
 
   if (!id) return <Alert>No customer was selected.</Alert>;
   if (error) return <div className="space-y-4"><BackLink /><Alert>{error}</Alert></div>;
@@ -87,6 +89,7 @@ function CustomerDetailInner() {
           <div className="flex flex-wrap gap-2">
             {org.status === "trial" && <Button variant="secondary" onClick={() => { setAction({ type: "trial" }); setDays("7"); setActionError(""); }}><CalendarPlus className="h-4 w-4" />Extend trial</Button>}
             <Link href={`/super-admin/payments?org=${org.id}`} className="inline-flex h-9 items-center gap-2 rounded-md bg-brand-700 px-3.5 text-sm font-medium text-white hover:bg-brand-800"><CreditCard className="h-4 w-4" />Record payment</Link>
+            <Button variant="secondary" onClick={() => setManaging(true)}><ShieldCheck className="h-4 w-4" />Manage plan</Button>
             {org.status === "suspended"
               ? <Button variant="secondary" onClick={() => { setAction({ type: "status", status: "active" }); setActionError(""); }}><CheckCircle2 className="h-4 w-4" />Reactivate</Button>
               : <Button variant="danger" onClick={() => { setAction({ type: "status", status: "suspended" }); setActionError(""); }}><Ban className="h-4 w-4" />Suspend</Button>}
@@ -110,6 +113,8 @@ function CustomerDetailInner() {
           <p className="text-xs text-slate-500">GSTIN {org.gstin ?? "not provided"} · joined {dateLabel(org.createdAt)}</p>
         </InfoCard>
       </div>
+
+      <FeaturesPanel key={subscriptions[0]?.id ?? "none"} orgId={org.id} onChanged={() => void reload()} />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel title="Team" description="Store users. Passwords are never visible to Drycare staff." padded={false}>
@@ -180,6 +185,16 @@ function CustomerDetailInner() {
           </ol>
         )}
       </Panel>
+
+      {managing && (
+        <ManagePlanModal
+          orgId={org.id}
+          orgName={org.name}
+          current={subscriptions[0] ?? null}
+          onClose={() => setManaging(false)}
+          onDone={(message) => { setManaging(false); setNotice(message); void reload(); }}
+        />
+      )}
 
       {action && (
         <Modal open title={action.type === "trial" ? "Extend free trial" : action.status === "suspended" ? "Suspend account" : "Reactivate account"} onClose={() => setAction(null)}

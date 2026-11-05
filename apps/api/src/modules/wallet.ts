@@ -7,6 +7,7 @@ import { assertBranchAccess, requirePermission } from "../lib/context";
 import { audit, emit } from "../lib/audit";
 import { badRequest, notFound } from "../lib/errors";
 import { walletBalance, walletEntry } from "../lib/wallet";
+import { requireFeature } from "../lib/entitlements";
 import { openShiftFor, paymentRef } from "./payments";
 
 async function customerOf(orgId: string, id: string) {
@@ -32,8 +33,10 @@ export async function walletRoutes(app: FastifyInstance) {
     return { balance: await walletBalance(db, id), entries };
   });
 
+  // Viewing and spending are not limited by plan: a balance is the customer's own money.
   app.post("/customers/:id/wallet/topups", async (req, reply) => {
     const auth = requirePermission(req, "payments.collect");
+    await requireFeature(auth.orgId, "wallet");
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     const body = z.object({
       branchId: z.uuid(),
@@ -67,6 +70,8 @@ export async function walletRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     const body = z.object({ amount: z.number().int().refine((v) => v !== 0, "Enter an amount").refine((v) => Math.abs(v) <= 10_000_000), reason: z.string().trim().min(8, "Give a reason (at least 8 characters)").max(300) }).parse(req.body);
     await customerOf(auth.orgId, id);
+    // Taking money out stays possible, so a shop without the wallet can still settle a leftover balance.
+    if (body.amount > 0) await requireFeature(auth.orgId, "wallet");
     const entry = await db.transaction(async (tx) => {
       const e = await walletEntry(tx, { orgId: auth.orgId, customerId: id, kind: "adjust", amount: body.amount, note: body.reason, userId: auth.userId });
       await audit(tx, req, { action: "wallet.adjusted", resourceType: "customer", resourceId: id, after: { amount: body.amount, reason: body.reason, balance: e.balanceAfter } });

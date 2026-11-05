@@ -33,7 +33,7 @@ function advice(passed: Set<number>) {
 }
 
 /** Prints four sample tags, then checks which ones the scanner reads. A scanner types like a keyboard, so a text box is all it needs. */
-export function ScannerTest({ onPrint, onUse, disabled }: { onPrint: () => void; onUse: (sample: ScannerSample) => void; disabled?: boolean }) {
+export function ScannerTest({ onPrint, onUse, disabled, approvedScanners }: { onPrint: () => void; onUse: (sample: ScannerSample) => void; disabled?: boolean; approvedScanners?: string[] }) {
   const [value, setValue] = useState("");
   const [passed, setPassed] = useState<Set<number>>(new Set());
   const [last, setLast] = useState<{ text: string; matched: boolean } | null>(null);
@@ -59,6 +59,7 @@ export function ScannerTest({ onPrint, onUse, disabled }: { onPrint: () => void;
         </div>
         <Button variant="secondary" onClick={onPrint} disabled={disabled}><Printer className="h-4 w-4" />Print 4 test tags</Button>
       </div>
+      {!!approvedScanners?.length && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600"><strong className="font-semibold text-slate-800">Approved scanners:</strong> {approvedScanners.join(", ")}.</p>}
       <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <div className="space-y-2">
           <Field label="Scan here">

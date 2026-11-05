@@ -144,6 +144,15 @@ export function getLicenseStatus(): LicenseStatus {
   };
 }
 
+/** What this PC's valid license key allows, or null during the demo and when no key limits it. */
+export function licenseGrants() {
+  if (env.DRYCARE_MODE !== "desktop" || !env.LICENSE_ENFORCED) return null;
+  const key = readLicenseKey();
+  const license = key ? parseAndVerifyLicense(key) : null;
+  if (!license || getInstallationLicenseState(license, env.LICENSE_INSTALLATION_ID ?? null) !== "active") return null;
+  return { features: license.features ?? null, hardware: license.hardware ?? null, limits: license.limits ?? null };
+}
+
 export function activateDesktopLicense(key: string) {
   if (env.DRYCARE_MODE !== "desktop" || !env.LICENSE_ENFORCED || !env.LICENSE_FILE) {
     throw new AppError(404, "NOT_FOUND", "License activation is not available in this edition");

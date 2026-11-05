@@ -9,14 +9,15 @@ import { Alert, Badge, Button, Card, Field, Input, Modal, OrderStatusBadge, Page
 import { CustomerForm } from "@/components/CustomerForm";
 import { ScheduleModal } from "@/components/ScheduleModal";
 import { CustomerWallet } from "@/components/CustomerWallet";
+import { CustomerMembership } from "@/components/CustomerMembership";
 import { CLAIM_KINDS, CLAIM_STATUS_LABELS, type ClaimKind, type ClaimStatus } from "@drycare/shared";
 
-const TABS = ["Orders", "Garments", "Payments", "Wallet", "Claims", "Addresses", "Preferences"] as const;
+const TABS = ["Orders", "Garments", "Payments", "Wallet", "Membership", "Claims", "Addresses", "Preferences"] as const;
 
 function CustomerProfileInner() {
   const id = useSearchParams().get("id") ?? "";
   const router = useRouter();
-  const { can, branchId } = useSession();
+  const { can, has, branchId } = useSession();
   const [scheduling, setScheduling] = useState(false);
   const { data: c, error, loading, reload } = useApi(`/customers/${id}`);
   const orders = useApi<any[]>(can("orders.read") ? `/customers/${id}/orders` : null);
@@ -63,7 +64,7 @@ function CustomerProfileInner() {
                 {c.status === "active" ? "Mark inactive" : "Reactivate"}
               </Button>
             )}
-            {can("deliveries.manage") && c.status === "active" && (
+            {can("deliveries.manage") && has("deliveries") && c.status === "active" && (
               <Button variant="secondary" onClick={() => setScheduling(true)}>
                 Schedule pickup
               </Button>
@@ -89,7 +90,7 @@ function CustomerProfileInner() {
         </div>
       )}
       <div className="dc-tabs mb-3 flex gap-1 whitespace-nowrap border-b border-slate-200">
-        {TABS.filter((t) => (t !== "Orders" || can("orders.read")) && (t !== "Payments" || c.financialVisible) && (t !== "Garments" || can("orders.read")) && (t !== "Claims" || can("complaints.manage"))).map((t) => (
+        {TABS.filter((t) => (t !== "Orders" || can("orders.read")) && (t !== "Payments" || c.financialVisible) && (t !== "Garments" || can("orders.read")) && (t !== "Claims" || can("complaints.manage")) && (t !== "Membership" || has("customerMemberships"))).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={cx("-mb-px border-b-2 px-3 py-2 text-sm font-medium", tab === t ? "border-brand-600 text-brand-700" : "border-transparent text-slate-500 hover:text-slate-800")}>
             {t}
           </button>
@@ -159,6 +160,7 @@ function CustomerProfileInner() {
         </Card>
       )}
       {tab === "Wallet" && <CustomerWallet customerId={c.id} customerName={c.name} />}
+      {tab === "Membership" && <CustomerMembership customerId={c.id} customerName={c.name} />}
       {tab === "Claims" && <CustomerClaims customerId={c.id} />}
       {tab === "Addresses" && <Addresses customer={c} reload={reload} />}
       {tab === "Preferences" && (

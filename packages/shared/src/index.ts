@@ -4,6 +4,7 @@ export * from "./workflow";
 export * from "./permissions";
 export * from "./schemas";
 export * from "./license";
+export * from "./features";
 export * from "./laundry";
 export * from "./operations";
 export * from "./tspl";

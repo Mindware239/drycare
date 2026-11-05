@@ -11,7 +11,7 @@ import { OnlineBookingSettings } from "@/components/OnlineBookingSettings";
 import { Globe } from "lucide-react";
 
 export default function DeliveriesPage() {
-  const { branchId, can } = useSession();
+  const { branchId, can, has } = useSession();
   const [date, setDate] = useState(todayISO());
   const [kind, setKind] = useState("");
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -46,7 +46,7 @@ export default function DeliveriesPage() {
         title="Pickups & deliveries"
         subtitle={`${counts.pickups} pickup(s) · ${counts.deliveries} deliver(ies) · ${counts.open} open`}
         actions={<>
-          {can("org.manage") && <Button variant="secondary" onClick={() => setBookingOpen(true)}><Globe className="h-4 w-4" />Online booking</Button>}
+          {can("org.manage") && has("onlineBooking") && <Button variant="secondary" onClick={() => setBookingOpen(true)}><Globe className="h-4 w-4" />Online booking</Button>}
           <Button onClick={() => setScheduling(true)}>Schedule pickup / delivery</Button>
         </>}
       />

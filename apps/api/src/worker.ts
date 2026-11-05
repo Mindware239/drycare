@@ -7,6 +7,7 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { formatMoney } from "@drycare/shared";
 import { db, schema } from "./db/client";
 import { env } from "./env";
+import { customerChannel } from "./lib/entitlements";
 import { emailConfigured, sendEmail } from "./lib/mailer";
 import { processDueMarketingCampaigns } from "./lib/marketing";
 import { marketingUnsubscribeToken } from "./lib/marketingConsent";
@@ -94,7 +95,7 @@ async function buildMessage(eventType: string, payload: Record<string, unknown>,
       break;
   }
   if (!body) return undefined;
-  const channel = eventType === "customer.approval_otp" ? "email" : customer.notificationChannel;
+  const channel = eventType === "customer.approval_otp" ? "email" : await customerChannel(orgId, customer.notificationChannel, customer.email);
   const recipient = channel === "email" ? customer.email : customer.phone;
   const orderNumber = order?.orderNumber;
   const subject = orderNumber ? `${shop}: Order ${orderNumber} update` : `${shop}: Customer update`;

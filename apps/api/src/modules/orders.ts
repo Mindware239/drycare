@@ -26,6 +26,8 @@ import { resolvePrice } from "./catalogue";
 import { invoiceCreditSql, invoicePaidSql, invoiceTotals } from "../lib/balances";
 import { recordGarmentTransition, refreshOrderStatus } from "../lib/orderStatus";
 import { recordPayments } from "./payments";
+import { hasFeature } from "../lib/entitlements";
+import { currentMembership } from "../lib/memberships";
 import { linkPickupToOrder } from "./deliveries";
 import { env } from "../env";
 import { emailConfigured } from "../lib/mailer";
@@ -84,7 +86,14 @@ export async function buildQuote(tx: DbOrTx, auth: AuthContext, body: QuoteInput
     coupon = foundCoupon;
     discountBps = foundCoupon.discountBps;
   }
-  if (discountBps > maxDiscount && !can(auth, "discounts.approve")) {
+  // Discounts do not add up: the customer gets the better one. On a tie the membership is used, so a coupon is not spent for nothing.
+  const member = (await hasFeature(auth.orgId, "customerMemberships", tx)) ? await currentMembership(tx, auth.orgId, body.customerId) : undefined;
+  const memberApplied = !!member && member.discountBps >= discountBps;
+  if (memberApplied) {
+    discountBps = member.discountBps;
+    coupon = undefined;
+  } else if (discountBps > maxDiscount && !can(auth, "discounts.approve")) {
+    // The owner already approved the membership discount when setting up the plan, so only other discounts need this.
     throw forbidden(`Discounts above ${maxDiscount / 100}% need manager approval`);
   }
   const surchargeBps = body.express ? (settings.expressSurchargeBps ?? 5000) : 0;
@@ -124,7 +133,7 @@ export async function buildQuote(tx: DbOrTx, auth: AuthContext, body: QuoteInput
   if (coupon && totals.subtotal < coupon.minimumOrderValue) {
     throw badRequest(`This coupon requires a minimum order of ${formatMoney(coupon.minimumOrderValue)}`);
   }
-  return { lines, totals, currency: org!.defaultCurrency, surchargeBps, coupon, discountBps };
+  return { lines, totals, currency: org!.defaultCurrency, surchargeBps, coupon, discountBps, member, memberApplied };
 }
 
 export async function getOrderDetail(tx: DbOrTx, orgId: string, orderId: string) {
@@ -242,6 +251,7 @@ export async function orderRoutes(app: FastifyInstance) {
       surchargeBps: q.surchargeBps,
       couponCode: q.coupon?.code ?? null,
       discountBps: q.discountBps,
+      membership: q.member ? { planName: q.member.planName, discountBps: q.member.discountBps, endsAt: q.member.endsAt, applied: q.memberApplied } : null,
       approvalsRequired: q.lines.reduce((count, line) => count + Number(line.item.specialCareApprovalRequired) + Number(
         line.item.overrideUnitPrice !== undefined && line.price && line.item.overrideUnitPrice > line.price.unitPrice,
       ), 0),
@@ -289,6 +299,7 @@ export async function orderRoutes(app: FastifyInstance) {
           promisedAt: new Date(body.promisedAt),
           discountBps: quote.discountBps,
           couponId: quote.coupon?.id ?? null,
+          customerMembershipId: quote.memberApplied ? quote.member!.id : null,
           ...quote.totals,
           currency: quote.currency,
           notes: body.notes,

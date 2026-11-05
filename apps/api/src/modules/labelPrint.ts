@@ -5,9 +5,10 @@ import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { buildTsplJob, bytesPerRow } from "@drycare/shared";
+import { BASIC_TAG_SIZE, buildTsplJob, bytesPerRow, isPrinterApproved } from "@drycare/shared";
 import { env } from "../env";
-import { requirePermission } from "../lib/context";
+import { requireAuth, requirePermission } from "../lib/context";
+import { hardwarePolicy, hasFeature } from "../lib/entitlements";
 import { AppError, badRequest } from "../lib/errors";
 
 type Printer = {
@@ -153,7 +154,14 @@ export async function labelPrintRoutes(app: FastifyInstance) {
   app.get("/labels/printers", async (req) => {
     requirePermission(req, "orders.read");
     if (!available()) return { available: false, printers: [] };
-    return { available: true, printers: await listPrinters() };
+    const { printers: approved } = await hardwarePolicy();
+    return { available: true, restricted: approved.length > 0, printers: (await listPrinters()).map((p) => ({ ...p, approved: isPrinterApproved(p, approved) })) };
+  });
+
+  /** The printer and scanner models the software owner accepts, for the setup screens. */
+  app.get("/labels/hardware", async (req) => {
+    requireAuth(req);
+    return hardwarePolicy();
   });
 
   /** What Windows knows about this printer's queue. It cannot see inside the printer, so a stuck job is the best signal. */
@@ -193,12 +201,16 @@ export async function labelPrintRoutes(app: FastifyInstance) {
     const auth = requirePermission(req, "orders.read");
     if (!available()) throw badRequest("Direct printing is available in Drycare for PC. Use the print dialog here.");
     const body = printBody.parse(req.body);
+    if ((body.widthMm !== BASIC_TAG_SIZE.widthMm || body.heightMm !== BASIC_TAG_SIZE.heightMm) && !(await hasFeature(auth.orgId, "labelDesigner"))) {
+      throw new AppError(403, "FEATURE_NOT_IN_PLAN", `Your plan prints the ${BASIC_TAG_SIZE.widthMm} × ${BASIC_TAG_SIZE.heightMm} mm taffeta tag. Upgrade on Plan & billing to use other tag sizes.`, [{ feature: "labelDesigner" }]);
+    }
     forgetOld();
     const requestKey = body.requestId ? `${auth.orgId}:${body.requestId}` : null;
     const earlier = requestKey ? handled.get(requestKey) : undefined;
     if (earlier) return { sent: earlier.sent, duplicate: true };
     const printer = (await listPrinters()).find((p) => p.name === body.printer);
     if (!printer) throw badRequest(`Printer "${body.printer}" was not found on this PC.`);
+    if (!isPrinterApproved(printer, (await hardwarePolicy()).printers)) throw new AppError(403, "PRINTER_NOT_APPROVED", `${printer.name} is not on the approved printer list. Contact Drycare support to have this printer approved.`);
     if (printer.offline) throw new AppError(409, "PRINTER_OFFLINE", `${printer.name} is offline. Check that it is switched on and its USB cable is connected, then try again.`);
 
     const job = buildTsplJob({

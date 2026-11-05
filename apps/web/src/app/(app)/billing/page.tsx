@@ -24,6 +24,7 @@ type RazorpayHandler = { razorpay_order_id: string; razorpay_payment_id: string;
 const FEATURE_LABELS: Record<string, string> = {
   pos: "Counter billing (POS)", garmentTracking: "Barcode garment tracking", production: "Production board", deliveries: "Pickup & delivery", laundry: "Self-service laundry",
   reports: "Reports", marketing: "Marketing campaigns", multiBranch: "Multiple branches", api: "API access", whatsapp: "WhatsApp messages",
+  labelDesigner: "Tag designer (any tag size & layout)", customerMemberships: "Customer memberships", inventory: "Stock & purchasing", onlineBooking: "Online pickup booking", wallet: "Customer wallet", advancedReports: "Advanced reports",
 };
 const per = (interval: string) => (interval === "year" ? "year" : "month");
 

@@ -30,6 +30,9 @@ import { reportsCenterRoutes } from "./modules/reportsCenter";
 import { bookingRoutes } from "./modules/booking";
 import { walletRoutes } from "./modules/wallet";
 import { assertWritable } from "./lib/subscriptionAccess";
+import { assertFeatureAllowed } from "./lib/entitlements";
+import { platformEntitlementRoutes } from "./modules/platformEntitlements";
+import { membershipRoutes } from "./modules/memberships";
 import { logisticsRoutes } from "./modules/logistics";
 import { laundryRoutes } from "./modules/laundry";
 import { inventoryRoutes } from "./modules/inventory";
@@ -80,6 +83,7 @@ export async function buildServer() {
     req.auth = await loadAuth(req);
     // Lapsed trial / expired plan: the shop stays signed in and can read and pay, but cannot change data.
     await assertWritable(req);
+    await assertFeatureAllowed(req);
   });
 
   app.setErrorHandler((err, req, reply) => {
@@ -137,6 +141,8 @@ export async function buildServer() {
       await api.register(platformConsoleRoutes);
       await api.register(platformBillingRoutes);
       await api.register(platformLicenseRoutes);
+      await api.register(platformEntitlementRoutes);
+      await api.register(membershipRoutes);
       await api.register(reportsCenterRoutes);
       await api.register(bookingRoutes);
       await api.register(walletRoutes);

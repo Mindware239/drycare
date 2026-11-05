@@ -3,13 +3,14 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Printer, ScanLine, Settings2, TriangleAlert, XCircle } from "lucide-react";
-import { DEFAULT_LABEL_SETTINGS, GARMENT_DESIGN_38_LINE, GARMENT_DESIGN_38_QR, formatMoney, labelSettingsSchema, type LabelDesign, type LabelSettings } from "@drycare/shared";
+import { DEFAULT_LABEL_SETTINGS, GARMENT_DESIGN_38_LINE, GARMENT_DESIGN_38_QR, formatMoney, labelSettingsSchema, withBasicTag, type FeatureMap, type LabelDesign, type LabelSettings } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { dateOnly } from "@/lib/format";
 import { withRollSize } from "@/lib/labelDesign";
 import { labelToBitmap, renderLabel, type LabelData, type RenderedLabel } from "@/lib/labelRender";
 import { Alert, Badge, Button, Select, Spinner, cx } from "@/components/ui";
 import { BarcodeAdjust } from "@/components/BarcodeAdjust";
+import { BasicTagSetup } from "@/components/BasicTagSetup";
 import { LabelDesigner, type PrinterDetails } from "@/components/LabelDesigner";
 import { PrinterQueueStatus, usePrinterQueue } from "@/components/PrinterQueue";
 import { SCANNER_SAMPLES, ScannerTest, sampleData } from "@/components/ScannerTest";
@@ -17,7 +18,7 @@ import { SCANNER_SAMPLES, ScannerTest, sampleData } from "@/components/ScannerTe
 type Scope = "all" | "bag" | "garments";
 type PrintItem = { key: string; design: LabelDesign; data: LabelData };
 type Drawn = PrintItem & { label: RenderedLabel; url: string };
-type PrinterInfo = { available: boolean; printers: PrinterDetails[] };
+type PrinterInfo = { available: boolean; restricted?: boolean; printers: (PrinterDetails & { approved?: boolean })[] };
 
 /** The largest group sent to the printer at once: keeps each request small even for big bag labels. */
 const BATCH = 20;
@@ -35,6 +36,9 @@ function LabelsPageInner() {
   const order = useApi<any>(test ? null : `/orders/${id}`);
   const org = useApi<any>("/organizations/current");
   const printerInfo = useApi<PrinterInfo>("/labels/printers");
+  const session = useApi<{ features?: FeatureMap }>("/auth/session");
+  const hardware = useApi<{ printers: string[]; scanners: string[] }>("/labels/hardware");
+  const canDesign = session.data?.features?.labelDesigner ?? true;
   const [scope, setScope] = useState<Scope>((params.get("scope") as Scope) || "all");
   const [settings, setSettings] = useState<LabelSettings>(DEFAULT_LABEL_SETTINGS);
   const [panel, setPanel] = useState<"" | "design" | "scanner">(test ? "design" : "");
@@ -58,10 +62,11 @@ function LabelsPageInner() {
 
   // Parsing fills in anything a design saved by an older version does not have yet.
   const savedSettings = useMemo(() => {
-    if (!org.data) return null;
+    if (!org.data || !session.data) return null;
     const saved = labelSettingsSchema.safeParse({ ...DEFAULT_LABEL_SETTINGS, ...(org.data.settings?.labels ?? {}) });
-    return saved.success ? saved.data : DEFAULT_LABEL_SETTINGS;
-  }, [org.data]);
+    const parsed = saved.success ? saved.data : DEFAULT_LABEL_SETTINGS;
+    return canDesign ? parsed : withBasicTag(parsed);
+  }, [org.data, session.data, canDesign]);
   useEffect(() => {
     if (savedSettings) setSettings(savedSettings);
   }, [savedSettings]);
@@ -71,10 +76,12 @@ function LabelsPageInner() {
   const sampleBranch = branches.data?.[0]?.branchCode as string | undefined;
   const o = useMemo(() => (test ? sampleOrder(sampleBranch ?? "TEST") : order.data), [test, sampleBranch, order.data]);
   const direct = printerInfo.data?.available ?? false;
-  const printers = useMemo(() => printerInfo.data?.printers ?? [], [printerInfo.data]);
+  // Only printers the software owner accepts can be chosen. The server refuses any other.
+  const printers = useMemo(() => (printerInfo.data?.printers ?? []).filter((p) => p.approved !== false), [printerInfo.data]);
+  const blockedPrinter = printerInfo.data?.printers.find((p) => p.approved === false && p.name === settings.printerName)?.name;
 
   // On a PC, pick the Windows default printer until the owner chooses one.
-  const printerName = settings.printerName || printers.find((p) => p.isDefault)?.name || "";
+  const printerName = (!blockedPrinter && settings.printerName) || printers.find((p) => p.isDefault)?.name || (printerInfo.data?.restricted ? printers[0]?.name : "") || "";
   const { queue, refresh: refreshQueue, restart: restartQueue } = usePrinterQueue(printerName, !direct ? "off" : watching ? "watching" : panel === "design" ? "idle" : "off");
 
   const live: any[] = useMemo(() => (o ? o.garments.filter((g: any) => g.currentStatus !== "cancelled") : []), [o]);
@@ -158,7 +165,7 @@ function LabelsPageInner() {
   }, [autoPrint, direct, printerName, o, items, drawn, settings, savedSettings, id]);
 
   if (order.error) return <div className="p-6"><Alert>{order.error.message}</Alert></div>;
-  if ((!o && !test) || !org.data) return <Spinner />;
+  if ((!o && !test) || !org.data || !session.data) return <Spinner />;
 
   /** Sends labels of one size to the printer in small groups. Returns how many went. */
   async function sendDirect(list: Drawn[], copies: number, requestId: string) {
@@ -264,9 +271,9 @@ function LabelsPageInner() {
 
   const applySample = (sampleId: number) => {
     const preset = sampleId >= 3 ? GARMENT_DESIGN_38_QR : GARMENT_DESIGN_38_LINE;
-    setSettings({ ...settings, garmentDesign: preset });
+    setSettings(canDesign ? { ...settings, garmentDesign: preset } : withBasicTag({ ...settings, basicTagStyle: sampleId >= 3 ? "qr" : "line" }));
     setPanel("design");
-    setNotice("Barcode updated in the designer. Check it, then press Save design.");
+    setNotice(canDesign ? "Barcode updated in the designer. Check it, then press Save design." : "Tag updated. Check it, then press Save.");
   };
 
   printRef.current = print;
@@ -295,7 +302,7 @@ function LabelsPageInner() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">{test ? "Tag setup" : `Labels · ${o.orderNumber}`}</h1>
-            <p className="text-sm text-slate-500">{test ? "Design your tags and test your scanner." : `${bags.length} bag label${bags.length === 1 ? "" : "s"} · ${live.length} garment tag${live.length === 1 ? "" : "s"}`}{direct && printerName ? ` · ${printerName}` : ""}</p>
+            <p className="text-sm text-slate-500">{test ? (canDesign ? "Design your tags and test your scanner." : "Set up your printer and test your scanner.") : `${bags.length} bag label${bags.length === 1 ? "" : "s"} · ${live.length} garment tag${live.length === 1 ? "" : "s"}`}{direct && printerName ? ` · ${printerName}` : ""}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {!test && (
@@ -306,12 +313,14 @@ function LabelsPageInner() {
               </Select>
             )}
             {autoPrint && <Link href={`/orders/view?id=${id}&created=1`} className="inline-flex items-center gap-1 px-2 text-sm font-semibold text-slate-900 underline underline-offset-4"><ArrowLeft className="h-4 w-4" />Back to order</Link>}
-            <Button variant="secondary" onClick={() => setPanel(panel === "design" ? "" : "design")}><Settings2 className="h-4 w-4" />Tag designer</Button>
+            <Button variant="secondary" onClick={() => setPanel(panel === "design" ? "" : "design")}><Settings2 className="h-4 w-4" />{canDesign ? "Tag designer" : "Tag setup"}</Button>
             <Button variant="secondary" onClick={() => setPanel(panel === "scanner" ? "" : "scanner")}><ScanLine className="h-4 w-4" />Scanner test</Button>
             {!test && <Button onClick={startPrint} loading={busy} disabled={total === 0}><Printer className="h-4 w-4" />Print {total} {selected.size ? "selected" : `label${total === 1 ? "" : "s"}`}</Button>}
           </div>
         </div>
         {mixedSizes && <Alert tone="amber">Your bag label is {settings.bagDesign.widthMm} × {settings.bagDesign.heightMm} mm and your garment tag is {settings.garmentDesign.widthMm} × {settings.garmentDesign.heightMm} mm. One roll cannot print both: set them to the same size, or print them separately.</Alert>}
+        {blockedPrinter && <Alert tone="amber">{blockedPrinter} is not on the approved printer list, so it cannot be used. Choose an approved printer or contact Drycare support.</Alert>}
+        {direct && printerInfo.data?.restricted && printers.length === 0 && <Alert tone="amber">None of the printers on this PC are approved. Approved models: {hardware.data?.printers.join(", ")}.</Alert>}
         {error && <Alert>{error}</Alert>}
         {notice && <Alert tone="green">{notice}</Alert>}
         {confirmLarge && (
@@ -338,7 +347,7 @@ function LabelsPageInner() {
             {o.printJobs.slice(0, 5).map((j: any) => <Badge key={j.id} color={j.status === "printed" ? "green" : j.status === "failed" ? "red" : "amber"}>{j.status} · {j.labelCount} · {new Date(j.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</Badge>)}
           </div>
         )}
-        {!test && panel === "" && (
+        {!test && panel === "" && canDesign && (
           <BarcodeAdjust
             kind={adjustKind}
             onKind={setAdjustKind}
@@ -352,7 +361,22 @@ function LabelsPageInner() {
             onDiscard={() => { if (savedSettings) setSettings(savedSettings); }}
           />
         )}
-        {panel === "design" && (
+        {panel === "design" && !canDesign && (
+          <BasicTagSetup
+            settings={{ ...settings, printerName }}
+            onChange={setSettings}
+            sample={samples.garment}
+            printers={printers}
+            directAvailable={direct}
+            printerQueue={<PrinterQueueStatus printer={printerName} queue={queue} onChanged={afterCancel} />}
+            changed={changed}
+            saving={saving}
+            onRefreshPrinters={() => printerInfo.reload()}
+            onSave={saveSettings}
+            onTestPrint={() => printSamples([{ key: "test-garment", design: settings.garmentDesign, data: samples.garment }])}
+          />
+        )}
+        {panel === "design" && canDesign && (
           <LabelDesigner
             settings={{ ...settings, printerName }}
             onChange={setSettings}
@@ -371,6 +395,7 @@ function LabelsPageInner() {
         {panel === "scanner" && (
           <ScannerTest
             disabled={busy}
+            approvedScanners={hardware.data?.scanners}
             onPrint={() => printSamples(SCANNER_SAMPLES.map((s) => ({ key: `sample-${s.id}`, design: s.design, data: sampleData(s) })))}
             onUse={(s) => applySample(s.id)}
           />

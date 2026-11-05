@@ -8,7 +8,8 @@ import { assertBranchAccess, requirePermission, requireAuth } from "../lib/conte
 import { audit } from "../lib/audit";
 import { conflict, notFound, badRequest, forbidden } from "../lib/errors";
 import { issueToken, linkFor } from "../lib/tokens";
-import { GSTIN_PATTERN, billingProfileSchema, labelSettingsSchema } from "@drycare/shared";
+import { DEFAULT_LABEL_SETTINGS, GSTIN_PATTERN, billingProfileSchema, labelSettingsSchema } from "@drycare/shared";
+import { assertBranchAvailable, hasFeature } from "../lib/entitlements";
 import bwipjs from "bwip-js";
 import { orgView } from "../lib/orgView";
 import { invoiceTotals } from "../lib/balances";
@@ -95,6 +96,12 @@ export async function organizationRoutes(app: FastifyInstance) {
     const body = orgUpdateSchema.parse(req.body);
     return db.transaction(async (tx) => {
       const before = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) });
+      // Without the tag designer only print settings can change. Designs stay as saved, so they return on an upgrade.
+      if (body.settings?.labels && !(await hasFeature(auth.orgId, "labelDesigner", tx))) {
+        const saved = labelSettingsSchema.safeParse({ ...DEFAULT_LABEL_SETTINGS, ...(before!.settings.labels ?? {}) });
+        const { garmentDesign, bagDesign, templates } = saved.success ? saved.data : DEFAULT_LABEL_SETTINGS;
+        body.settings.labels = { ...body.settings.labels, garmentDesign, bagDesign, templates };
+      }
       const [after] = await tx
         .update(schema.organizations)
         .set({ name: body.name, legalName: body.legalName, gstin: body.gstin, settings: body.settings ? { ...before!.settings, ...body.settings } : undefined, updatedAt: new Date() })
@@ -116,6 +123,7 @@ export async function organizationRoutes(app: FastifyInstance) {
     const auth = requirePermission(req, "branches.manage");
     const body = branchSchema.parse(req.body);
     const [row] = await db.transaction(async (tx) => {
+      await assertBranchAvailable(tx, auth.orgId);
       const r = await tx.insert(schema.branches).values({ organizationId: auth.orgId, name: body.name, branchCode: body.branchCode, phone: body.phone, address: body.address ?? {}, timezone: body.timezone, status: body.status }).returning();
       await audit(tx, req, { action: "branch.created", resourceType: "branch", resourceId: r[0].id, after: r[0] });
       return r;
@@ -131,6 +139,7 @@ export async function organizationRoutes(app: FastifyInstance) {
     return db.transaction(async (tx) => {
       const before = await tx.query.branches.findFirst({ where: and(eq(schema.branches.id, branchId), eq(schema.branches.organizationId, auth.orgId)) });
       if (!before) throw notFound("Branch");
+      if (body.status === "active" && before.status !== "active") await assertBranchAvailable(tx, auth.orgId);
       const [after] = await tx.update(schema.branches).set({ ...body, updatedAt: new Date() }).where(eq(schema.branches.id, branchId)).returning();
       await audit(tx, req, { action: "branch.updated", resourceType: "branch", resourceId: branchId, before, after });
       return after;

@@ -15,7 +15,8 @@ const TOPUP_METHODS = ["cash", "upi", "card", "bank_transfer", "wallet", "other"
 
 /** Prepaid wallet: balance, top-up at the counter, statement, and manager adjustments. */
 export function CustomerWallet({ customerId, customerName }: { customerId: string; customerName: string }) {
-  const { branchId, can } = useSession();
+  const { branchId, can, has } = useSession();
+  const walletOn = has("wallet");
   const { data, error, reload } = useApi<{ balance: number; entries: Entry[] }>(`/customers/${customerId}/wallet`);
   const [mode, setMode] = useState<"topup" | "adjust" | null>(null);
   return (
@@ -29,10 +30,11 @@ export function CustomerWallet({ customerId, customerName }: { customerId: strin
           <p className="text-xs text-slate-500">Prepaid money {customerName} can use to pay orders at the counter.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {can("payments.collect") && <Button onClick={() => setMode("topup")}><Plus className="h-4 w-4" />Add money</Button>}
-          {can("payments.refund") && <Button variant="secondary" onClick={() => setMode("adjust")}><SlidersHorizontal className="h-4 w-4" />Adjust</Button>}
+          {walletOn && can("payments.collect") && <Button onClick={() => setMode("topup")}><Plus className="h-4 w-4" />Add money</Button>}
+          {(walletOn || (data?.balance ?? 0) > 0) && can("payments.refund") && <Button variant="secondary" onClick={() => setMode("adjust")}><SlidersHorizontal className="h-4 w-4" />Adjust</Button>}
         </div>
       </section>
+      {!walletOn && <Alert tone="amber">Adding money to the wallet is not in your plan. Any balance can still be spent on orders. <a href="/billing" className="font-semibold underline underline-offset-2">See plans</a></Alert>}
       <Card padded={false} title="Wallet statement">
         {!data ? <div className="p-6"><Spinner /></div> : !data.entries.length ? <p className="px-4 py-10 text-center text-sm text-slate-500">No wallet activity yet. Add money to start.</p> : (
           <div className="overflow-x-auto">
@@ -58,7 +60,7 @@ export function CustomerWallet({ customerId, customerName }: { customerId: strin
         )}
       </Card>
       {mode === "topup" && <TopUp customerId={customerId} branchId={branchId} onClose={() => setMode(null)} onDone={() => { setMode(null); void reload(); }} />}
-      {mode === "adjust" && <Adjust customerId={customerId} onClose={() => setMode(null)} onDone={() => { setMode(null); void reload(); }} />}
+      {mode === "adjust" && <Adjust customerId={customerId} removeOnly={!walletOn} onClose={() => setMode(null)} onDone={() => { setMode(null); void reload(); }} />}
     </div>
   );
 }
@@ -98,8 +100,8 @@ function TopUp({ customerId, branchId, onClose, onDone }: { customerId: string; 
   );
 }
 
-function Adjust({ customerId, onClose, onDone }: { customerId: string; onClose: () => void; onDone: () => void }) {
-  const [dir, setDir] = useState<"add" | "remove">("add");
+function Adjust({ customerId, removeOnly, onClose, onDone }: { customerId: string; removeOnly: boolean; onClose: () => void; onDone: () => void }) {
+  const [dir, setDir] = useState<"add" | "remove">(removeOnly ? "remove" : "add");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -122,7 +124,7 @@ function Adjust({ customerId, onClose, onDone }: { customerId: string; onClose: 
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
         <p className="text-sm text-slate-600">For corrections or goodwill credit. No money changes hands; the reason is recorded in the audit log.</p>
-        <Field label="Change"><Select value={dir} onChange={(e) => setDir(e.target.value as typeof dir)}><option value="add">Add to balance</option><option value="remove">Remove from balance</option></Select></Field>
+        <Field label="Change"><Select value={dir} onChange={(e) => setDir(e.target.value as typeof dir)}>{!removeOnly && <option value="add">Add to balance</option>}<option value="remove">Remove from balance</option></Select></Field>
         <Field label="Amount (₹)" required><Input inputMode="decimal" required value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} /></Field>
         <Field label="Reason" required><Input required minLength={8} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Goodwill for late delivery" /></Field>
         <div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={saving} disabled={!Number(amount) || reason.trim().length < 8}>Save adjustment</Button></div>

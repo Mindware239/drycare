@@ -13,6 +13,7 @@ import { audit, emit } from "../lib/audit";
 import { badRequest, conflict, forbidden, notFound, unprocessable } from "../lib/errors";
 import { nextNumber, pad } from "../lib/sequences";
 import { walletEntry } from "../lib/wallet";
+import { requireFeature } from "../lib/entitlements";
 import { assertDrawerCash, openShiftFor } from "./payments";
 
 const uuid = z.uuid();
@@ -177,6 +178,7 @@ export async function claimRoutes(app: FastifyInstance) {
     if (!can(auth, "payments.refund")) throw forbidden("Only a manager can approve or reject a claim");
     const { id } = z.object({ id: uuid }).parse(req.params);
     const body = claimDecisionSchema.parse(req.body);
+    if (body.outcome === "approve" && body.resolution === "wallet_credit") await requireFeature(auth.orgId, "wallet");
     await db.transaction(async (tx) => {
       const c = await lockClaim(tx, auth, id);
       if (c.status !== "open" && c.status !== "investigating") throw conflict("This claim has already been decided");

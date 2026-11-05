@@ -15,6 +15,7 @@ import {
   LoaderCircle,
   LogOut,
   Menu,
+  Printer,
   Repeat,
   Receipt,
   Settings,
@@ -51,7 +52,10 @@ const NAV: { section: string; items: { href: string; label: string; icon: Lucide
   },
   {
     section: "Software",
-    items: [{ href: "/super-admin/licenses", label: "Licenses & releases", icon: KeyRound }],
+    items: [
+      { href: "/super-admin/licenses", label: "Licenses & releases", icon: KeyRound },
+      { href: "/super-admin/hardware", label: "Printers & scanners", icon: Printer },
+    ],
   },
   {
     section: "Administration",

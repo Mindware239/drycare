@@ -6,6 +6,29 @@ Last updated: 29 Oct 2026 · Source documents: *DRYCARE-SRS-001 v1.0*, *Complete
 
 **Legend:** ✅ Done & tested · 🟡 Partial (works, but missing pieces listed) · ⬜ Not started
 
+## Plan features, super admin control, approved hardware, customer memberships (5 Nov 2026): not deployed
+
+Migration `0030_plan_features_memberships` is additive; the dev DB was backed up first to `.local/backups/before-0030-*.sql`. Test with `pnpm features-test`.
+
+- **One feature list:** `packages/shared/src/features.ts`. The Plans screen used different names from the saved plans (`garment_tracking` vs `garmentTracking`), so its ticks did not reflect the plan and saving erased the real values. Saving now merges, so entries like `cloudSync` are kept.
+- **Enforced on the server** (`lib/entitlements.ts`), the screens only hide: tag designer, customer memberships, pickup & delivery, stock & purchasing, self-service laundry, marketing campaigns, online booking. Trial = everything. Exceptions per shop are in `organizations.feature_overrides_json`, outside the `settings` shop owners can edit.
+- **Starter** has no tag designer, memberships, stock, laundry or campaigns. It prints the ready-made 38 × 30 mm taffeta tag (line or QR); custom designs are kept, unused, and return on an upgrade.
+- **Super admin:** Customers → open a shop → *Features for this shop* and *Manage plan* (renew, change, cancel, without a payment record). *Printers & scanners* sets the approved models.
+- **PC edition:** works offline, so features and approved hardware are signed into the license key. Keys issued earlier keep full access. Licenses → *Renew* issues a new key for the same PCs. Changes reach a PC only through a new key, and needs this new app version installed.
+- **Approved hardware:** printers are enforced in the PC edition. Scanners are shown but cannot be enforced, as a USB scanner types like a keyboard. The browser print dialog cannot be limited.
+- **Customer memberships:** Memberships screen (plans, members) and a Membership tab on each customer. The fee counts in collections and the drawer like a wallet top-up. Discounts do not add up: the customer gets the better one.
+
+**Added the same day** (migration `0031_plan_limits_membership_invoices`, backup `.local/backups/before-0031-*.sql`):
+
+- **Branch limit:** enforced when adding or reopening a branch. Branches already open are never closed. Super admin can allow more for one shop. The PC edition reads it from the key.
+- **PC limit:** enforced when issuing or renewing a key, counting every key of that customer still in force. Super admin can knowingly allow more. It cannot be enforced on a PC that is already activated.
+- **Wallet:** without it a shop cannot add money or give wallet compensation, but customers can always spend an existing balance and the shop can settle it.
+- **Advanced reports:** 10 reports need it. Daily sales, GST summary, day book, payment methods, expenses, dues and garments pending are in every plan.
+- **SMS / WhatsApp:** without it, customers get updates by email if they have one. No provider is connected, so neither is actually sent by SMS or WhatsApp yet, on any plan.
+- **Membership invoice:** each paid sale gets a number (`M2627-000001`, a shop-wide series per financial year) and a printable tax invoice, or a receipt when no GST applies. The plan sets the GST included in the price. A shop with no GSTIN charges none. Sales are included in the GST summary.
+
+**Still open:** connect an SMS / WhatsApp provider (needs the owner's account). An accountant should confirm the GST rate and treatment of membership fees, including cancelled ones, as no credit note is issued. The public pricing page and the saved plans disagree: Starter ₹1,499 vs ₹999, Growth ₹2,499 vs ₹1,999, and pickup & delivery is "No" for Starter on the page but on in the saved plan.
+
 ## Production-readiness fixes and audit (29 Oct 2026, v0.1.9): not deployed
 
 See [DESKTOP_CLOUD_PLAN.md §9](./DESKTOP_CLOUD_PLAN.md). Migration `0029_staged_commit` is additive; the dev DB was backed up first.
@@ -178,7 +201,7 @@ Latest verification (27 Oct 2026): `pnpm typecheck`, `pnpm test` (24 tests), `pn
 | FR-TEN-006 permission-aware reporting | ✅ | Branch-restricted staff only see their branches |
 
 ### 6.3 Customers — FR-CRM-001…009
-All ✅ (create/update, search by ID/phone/email/name/order no., configurable phone/email duplicate matching, history, GSTIN, editable addresses, marketing consent separate from operational channel, branch and financial permission scoping, no hard delete — inactive/merged instead, audited merge). Loyalty or membership rewards are not supported by the current data model.
+All ✅ (create/update, search by ID/phone/email/name/order no., configurable phone/email duplicate matching, history, GSTIN, editable addresses, marketing consent separate from operational channel, branch and financial permission scoping, no hard delete — inactive/merged instead, audited merge). Paid customer memberships with an automatic discount were added on 5 Nov 2026; loyalty points are not supported.
 
 ### 6.4 Catalogue & pricing — FR-CAT-001…007
 All ✅. Includes service categories, searchable garment/service listings, branch price lists, effective dates, and price history. Units: per piece / pair / kg / package. Price edits close the old row and insert a new one, so old orders never change (verified in smoke test). Overrides need `prices.override` + reason. Discounts above the configurable limit need `discounts.approve`.
@@ -232,7 +255,7 @@ Owner-managed campaigns at `/campaigns` support drafts, recipient previews, sche
 ### 6.14 Reports — FR-REP-001…006 ✅ (staff-performance and inventory reports ⬜; PDF export ⬜, CSV ✅)
 
 ### 6.15 SaaS subscriptions — FR-SAAS-001…007 ⬜
-Tenant status (trial/active/suspended) exists and suspended tenants are blocked; plans, entitlements and billing are not built.
+Tenant status (trial/active/suspended) exists and suspended tenants are blocked. Plans, billing and feature limits are built; see the 5 Nov 2026 section above.
 
 ### 6.16 Audit — FR-AUD-001…005
 ✅ Audit events with actor, IP, request ID, before/after. **Database triggers block UPDATE/DELETE** on audit logs, garment history, inspections, payment allocations, invoice items; payment amounts are immutable. Logs redact cookies and passwords. Retention/export policies ⬜.
