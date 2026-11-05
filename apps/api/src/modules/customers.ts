@@ -263,7 +263,7 @@ export async function customerRoutes(app: FastifyInstance) {
     const { customerId } = idParam.parse(req.params);
     await getCustomer(auth.orgId, customerId);
     const garments = await db.execute(sql`
-      select g.id, g.tag_code, g.scan_code, g.current_status, g.created_at, g.updated_at, g.delivered_at,
+      select g.id, g.tag_code, g.scan_code, (select t.epc from rfid_tags t where t.garment_id = g.id) as rfid, g.current_status, g.created_at, g.updated_at, g.delivered_at,
              o.id as order_id, o.order_number, o.received_at,
              oi.garment_type_name, oi.service_name, oi.unit_price, oi.quantity, oi.colour, oi.brand
       from garments g

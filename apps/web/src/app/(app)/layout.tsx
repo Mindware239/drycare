@@ -169,7 +169,7 @@ function Shell({ children }: { children: ReactNode }) {
     if (!value) return;
     const openLabel = (code: string) => router.push(can("garments.process") ? `/scan?tag=${encodeURIComponent(code)}` : `/tags/view?code=${encodeURIComponent(code)}`);
     // A number could be a barcode or a phone number: a barcode wins, otherwise it is a customer search.
-    if (/^\d{4,18}$/.test(value) && can("orders.read") && (await api(`/scan/resolve?code=${value}`).then(() => true, () => false))) {
+    if ((/^\d{4,18}$/.test(value) || /^[0-9A-F]{8,64}$/i.test(value)) && can("orders.read") && (await api(`/scan/resolve?code=${encodeURIComponent(value)}`).then(() => true, () => false))) {
       openLabel(value);
       setQuery("");
       return;
@@ -321,7 +321,7 @@ function Shell({ children }: { children: ReactNode }) {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              ref={searchRef} placeholder="Search customer, phone, order or tag number"
+              ref={searchRef} placeholder="Search customer, phone, order, tag or RFID"
               className={cx("h-10 w-full rounded-full border py-2 pl-9 pr-16 text-sm focus:border-[#3cbf5a] focus:outline-none focus:ring-4 focus:ring-[#3cbf5a]/25", "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500")}
               aria-label="Global search"
               aria-keyshortcuts="Control+K"

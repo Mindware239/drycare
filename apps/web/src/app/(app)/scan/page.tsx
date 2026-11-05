@@ -31,6 +31,7 @@ function ScanInner() {
   const [reworkReason, setReworkReason] = useState("");
   const [locationId, setLocationId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const opened = useRef("");
   // The record shown under the scan. The count fetches it again after each change, so the history stays current.
   const [traced, setTraced] = useState<{ code: string; n: number } | null>(null);
   const trace = useApi<TagTraceData>(traced ? `/tags/trace?code=${encodeURIComponent(traced.code)}&n=${traced.n}` : null);
@@ -89,7 +90,8 @@ function ScanInner() {
 
   useEffect(() => {
     const t = params.get("tag");
-    if (t) lookup(t, false);
+    // Once per tag in the address: React repeats this on the dev server, and each lookup writes to the garment's history.
+    if (t && opened.current !== t) { opened.current = t; lookup(t, false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -150,7 +152,7 @@ function ScanInner() {
       </Card>
 
       {g && (
-        <div className="mt-5 grid gap-5 lg:grid-cols-3">
+        <div className="mt-5 grid gap-5 lg:grid-cols-3 [&>*]:min-w-0">
           <div className="space-y-5 lg:col-span-2">
             <Card
               title={
@@ -248,7 +250,7 @@ function ScanInner() {
             )}
             {g.currentStatus === "quality_control" && !can("qc.approve") && <Alert tone="amber">Waiting for a quality inspector.</Alert>}
 
-            {["packing", "ready"].includes(g.currentStatus) && (
+            {(["packing", "ready"].includes(g.currentStatus) || g.allowed.some((a: any) => a.to === "ready")) && (
               <Card title="Rack / storage location">
                 <div className="flex flex-wrap items-end gap-2">
                   <Field label="Location" className="w-48">
@@ -303,7 +305,7 @@ function ScanInner() {
       )}
       {traced && trace.error && <div className="mt-5"><Alert>{trace.error.message}</Alert></div>}
       {trace.data && (!g || trace.data.label.id === g.id) && traced && (
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-3">
+        <div className="mt-5 grid items-start gap-5 lg:grid-cols-3 [&>*]:min-w-0">
           <div className={g ? "lg:col-span-3" : "lg:col-span-2"}><TagRecord data={trace.data} /></div>
           {!g && <TagTimeline data={trace.data} />}
         </div>

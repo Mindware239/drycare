@@ -16,7 +16,7 @@ function TagView() {
       <Link href="/tags" className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"><ArrowLeft className="h-4 w-4" />All tags</Link>
       {error && <Alert>{error.message}</Alert>}
       {!data && !error ? <Spinner /> : data && (
-        <div className="grid items-start gap-5 xl:grid-cols-3">
+        <div className="grid items-start gap-5 xl:grid-cols-3 [&>*]:min-w-0">
           <div className="xl:col-span-2"><TagRecord data={data} /></div>
           <TagTimeline data={data} />
         </div>

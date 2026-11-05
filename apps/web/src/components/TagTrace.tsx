@@ -8,6 +8,7 @@ import { Badge, Card, StageBadge, Table, Td, cx } from "@/components/ui";
 export type TagTraceData = {
   kind: "garment" | "bag";
   label: { id: string; scanCode: string; code: string };
+  rfid?: { epc: string | null; lastSeen: { at: string; notes: string | null; actor: string | null } | null } | null;
   customer?: { id: string; name: string; code: string | null; phone: string | null };
   membership: { planName: string; discountBps: number; freeExpress: boolean; perks: string[]; endsAt: string } | null;
   order: { id: string; orderNumber: string; status: string; receivedAt: string; promisedAt: string; express: boolean; branchName: string | null; branchCode: string | null; createdBy: string | null; invoiceNumber: string | null; total?: number; paid?: number; credits?: number; balance?: number; discount?: number };
@@ -97,6 +98,8 @@ export function TagRecord({ data }: { data: TagTraceData }) {
             <Fact label="Label">{data.kind === "bag" ? "Bag label" : "Garment tag"}</Fact>
             <Fact label="Full number"><span className="font-mono text-xs">{data.label.code}</span></Fact>
             <Fact label="Store code"><span className="font-mono text-xs">{order.branchCode ?? "—"}</span></Fact>
+            {data.rfid?.epc && <Fact label="RFID tag"><span className="break-all font-mono text-xs">{data.rfid.epc}</span></Fact>}
+            {data.rfid?.lastSeen && <Fact label="Last seen">{dateTime(data.rfid.lastSeen.at)}{data.rfid.lastSeen.notes ? ` · ${data.rfid.lastSeen.notes}` : ""}</Fact>}
           </dl>
         </Card>
         <Card title="Customer">

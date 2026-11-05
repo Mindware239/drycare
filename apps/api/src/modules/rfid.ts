@@ -28,11 +28,11 @@ async function logEvent(tx: DbOrTx, auth: AuthContext, entry: { epc: string; act
 /** What a set of tag numbers stands for right now, in the order they were read. */
 async function describe(auth: AuthContext, epcs: string[]) {
   const unique = [...new Set(epcs)];
-  const rows = await db.execute<{ epc: string; status: string; garmentId: string | null; tagCode: string | null; scanCode: string | null; stage: string | null; garment: string | null; service: string | null; orderId: string | null; orderNumber: string | null; customerId: string | null; customerName: string | null; branchId: string | null }>(sql`
-    select t.epc, t.status, g.id as "garmentId", g.tag_code as "tagCode", g.scan_code as "scanCode", g.current_status as stage,
+  const rows = await db.execute<{ epc: string; status: string; garmentId: string | null; tagCode: string | null; scanCode: string | null; stage: string | null; version: number | null; workflowStages: string[] | null; location: string | null; rack: string | null; garment: string | null; service: string | null; orderId: string | null; orderNumber: string | null; customerId: string | null; customerName: string | null; branchId: string | null }>(sql`
+    select t.epc, t.status, g.id as "garmentId", g.tag_code as "tagCode", g.scan_code as "scanCode", g.current_status as stage, g.version, g.workflow_stages as "workflowStages", g.location, sl.code as rack,
            oi.garment_type_name as garment, oi.service_name as service, o.id as "orderId", o.order_number as "orderNumber", c.id as "customerId", c.name as "customerName", o.branch_id as "branchId"
     from rfid_tags t
-    left join garments g on g.id = t.garment_id left join order_items oi on oi.id = g.order_item_id left join orders o on o.id = g.order_id left join customers c on c.id = o.customer_id
+    left join garments g on g.id = t.garment_id left join order_items oi on oi.id = g.order_item_id left join orders o on o.id = g.order_id left join customers c on c.id = o.customer_id left join storage_locations sl on sl.id = g.storage_location_id
     where t.organization_id = ${auth.orgId} and t.epc = any(${`{${unique.join(",")}}`}::text[])`);
   const byEpc = new Map(rows.map((r) => [r.epc, r]));
   return unique.map((epc) => {
@@ -43,8 +43,27 @@ async function describe(auth: AuthContext, epcs: string[]) {
     if (r.status === "retired") return { epc, state: "retired" as const };
     if (!r.garmentId) return { epc, state: "free" as const };
     if (elsewhere) return { epc, state: "elsewhere" as const };
-    return { epc, state: "linked" as const, garmentId: r.garmentId, tagCode: r.tagCode, scanCode: r.scanCode, stage: r.stage, garment: r.garment, service: r.service, orderId: r.orderId, orderNumber: r.orderNumber, customerId: r.customerId, customerName: r.customerName };
+    return { epc, state: "linked" as const, garmentId: r.garmentId, tagCode: r.tagCode, scanCode: r.scanCode, stage: r.stage, version: r.version, workflowStages: r.workflowStages, location: r.location, rack: r.rack, garment: r.garment, service: r.service, orderId: r.orderId, orderNumber: r.orderNumber, customerId: r.customerId, customerName: r.customerName };
   });
+}
+
+const stockScope = z.object({ branchId: z.uuid().optional(), place: z.enum(["shop", "facility", "all"]).default("shop"), rackId: z.uuid().optional() });
+
+/** Garments in the shop's care that should be in this place, with their tags and where they were last seen. */
+async function expectedGarments(auth: AuthContext, q: z.infer<typeof stockScope>) {
+  if (q.branchId) assertBranchAccess(auth, q.branchId);
+  const locations = q.place === "shop" ? ["shop_counter", "shop_storage"] : q.place === "facility" ? ["at_facility"] : ["shop_counter", "shop_storage", "at_facility", "in_transit_to_facility", "in_transit_to_shop"];
+  return db.execute<{ epc: string | null; garmentId: string; scanCode: string; tagCode: string; stage: string; garment: string; customerName: string; orderId: string; orderNumber: string; rack: string | null; lastSeenAt: Date | null; lastSeenPlace: string | null }>(sql`
+    select t.epc, g.id as "garmentId", g.scan_code as "scanCode", g.tag_code as "tagCode", g.current_status as stage, oi.garment_type_name as garment, c.name as "customerName",
+           o.id as "orderId", o.order_number as "orderNumber", sl.code as rack, seen.occurred_at as "lastSeenAt", seen.notes as "lastSeenPlace"
+    from garments g
+    join orders o on o.id = g.order_id join customers c on c.id = o.customer_id join order_items oi on oi.id = g.order_item_id
+    left join rfid_tags t on t.garment_id = g.id left join storage_locations sl on sl.id = g.storage_location_id
+    left join lateral (select e.occurred_at, e.notes from rfid_events e where e.garment_id = g.id and e.action = 'read' order by e.occurred_at desc limit 1) seen on true
+    where g.organization_id = ${auth.orgId} and g.current_status not in ('delivered', 'cancelled', 'dispatched') and g.location = any(${`{${locations.join(",")}}`}::text[])
+      ${q.branchId ? sql`and g.current_branch_id = ${q.branchId}` : auth.branchIds.length ? sql`and g.current_branch_id = any(${`{${auth.branchIds.join(",")}}`}::uuid[])` : sql``}
+      ${q.rackId ? sql`and g.storage_location_id = ${q.rackId}` : sql``}
+    order by g.tag_code limit 5000`);
 }
 
 export async function rfidRoutes(app: FastifyInstance) {
@@ -165,10 +184,11 @@ export async function rfidRoutes(app: FastifyInstance) {
   /** Tracking: what each tag read is on. Each read is recorded, so a garment's history shows where it was seen. */
   app.post("/rfid/read", async (req) => {
     const auth = requirePermission(req, "orders.read");
-    const { epcs, place } = z.object({ epcs: epcList, place: z.string().trim().max(60).optional() }).parse(req.body);
+    // Silent: the screen is only refreshing what it already read, so it is not a new sighting.
+    const { epcs, place, silent } = z.object({ epcs: epcList, place: z.string().trim().max(60).optional(), silent: z.boolean().default(false) }).parse(req.body);
     const items = await describe(auth, epcs);
     const seen = items.filter((i) => i.state === "linked");
-    if (seen.length) await db.insert(schema.rfidEvents).values(seen.map((i) => ({ organizationId: auth.orgId, epc: i.epc, action: "read", garmentId: i.garmentId, notes: place || null, actorUserId: auth.userId })));
+    if (seen.length && !silent) await db.insert(schema.rfidEvents).values(seen.map((i) => ({ organizationId: auth.orgId, epc: i.epc, action: "read", garmentId: i.garmentId, notes: place || null, actorUserId: auth.userId })));
     return { items };
   });
 
@@ -200,6 +220,33 @@ export async function rfidRoutes(app: FastifyInstance) {
       };
     })) : [];
     return { orders, others: items.filter((i) => i.state !== "linked") };
+  });
+
+  /** How many tagged garments should be in a place, and how many cannot be counted because they have no tag. */
+  app.get("/rfid/expected", async (req) => {
+    const auth = requirePermission(req, "orders.read");
+    const q = stockScope.parse(req.query);
+    const rows = await expectedGarments(auth, q);
+    return { expected: rows.filter((g) => g.epc).length, untagged: rows.filter((g) => !g.epc).length };
+  });
+
+  /** A stock count: compares the tags read with what should be there, and records each sighting. */
+  app.post("/rfid/stock-check", async (req) => {
+    const auth = requirePermission(req, "orders.read");
+    const body = stockScope.extend({ epcs: z.array(epcField).max(5000) }).parse(req.body);
+    const rows = await expectedGarments(auth, body);
+    const expected = rows.filter((g) => g.epc);
+    const read = new Set(body.epcs);
+    const expectedEpcs = new Set(expected.map((g) => g.epc));
+    const found = expected.filter((g) => read.has(g.epc!));
+    const others = [...read].filter((epc) => !expectedEpcs.has(epc));
+    const unexpected = others.length ? await describe(auth, others) : [];
+    const where = body.place === "facility" ? "Stock check, facility" : body.place === "shop" ? "Stock check, shop" : "Stock check";
+    await db.transaction(async (tx) => {
+      if (found.length) await tx.insert(schema.rfidEvents).values(found.map((g) => ({ organizationId: auth.orgId, epc: g.epc!, action: "read", garmentId: g.garmentId, notes: where, actorUserId: auth.userId })));
+      await audit(tx, req, { action: "rfid.stock_check", resourceType: "organization", resourceId: auth.orgId, after: { place: body.place, rackId: body.rackId, expected: expected.length, found: found.length, missing: expected.length - found.length, unexpected: unexpected.length } });
+    });
+    return { expected: expected.length, found: found.length, untagged: rows.length - expected.length, missing: expected.filter((g) => !read.has(g.epc!)), unexpected };
   });
 
   /** Garments of an order still without a tag, so the link screen can move on to the next one by itself. */

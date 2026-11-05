@@ -239,7 +239,7 @@ function OrderInner() {
             </div>
             <div className="flex flex-col items-end gap-2">
               <a href={`/print/labels?id=${o.id}`} target="_blank" rel="noreferrer"><Button><Tags className="h-4 w-4" />Print bag label & {o.garments.length} tags</Button></a>
-              {has("rfid") && <Link href={`/rfid?order=${encodeURIComponent(o.orderNumber)}`}><Button variant="secondary">Link RFID tags</Button></Link>}
+              {has("rfid") && <Link href={`/rfid?order=${encodeURIComponent(o.orderNumber)}`}><Button variant="secondary">Link RFID tags ({o.garments.filter((g: any) => g.rfid).length} of {o.garments.length})</Button></Link>}
               <span className="text-xs text-emerald-900">Labels: {lastPrint ? <Badge color={lastPrint.status === "printed" ? "green" : lastPrint.status === "failed" ? "red" : "amber"}>{lastPrint.status}</Badge> : <Badge color="amber">not printed yet</Badge>}</span>
             </div>
           </div>
@@ -348,12 +348,13 @@ function OrderInner() {
             padded={false}
           >
             <div className="hidden overflow-x-auto md:block">
-              <Table head={["Barcode", "Tag", "Garment", "Service", "Stage", "Where", "Rack", ""]}>
+              <Table head={["Barcode", ...(has("rfid") ? ["RFID"] : []), "Tag", "Garment", "Service", "Stage", "Where", "Rack", ""]}>
                 {o.garments.map((g: any) => {
                   const it = itemById(g.orderItemId);
                   return (
                     <tr key={g.id} className="transition hover:bg-slate-50/70">
                       <Td className="font-mono font-semibold"><Link href={`/tags/view?code=${g.scanCode}`} className="hover:text-brand-700">{g.scanCode}</Link></Td>
+                      {has("rfid") && <Td className="font-mono text-xs">{g.rfid ? <span title={g.rfid}>…{g.rfid.slice(-8)}</span> : <Link href={`/rfid?order=${encodeURIComponent(o.orderNumber)}`} className="font-sans font-medium text-amber-700 hover:underline">Link</Link>}</Td>}
                       <Td className="font-mono text-xs text-slate-500">{g.tagCode}</Td>
                       <Td>
                         <span className="font-medium text-slate-800">{it?.garmentTypeName}</span>

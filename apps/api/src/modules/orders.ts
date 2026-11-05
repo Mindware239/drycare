@@ -150,6 +150,7 @@ export async function getOrderDetail(tx: DbOrTx, orgId: string, orderId: string)
         id: schema.garments.id,
         tagCode: schema.garments.tagCode,
         scanCode: schema.garments.scanCode,
+        rfid: schema.rfidTags.epc,
         tagVersion: schema.garments.tagVersion,
         orderItemId: schema.garments.orderItemId,
         currentStatus: schema.garments.currentStatus,
@@ -163,6 +164,7 @@ export async function getOrderDetail(tx: DbOrTx, orgId: string, orderId: string)
       })
       .from(schema.garments)
       .leftJoin(schema.storageLocations, eq(schema.storageLocations.id, schema.garments.storageLocationId))
+      .leftJoin(schema.rfidTags, eq(schema.rfidTags.garmentId, schema.garments.id))
       .where(eq(schema.garments.orderId, order.id))
       .orderBy(asc(schema.garments.tagCode)),
     tx.query.invoices.findFirst({ where: eq(schema.invoices.orderId, order.id) }),

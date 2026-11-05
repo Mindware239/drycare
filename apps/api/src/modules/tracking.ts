@@ -37,6 +37,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     const q = z.object({
       search: z.string().trim().max(80).default(""),
       status: z.enum(["all", "in_process", "ready", "delivered", "exception", "cancelled"]).default("all"),
+      rfid: z.enum(["all", "with", "without"]).default("all"),
       from: z.iso.date().optional(),
       to: z.iso.date().optional(),
       limit: z.coerce.number().int().min(1).max(5000).default(50),
@@ -46,7 +47,8 @@ export async function trackingRoutes(app: FastifyInstance) {
     const digits = q.search.replace(/\D/g, "");
     const conditions = sql`g.organization_id = ${auth.orgId}
       ${auth.branchIds.length ? sql`and o.branch_id = any(${uuidList(auth.branchIds)}::uuid[])` : sql``}
-      ${q.search ? sql`and (g.scan_code ilike ${term} or g.tag_code ilike ${term} or o.order_number ilike ${term} or c.name ilike ${term} or oi.garment_type_name ilike ${term}
+      ${q.rfid === "with" ? sql`and rt.epc is not null` : q.rfid === "without" ? sql`and rt.epc is null` : sql``}
+      ${q.search ? sql`and (rt.epc ilike ${term} or g.scan_code ilike ${term} or g.tag_code ilike ${term} or o.order_number ilike ${term} or c.name ilike ${term} or oi.garment_type_name ilike ${term}
         ${digits.length >= 3 ? sql`or c.phone_normalized like ${`%${digits}%`}` : sql``})` : sql``}
       ${q.from ? sql`and g.created_at >= (${q.from}::date)::timestamp at time zone 'Asia/Kolkata'` : sql``}
       ${q.to ? sql`and g.created_at < ((${q.to}::date) + 1)::timestamp at time zone 'Asia/Kolkata'` : sql``}`;
@@ -56,18 +58,21 @@ export async function trackingRoutes(app: FastifyInstance) {
     const from = sql`from garments g
       join orders o on o.id = g.order_id
       join customers c on c.id = o.customer_id
-      join order_items oi on oi.id = g.order_item_id`;
+      join order_items oi on oi.id = g.order_item_id
+      left join rfid_tags rt on rt.garment_id = g.id`;
     // What one piece was charged: the line's total shared across the pieces still on it.
     const charge = sql`case when g.current_status = 'cancelled' then 0 else round(oi.line_total::numeric / greatest((select count(*) from garments x where x.order_item_id = g.order_item_id and x.current_status <> 'cancelled'), 1)) end`;
     const [rows, [summary]] = await Promise.all([
       db.execute(sql`
         select g.id, g.scan_code as "scanCode", g.tag_code as "tagCode", g.current_status as status, g.location, g.created_at as "createdAt", g.delivered_at as "deliveredAt",
                o.id as "orderId", o.order_number as "orderNumber", c.id as "customerId", c.name as "customerName", ${can(auth, "customers.read") ? sql`c.phone` : sql`null`} as "customerPhone",
-               oi.garment_type_name as garment, oi.service_name as service, oi.colour, sl.code as rack,
+               oi.garment_type_name as garment, oi.service_name as service, oi.colour, sl.code as rack, rt.epc as rfid,
+               seen.occurred_at as "lastSeenAt", seen.notes as "lastSeenPlace",
                ${seesMoney(auth) ? charge : sql`null`} as charge,
                (select count(*)::int from label_print_jobs j where j.order_id = g.order_id and j.status = 'printed'
                   and (j.scope = 'all' or (j.scope = 'garments' and (j.garment_ids is null or j.garment_ids ? g.id::text)))) as "printCount"
         ${from} left join storage_locations sl on sl.id = g.storage_location_id
+        left join lateral (select e.occurred_at, e.notes from rfid_events e where e.garment_id = g.id and e.action = 'read' order by e.occurred_at desc limit 1) seen on true
         where ${conditions} ${statusFilter}
         order by g.created_at desc, g.scan_code desc
         limit ${q.limit} offset ${q.offset}`),
@@ -77,6 +82,7 @@ export async function trackingRoutes(app: FastifyInstance) {
                count(*) filter (where g.current_status = 'ready')::int as ready,
                count(*) filter (where g.current_status = 'delivered')::int as delivered,
                count(*) filter (where g.current_status = 'exception')::int as exception,
+               count(rt.epc)::int as "withRfid",
                ${seesMoney(auth) ? sql`coalesce(sum(${charge}), 0)` : sql`null`} as sales
         ${from} where ${conditions}`),
     ]);
@@ -151,6 +157,10 @@ export async function trackingRoutes(app: FastifyInstance) {
     return {
       kind: garment ? "garment" : "bag",
       label: garment ? { id: garment.id, scanCode: garment.scanCode, code: garment.tagCode } : { id: bag!.id, scanCode: bag!.scanCode, code: bag!.bagCode },
+      rfid: garment ? {
+        epc: (tags as unknown as { id: string; rfid: string | null }[]).find((t) => t.id === garment.id)?.rfid ?? null,
+        lastSeen: rfid.find((e) => e.action === "read") ?? null,
+      } : null,
       customer: customer && { id: customer.id, name: customer.name, code: customer.customerCode, phone: can(auth, "customers.read") ? customer.phone : null },
       membership: member ? { planName: member.planName, discountBps: member.discountBps, freeExpress: member.freeExpress, perks: member.perks, endsAt: member.endsAt } : null,
       order: {

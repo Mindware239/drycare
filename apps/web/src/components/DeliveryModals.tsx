@@ -48,14 +48,12 @@ export function DispatchModal({ stop, onClose, onDone }: { stop: any; onClose: (
     e.preventDefault();
     const typed = expandScanCode(code);
     // A barcode holds a number: match it to the tag it was printed for. Older tags hold a longer one.
-    const t = items.find((i) => i.scan_code === typed || numericScanCode(i.tag_code) === typed)?.tag_code ?? typed;
+    const t = items.find((i) => i.scan_code === typed || i.rfid === typed || numericScanCode(i.tag_code) === typed)?.tag_code ?? typed;
     setCode("");
     if (!t) return;
     if (!items.some((i) => i.tag_code === t)) setErr(`${t} is not part of this delivery — keep it out of the bag.`);
-    else {
-      setErr("");
-      setScanned((s) => (s.includes(t) ? s : [...s, t]));
-    }
+    // A wrong garment's warning stays up: a handheld's next read follows within milliseconds.
+    else setScanned((s) => (s.includes(t) ? s : [...s, t]));
     input.current?.focus();
   }
 
@@ -91,7 +89,7 @@ export function DispatchModal({ stop, onClose, onDone }: { stop: any; onClose: (
         <>
           <p className="text-sm text-slate-600">Scan every garment tag as you put it in the bag.</p>
           <form onSubmit={scan}>
-            <Input ref={input} autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="Scan tag…" className="font-mono" />
+            <Input ref={input} autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="Scan the barcode or read the RFID tag…" aria-label="Scan tag" className="font-mono" />
           </form>
           <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm">
             {items.map((i) => (

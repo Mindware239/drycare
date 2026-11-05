@@ -2,7 +2,7 @@
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Circle, CircleAlert, Copy, PackageCheck, ScanLine, Send, Trash2, XCircle } from "lucide-react";
-import { LOCATION_LABELS, expandScanCode, type GarmentLocation } from "@drycare/shared";
+import { LOCATION_LABELS, expandScanCode, normalizeEpc, type GarmentLocation } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { dateTime } from "@/lib/format";
@@ -24,7 +24,6 @@ function TransferInner() {
   const { can } = useSession();
   const batch = useApi<any>(id ? `/transfers/${id}` : null);
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
   const [feed, setFeed] = useState<ScanResult[]>([]);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState<null | "dispatch" | "receive" | "partial">(null);
@@ -32,6 +31,9 @@ function TransferInner() {
   const [acting, setActing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastScan = useRef<{ code: string; at: number }>({ code: "", at: 0 });
+  const queue = useRef<string[]>([]);
+  const draining = useRef(false);
+  const readTags = useRef(new Set<string>());
 
   const b = batch.data;
   const open = b && (b.status === "draft" || b.status === "dispatched");
@@ -41,26 +43,44 @@ function TransferInner() {
   // Loading and receiving are separate checks; start each with an empty scan feed.
   useEffect(() => setFeed([]), [b?.status]);
 
-  async function submitScan(event: FormEvent) {
-    event.preventDefault();
-    const value = expandScanCode(code);
-    if (!value || busy) return;
-    // Some scanners send the code twice or an extra Enter; ignore an identical scan within 800 ms.
-    if (lastScan.current.code === value && Date.now() - lastScan.current.at < 800) return setCode("");
-    lastScan.current = { code: value, at: Date.now() };
-    setBusy(true);
+  /** Reads wait their turn, so a handheld's burst is never lost while one is being checked. */
+  async function drain() {
+    if (draining.current) return;
+    draining.current = true;
     setError("");
     try {
-      const r = await api<{ result: string; message: string }>(`/transfers/${id}/scan`, { body: { code: value } });
-      setFeed((f) => [{ ...r, at: Date.now() }, ...f].slice(0, 12));
+      while (queue.current.length) {
+        const value = queue.current.shift()!;
+        try {
+          const r = await api<{ result: string; message: string }>(`/transfers/${id}/scan`, { body: { code: value } });
+          setFeed((f) => [{ ...r, at: Date.now() }, ...f].slice(0, 12));
+        } catch (e) {
+          setError((e as ApiError).message);
+        }
+      }
       batch.reload();
-    } catch (e) {
-      setError((e as ApiError).message);
     } finally {
-      setCode("");
-      setBusy(false);
+      draining.current = false;
       inputRef.current?.focus();
     }
+  }
+
+  function submitScan(event: FormEvent) {
+    event.preventDefault();
+    const value = expandScanCode(code);
+    setCode("");
+    if (!value) return;
+    // Some scanners send the code twice or an extra Enter; ignore an identical scan within 800 ms.
+    if (lastScan.current.code === value && Date.now() - lastScan.current.at < 800) return;
+    lastScan.current = { code: value, at: Date.now() };
+    // Holding a handheld's trigger repeats each RFID tag for as long as it is held. Once per step is enough.
+    if (normalizeEpc(value) && !/^\d+$/.test(value)) {
+      const stepKey = `${b?.status}:${value}`;
+      if (readTags.current.has(stepKey)) return;
+      readTags.current.add(stepKey);
+    }
+    queue.current.push(value);
+    void drain();
   }
 
   async function act() {
@@ -136,7 +156,8 @@ function TransferInner() {
                   <ScanLine className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <Input ref={inputRef} value={code} onChange={(e) => setCode(e.target.value)} placeholder={step === "dispatch" ? "Scan a bag label, then each garment tag" : "Scan each garment tag as it is unpacked"} className="h-14 pl-12 font-mono text-lg" aria-label="Scan barcode" autoComplete="off" />
                 </label>
-                <Button type="submit" size="lg" className="h-14" loading={busy}>Enter</Button>
+                {/* Stays enabled while reads are checked: browsers ignore the Enter key when a form's button is disabled. */}
+                <Button type="submit" size="lg" className="h-14">Enter</Button>
               </form>
               <p className="mt-2 text-xs text-slate-500">
                 {step === "dispatch"
