@@ -37,7 +37,7 @@ export function OnlineBookingSettings({ onClose }: { onClose: () => void }) {
       {error && <Alert>{error.message}</Alert>}
       {!s || !data ? null : (
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">Customers open your booking page, choose a day and time, and the request appears here as a pickup marked “Online booking”.</p>
+          <p className="text-sm text-slate-600">Customers can request a pickup, view active membership plans and check their membership. Memberships must be bought or renewed at your shop.</p>
           {data.desktop && <Alert tone="amber">On the Windows app the page only works for devices on your shop network. Use Drycare Cloud for a public link.</Alert>}
           <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
             <span><span className="block text-sm font-semibold text-slate-900">Accept online pickup requests</span><span className="text-xs text-slate-500">You can switch it off any time.</span></span>

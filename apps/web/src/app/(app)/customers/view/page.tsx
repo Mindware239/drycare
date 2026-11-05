@@ -122,9 +122,10 @@ function CustomerProfileInner() {
         <Card padded={false}>
           {garments.error && <Alert>{garments.error.message}</Alert>}
           {!garments.data && !garments.error ? <Spinner /> : garments.data ? (
-            <Table head={["Tag", "Garment", "Service", "Order", "Received", "Colour", "Status", ...(c.financialVisible ? ["Charged"] : [])]}>
+            <Table head={["Barcode", "Tag", "Garment", "Service", "Order", "Received", "Colour", "Status", ...(c.financialVisible ? ["Charged"] : [])]}>
               {garments.data.map((g: any) => (
                 <tr key={g.id}>
+                  <Td className="font-mono font-semibold"><Link className="text-brand-700 hover:underline" href={`/tags/view?code=${g.scan_code}`}>{g.scan_code}</Link></Td>
                   <Td className="font-mono text-xs">{g.tag_code}</Td>
                   <Td className="font-medium">{g.garment_type_name}</Td>
                   <Td>{g.service_name}</Td>

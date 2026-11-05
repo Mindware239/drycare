@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { labelSettingsSchema } from "./schemas";
-import { branchCheck, compactTagCode, expandScanCode, isSampleScanNumber, numericScanCode, parseScanNumber } from "./scanCodes";
+import { branchCheck, digitsAsShortTag, sampleScanCode, compactTagCode, expandScanCode, isSampleScanNumber, numericScanCode, parseScanNumber } from "./scanCodes";
 import { buildTsplJob, bytesPerRow } from "./tspl";
 
 const text = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1");
@@ -52,6 +52,22 @@ describe("12-digit barcode numbers", () => {
   it("recognises sample tags", () => {
     expect(isSampleScanNumber(numericScanCode("NEWDEL-2026-00000-01"))).toBe(true);
     expect(isSampleScanNumber(numericScanCode("NEWDEL-2026-00001-01"))).toBe(false);
+    expect(isSampleScanNumber(sampleScanCode())).toBe(true);
+    expect(isSampleScanNumber(sampleScanCode(13))).toBe(true);
+    expect(isSampleScanNumber("000001")).toBe(false);
+  });
+  it("leaves a six-digit number exactly as it is", () => {
+    expect(numericScanCode("000123")).toBe("000123");
+    expect(expandScanCode(" 000123\r\n")).toBe("000123");
+  });
+  it("leaves a number of any length whole, however it looks", () => {
+    expect(expandScanCode("0000000000123")).toBe("0000000000123");
+    expect(expandScanCode("123456789012345678")).toBe("123456789012345678");
+  });
+  it("can still read an old tag from a branch whose code was all digits", () => {
+    expect(digitsAsShortTag("12260000101")).toBe("12-2026-00001-01");
+    expect(digitsAsShortTag("000123")).toBeNull();
+    expect(digitsAsShortTag("NEWDEL260000101")).toBeNull();
   });
 });
 

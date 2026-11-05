@@ -33,6 +33,7 @@ import { assertWritable } from "./lib/subscriptionAccess";
 import { assertFeatureAllowed } from "./lib/entitlements";
 import { platformEntitlementRoutes } from "./modules/platformEntitlements";
 import { membershipRoutes } from "./modules/memberships";
+import { trackingRoutes } from "./modules/tracking";
 import { logisticsRoutes } from "./modules/logistics";
 import { laundryRoutes } from "./modules/laundry";
 import { inventoryRoutes } from "./modules/inventory";
@@ -96,7 +97,8 @@ export async function buildServer() {
     if (err instanceof AppError) {
       return reply.code(err.statusCode).send({ error: { code: err.code, message: err.message, details: err.details, requestId } });
     }
-    const pgCode = (err as { code?: string }).code;
+    // Database errors arrive wrapped by the query builder.
+    const pgCode = (err as { code?: string }).code ?? (err as { cause?: { code?: string } }).cause?.code;
     if (pgCode === "23505") {
       return reply.code(409).send({ error: { code: "DUPLICATE", message: "This record already exists or the request was already processed.", details: [], requestId } });
     }
@@ -143,6 +145,7 @@ export async function buildServer() {
       await api.register(platformLicenseRoutes);
       await api.register(platformEntitlementRoutes);
       await api.register(membershipRoutes);
+      await api.register(trackingRoutes);
       await api.register(reportsCenterRoutes);
       await api.register(bookingRoutes);
       await api.register(walletRoutes);

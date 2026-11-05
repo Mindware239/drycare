@@ -347,11 +347,12 @@ function OrderInner() {
             padded={false}
           >
             <div className="hidden overflow-x-auto md:block">
-              <Table head={["Tag", "Garment", "Service", "Stage", "Where", "Rack", ""]}>
+              <Table head={["Barcode", "Tag", "Garment", "Service", "Stage", "Where", "Rack", ""]}>
                 {o.garments.map((g: any) => {
                   const it = itemById(g.orderItemId);
                   return (
                     <tr key={g.id} className="transition hover:bg-slate-50/70">
+                      <Td className="font-mono font-semibold"><Link href={`/tags/view?code=${g.scanCode}`} className="hover:text-brand-700">{g.scanCode}</Link></Td>
                       <Td className="font-mono text-xs text-slate-500">{g.tagCode}</Td>
                       <Td>
                         <span className="font-medium text-slate-800">{it?.garmentTypeName}</span>
@@ -380,7 +381,7 @@ function OrderInner() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-800">{it?.garmentTypeName}{it?.colour && <span className="font-normal text-slate-500"> · {it.colour}</span>}</p>
-                        <p className="mt-1 font-mono text-xs text-slate-500">{g.tagCode}</p>
+                        <p className="mt-1 font-mono text-xs text-slate-500">{g.scanCode} · {g.tagCode}</p>
                         <p className="mt-1 text-xs text-slate-500">{it?.serviceName}{g.storageLocation ? ` · Rack ${g.storageLocation}` : ""}</p>
                         <div className="mt-1"><LocationBadge location={g.location} /></div>
                       </div>
@@ -503,7 +504,7 @@ function OrderInner() {
               {(o.bags ?? []).map((b: any) => (
                 <li key={b.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <Package className="h-4 w-4 text-slate-400" />
-                  <span className="font-mono font-semibold text-slate-800">{b.bagCode}</span>
+                  <span className="font-mono font-semibold text-slate-800">{b.scanCode}</span> <span className="font-mono text-xs text-slate-500">{b.bagCode}</span>
                   <span className="text-slate-500">{b.garmentCount} garment{b.garmentCount === 1 ? "" : "s"}</span>
                   <LocationBadge location={b.location} />
                   <span className="ml-auto text-xs text-slate-500">{b.labelPrintCount > 0 ? `Label printed ${b.labelPrintCount}×` : "Label not printed"}</span>

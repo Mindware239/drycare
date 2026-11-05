@@ -20,7 +20,7 @@ import { db, schema, type DbOrTx, type Tx } from "../db/client";
 import { assertBranchAccess, can, requirePermission, type AuthContext } from "../lib/context";
 import { audit, emit } from "../lib/audit";
 import { AppError, badRequest, forbidden, notFound, unprocessable } from "../lib/errors";
-import { nextNumber, pad } from "../lib/sequences";
+import { nextNumber, nextTagScanCodes, pad } from "../lib/sequences";
 import { withIdempotency } from "../lib/idempotency";
 import { resolvePrice } from "./catalogue";
 import { invoiceCreditSql, invoicePaidSql, invoiceTotals } from "../lib/balances";
@@ -96,7 +96,7 @@ export async function buildQuote(tx: DbOrTx, auth: AuthContext, body: QuoteInput
     // The owner already approved the membership discount when setting up the plan, so only other discounts need this.
     throw forbidden(`Discounts above ${maxDiscount / 100}% need manager approval`);
   }
-  const surchargeBps = body.express ? (settings.expressSurchargeBps ?? 5000) : 0;
+  const surchargeBps = body.express && !member?.freeExpress ? (settings.expressSurchargeBps ?? 5000) : 0;
 
   const gtIds = [...new Set(body.items.map((i) => i.garmentTypeId))];
   const svcIds = [...new Set(body.items.map((i) => i.serviceId))];
@@ -147,6 +147,7 @@ export async function getOrderDetail(tx: DbOrTx, orgId: string, orderId: string)
       .select({
         id: schema.garments.id,
         tagCode: schema.garments.tagCode,
+        scanCode: schema.garments.scanCode,
         tagVersion: schema.garments.tagVersion,
         orderItemId: schema.garments.orderItemId,
         currentStatus: schema.garments.currentStatus,
@@ -194,7 +195,7 @@ export async function getOrderDetail(tx: DbOrTx, orgId: string, orderId: string)
     order by a.created_at, a.id`);
   const [bags, creditNotes, printJobs, exceptions] = await Promise.all([
     tx.execute(sql`
-      select b.id, b.bag_code as "bagCode", b.expected_count as "expectedCount", b.location, b.label_print_count as "labelPrintCount", b.created_at as "createdAt",
+      select b.id, b.bag_code as "bagCode", b.scan_code as "scanCode", b.expected_count as "expectedCount", b.location, b.label_print_count as "labelPrintCount", b.created_at as "createdAt",
              (select count(*)::int from garments g where g.bag_id = b.id and g.current_status <> 'cancelled') as "garmentCount"
       from bags b where b.order_id = ${order.id} order by b.bag_code`),
     invoice
@@ -251,7 +252,7 @@ export async function orderRoutes(app: FastifyInstance) {
       surchargeBps: q.surchargeBps,
       couponCode: q.coupon?.code ?? null,
       discountBps: q.discountBps,
-      membership: q.member ? { planName: q.member.planName, discountBps: q.member.discountBps, endsAt: q.member.endsAt, applied: q.memberApplied } : null,
+      membership: q.member ? { planName: q.member.planName, discountBps: q.member.discountBps, freeExpress: q.member.freeExpress, endsAt: q.member.endsAt, applied: q.memberApplied } : null,
       approvalsRequired: q.lines.reduce((count, line) => count + Number(line.item.specialCareApprovalRequired) + Number(
         line.item.overrideUnitPrice !== undefined && line.price && line.item.overrideUnitPrice > line.price.unitPrice,
       ), 0),
@@ -307,10 +308,14 @@ export async function orderRoutes(app: FastifyInstance) {
         })
         .returning();
 
+      // Keep the full code readable, but use a compact unique number for the barcode.
+      const pieceCount = quote.lines.reduce((total, l) => total + (l.svc.unitType === "per_kg" || l.svc.unitType === "per_package" ? 1 : l.item.quantity), 0);
+      const scanCodes = await nextTagScanCodes(tx, auth.orgId, pieceCount + 1);
+      let scanCodeIndex = 0;
       // One bag per order at intake; it is labelled with the order number so staff can match it by eye.
       const [bag] = await tx
         .insert(schema.bags)
-        .values({ organizationId: auth.orgId, branchId: branch.id, orderId: order.id, bagCode: `${orderNumber}-B1`, expectedCount: 0, createdBy: auth.userId })
+        .values({ organizationId: auth.orgId, branchId: branch.id, orderId: order.id, bagCode: `${orderNumber}-B1`, scanCode: scanCodes[scanCodeIndex++], expectedCount: 0, createdBy: auth.userId })
         .returning();
 
       let tagIndex = 0;
@@ -353,6 +358,7 @@ export async function orderRoutes(app: FastifyInstance) {
             orderId: order.id,
             orderItemId: oi.id,
             tagCode: `${orderNumber}-${String(tagIndex).padStart(2, "0")}`,
+            scanCode: scanCodes[scanCodeIndex++],
             garmentTypeId: l.gt.id,
             serviceId: l.svc.id,
             workflowStages: l.svc.workflowStages,

@@ -9,7 +9,7 @@ import { splitInclusiveTax } from "@drycare/shared";
 import { db, schema } from "../db/client";
 import { nextNumber, pad } from "../lib/sequences";
 import { audit, emit } from "../lib/audit";
-import { assertBranchAccess, requirePermission } from "../lib/context";
+import { assertBranchAccess, can, requirePermission } from "../lib/context";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { currentMembership } from "../lib/memberships";
 import { openShiftFor, paymentRef } from "./payments";
@@ -22,6 +22,8 @@ const planBody = z.object({
   taxBps: z.number().int().min(0).max(2800).optional(),
   durationDays: z.number().int().min(1, "A membership must last at least 1 day").max(3650),
   discountBps: z.number().int().min(1, "Enter a discount above 0%").max(10000, "The discount cannot be above 100%"),
+  freeExpress: z.boolean().optional(),
+  perks: z.array(z.string().trim().min(1).max(80, "Keep each benefit under 80 characters")).max(8, "A plan can list up to 8 benefits").optional(),
   active: z.boolean().optional(),
 });
 
@@ -60,6 +62,22 @@ export async function membershipRoutes(app: FastifyInstance) {
     return plan;
   });
 
+  /** The numbers at the top of the Memberships screen. Money only for those allowed to see it. */
+  app.get("/customer-memberships/summary", async (req) => {
+    const auth = requirePermission(req, "customers.read");
+    const monthStart = sql`date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'`;
+    const [members] = await db.execute<{ current: number; expiring: number }>(sql`
+      select count(*) filter (where status = 'active' and ends_at > now() and starts_at <= now())::int as current,
+             count(*) filter (where status = 'active' and ends_at > now() and ends_at <= now() + interval '15 days')::int as expiring
+      from customer_memberships where organization_id = ${auth.orgId}`);
+    if (!can(auth, "reports.financial")) return { ...members, sales: null, salesCount: null, discountGiven: null };
+    const [[sold], [discounts]] = await Promise.all([
+      db.execute<{ sales: string; count: number }>(sql`select coalesce(sum(price_paid), 0) as sales, count(*)::int as count from customer_memberships where organization_id = ${auth.orgId} and created_at >= ${monthStart}`),
+      db.execute<{ discount: string }>(sql`select coalesce(sum(discount_total), 0) as discount from orders where organization_id = ${auth.orgId} and customer_membership_id is not null and operational_status <> 'cancelled' and received_at >= ${monthStart}`),
+    ]);
+    return { ...members, sales: Number(sold.sales), salesCount: sold.count, discountGiven: Number(discounts.discount) };
+  });
+
   /** Everyone who has bought a membership, newest first. */
   app.get("/customer-memberships", async (req) => {
     const auth = requirePermission(req, "customers.read");
@@ -88,7 +106,7 @@ export async function membershipRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     const m = schema.customerMemberships;
     const history = await db.select({
-      id: m.id, planId: m.planId, planName: m.planName, discountBps: m.discountBps, pricePaid: m.pricePaid, invoiceNumber: m.invoiceNumber, startsAt: m.startsAt, endsAt: m.endsAt, status: m.status, cancelReason: m.cancelReason,
+      id: m.id, planId: m.planId, planName: m.planName, discountBps: m.discountBps, freeExpress: m.freeExpress, perks: m.perks, pricePaid: m.pricePaid, invoiceNumber: m.invoiceNumber, startsAt: m.startsAt, endsAt: m.endsAt, status: m.status, cancelReason: m.cancelReason,
       method: schema.payments.paymentMethod, reference: schema.payments.providerReference,
     }).from(m).leftJoin(schema.payments, eq(schema.payments.id, m.paymentId))
       .where(and(eq(m.customerId, id), eq(m.organizationId, auth.orgId))).orderBy(desc(m.endsAt)).limit(100);
@@ -164,9 +182,10 @@ export async function membershipRoutes(app: FastifyInstance) {
         await emit(tx, auth.orgId, "payment.received", { paymentId: payment.id, customerId: id, amount: plan.price, method: body.method });
       }
       const [membership] = await tx.insert(schema.customerMemberships).values({
-        organizationId: auth.orgId, customerId: id, planId: plan.id, branchId: body.branchId, planName: plan.name, discountBps: plan.discountBps,
+        organizationId: auth.orgId, customerId: id, planId: plan.id, branchId: body.branchId, planName: plan.name, discountBps: plan.discountBps, freeExpress: plan.freeExpress, perks: plan.perks,
         pricePaid: plan.price, taxBps, taxAmount: splitInclusiveTax(plan.price, taxBps).tax, invoiceNumber, paymentId, startsAt, endsAt, createdBy: auth.userId,
       }).returning();
+      await emit(tx, auth.orgId, "membership.sold", { customerId: id, planName: plan.name, discountBps: plan.discountBps, freeExpress: plan.freeExpress, perks: plan.perks, endsAt: endsAt.toISOString() });
       await audit(tx, req, { action: latest ? "membership.renewed" : "membership.sold", resourceType: "customer", resourceId: id, after: { plan: plan.name, price: plan.price, method: body.method, startsAt, endsAt } });
       return membership;
     });

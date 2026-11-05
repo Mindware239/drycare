@@ -7,7 +7,7 @@ import { db, schema, type Tx } from "../db/client";
 import { assertBranchAccess, can, requirePermission, type AuthContext } from "../lib/context";
 import { audit } from "../lib/audit";
 import { badRequest, conflict, forbidden, notFound, unprocessable } from "../lib/errors";
-import { nextNumber, pad } from "../lib/sequences";
+import { nextNumber, nextTagScanCodes, pad } from "../lib/sequences";
 import { invoiceTotals } from "../lib/balances";
 import { getOrderDetail } from "./orders";
 
@@ -123,8 +123,9 @@ export async function logisticsRoutes(app: FastifyInstance) {
       if (gs.length !== body.garmentIds.length) throw badRequest("Some garments do not belong to this order");
       if (gs.some((g) => !["shop_counter", "shop_storage"].includes(g.location))) throw unprocessable("Garments can only be re-bagged while they are at the shop", "NOT_AT_SHOP");
       const [{ n }] = await tx.execute<{ n: number }>(sql`select count(*)::int as n from bags where order_id = ${orderId}`);
+      const [scanCode] = await nextTagScanCodes(tx, auth.orgId, 1);
       const [bag] = await tx.insert(schema.bags).values({
-        organizationId: auth.orgId, branchId: order.branchId, orderId, bagCode: `${order.orderNumber}-B${n + 1}`, expectedCount: gs.length, createdBy: auth.userId,
+        organizationId: auth.orgId, branchId: order.branchId, orderId, bagCode: `${order.orderNumber}-B${n + 1}`, scanCode, expectedCount: gs.length, createdBy: auth.userId,
       }).returning();
       await tx.update(schema.garments).set({ bagId: bag.id }).where(inArray(schema.garments.id, body.garmentIds));
       await tx.execute(sql`update bags b set expected_count = (select count(*) from garments g where g.bag_id = b.id and g.current_status <> 'cancelled'), updated_at = now() where b.order_id = ${orderId}`);
@@ -148,7 +149,7 @@ export async function logisticsRoutes(app: FastifyInstance) {
       select (select count(*)::int from bags where order_id = ${orderId}) as bags,
              (select count(*)::int from garments where order_id = ${orderId} and current_status <> 'cancelled') as garments`);
     const labelCount = body.labelCount ?? (body.scope === "bag" ? bags : body.scope === "garments" ? body.garmentIds?.length ?? garments : bags + garments);
-    const [job] = await db.insert(schema.labelPrintJobs).values({ organizationId: auth.orgId, orderId, scope: body.scope, labelCount, requestedBy: auth.userId }).returning();
+    const [job] = await db.insert(schema.labelPrintJobs).values({ organizationId: auth.orgId, orderId, scope: body.scope, garmentIds: body.garmentIds ?? null, labelCount, requestedBy: auth.userId }).returning();
     reply.code(201);
     return job;
   });

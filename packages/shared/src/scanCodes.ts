@@ -1,6 +1,6 @@
 /**
- * Line barcodes get thicker, easier-to-scan bars when they carry fewer symbols. A 12-digit barcode needs the
- * least room, so tags and bags can carry a number instead of their full code:
+ * New tags and bags carry a number given by the server, as many digits long as the shop chose (six by default).
+ * Tags printed before that carry one of these older forms, and must keep scanning:
  *
  *   NEWDEL-2026-00001-01 becomes  0 cc 26 00001 01   (0 = garment, cc = check on the branch code)
  *   NEWDEL-2026-00001-B1 becomes  1 cc 26 00001 01   (1 = bag)
@@ -39,8 +39,10 @@ export function parseScanNumber(raw: string): ParsedScanNumber | null {
   return { kind, check: m[2], ending: `-20${m[3]}-${m[4]}-${kind === "garment" ? m[5] : `B${Number(m[5])}`}` };
 }
 
-/** Sample tags from the designer use order 00000, which is never issued. */
-export const isSampleScanNumber = (raw: string) => /^[01]\d{4}00000\d{2}$/.test(raw.trim());
+/** What sample tags from the designer carry. Numbering starts at 1, so all zeros is never issued. */
+export const sampleScanCode = (digits = 6) => "0".repeat(digits);
+/** Sample tags from the designer: all zeros, or the older number with order 00000, which is never issued. */
+export const isSampleScanNumber = (raw: string) => /^0+$/.test(raw.trim()) || /^[01]\d{4}00000\d{2}$/.test(raw.trim());
 
 /** The earlier short form, still printed on existing tags: NEWDEL-2026-00001-01 as NEWDEL260000101. */
 export function compactTagCode(tagCode: string) {
@@ -51,7 +53,13 @@ export function compactTagCode(tagCode: string) {
 /** Turns whatever a scanner typed into the stored code, where that needs no lookup. Digits-only numbers pass through. */
 export function expandScanCode(raw: string) {
   const code = raw.trim().toUpperCase();
-  if (code.includes("-") || NUMERIC.test(code)) return code;
+  if (code.includes("-") || /^\d+$/.test(code)) return code;
   const m = SHORT_TAG.exec(code);
   return m ? `${m[1]}-20${m[2]}-${m[3]}-${m[4]}` : code;
+}
+
+/** The old short form when a branch code was all digits: only worth trying after a number lookup finds nothing. */
+export function digitsAsShortTag(code: string) {
+  const m = /^\d+$/.test(code) ? SHORT_TAG.exec(code) : null;
+  return m ? `${m[1]}-20${m[2]}-${m[3]}-${m[4]}` : null;
 }

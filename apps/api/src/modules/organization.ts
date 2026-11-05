@@ -2,17 +2,23 @@ import type { FastifyInstance } from "fastify";
 import { hash } from "@node-rs/argon2";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { branchSchema, staffAttendanceSchema, staffCreateSchema, staffLeaveSchema, staffProfileSchema, storageLocationSchema } from "@drycare/shared";
+import { branchSchema, branchUpdateSchema, staffAttendanceSchema, staffCreateSchema, staffLeaveSchema, staffProfileSchema, storageLocationSchema } from "@drycare/shared";
 import { db, schema } from "../db/client";
 import { assertBranchAccess, requirePermission, requireAuth } from "../lib/context";
 import { audit } from "../lib/audit";
-import { conflict, notFound, badRequest, forbidden } from "../lib/errors";
+import { conflict, notFound, badRequest, forbidden, unprocessable } from "../lib/errors";
+import { tagNumbersUsed } from "../lib/sequences";
 import { issueToken, linkFor } from "../lib/tokens";
 import { DEFAULT_LABEL_SETTINGS, GSTIN_PATTERN, billingProfileSchema, labelSettingsSchema } from "@drycare/shared";
 import { assertBranchAvailable, hasFeature } from "../lib/entitlements";
 import bwipjs from "bwip-js";
 import { orgView } from "../lib/orgView";
 import { invoiceTotals } from "../lib/balances";
+
+async function assertStoreCodeFree(tx: Pick<typeof db, "query">, orgId: string, branchCode: string) {
+  const taken = await tx.query.branches.findFirst({ where: and(eq(schema.branches.organizationId, orgId), eq(schema.branches.branchCode, branchCode)) });
+  if (taken) throw conflict(`Store code ${branchCode} is already used by ${taken.name}. Choose another.`, "STORE_CODE_TAKEN");
+}
 
 const orgUpdateSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
@@ -96,6 +102,11 @@ export async function organizationRoutes(app: FastifyInstance) {
     const body = orgUpdateSchema.parse(req.body);
     return db.transaction(async (tx) => {
       const before = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) });
+      const digits = body.settings?.labels?.scanDigits;
+      if (digits && digits !== (before!.settings.labels?.scanDigits ?? 6)) {
+        const used = await tagNumbersUsed(tx, auth.orgId);
+        if (used > 10 ** digits - 1) throw unprocessable(`This shop has already issued ${used.toLocaleString("en-IN")} tag numbers, so a barcode needs at least ${String(used).length} digits.`, "SCAN_DIGITS_TOO_SHORT");
+      }
       // Without the tag designer only print settings can change. Designs stay as saved, so they return on an upgrade.
       if (body.settings?.labels && !(await hasFeature(auth.orgId, "labelDesigner", tx))) {
         const saved = labelSettingsSchema.safeParse({ ...DEFAULT_LABEL_SETTINGS, ...(before!.settings.labels ?? {}) });
@@ -124,6 +135,7 @@ export async function organizationRoutes(app: FastifyInstance) {
     const body = branchSchema.parse(req.body);
     const [row] = await db.transaction(async (tx) => {
       await assertBranchAvailable(tx, auth.orgId);
+      await assertStoreCodeFree(tx, auth.orgId, body.branchCode);
       const r = await tx.insert(schema.branches).values({ organizationId: auth.orgId, name: body.name, branchCode: body.branchCode, phone: body.phone, address: body.address ?? {}, timezone: body.timezone, status: body.status }).returning();
       await audit(tx, req, { action: "branch.created", resourceType: "branch", resourceId: r[0].id, after: r[0] });
       return r;
@@ -135,11 +147,12 @@ export async function organizationRoutes(app: FastifyInstance) {
   app.patch("/branches/:branchId", async (req) => {
     const auth = requirePermission(req, "branches.manage");
     const { branchId } = z.object({ branchId: z.uuid() }).parse(req.params);
-    const body = branchSchema.partial().parse(req.body);
+    const body = branchUpdateSchema.parse(req.body);
     return db.transaction(async (tx) => {
       const before = await tx.query.branches.findFirst({ where: and(eq(schema.branches.id, branchId), eq(schema.branches.organizationId, auth.orgId)) });
       if (!before) throw notFound("Branch");
       if (body.status === "active" && before.status !== "active") await assertBranchAvailable(tx, auth.orgId);
+      if (body.branchCode && body.branchCode !== before.branchCode) await assertStoreCodeFree(tx, auth.orgId, body.branchCode);
       const [after] = await tx.update(schema.branches).set({ ...body, updatedAt: new Date() }).where(eq(schema.branches.id, branchId)).returning();
       await audit(tx, req, { action: "branch.updated", resourceType: "branch", resourceId: branchId, before, after });
       return after;

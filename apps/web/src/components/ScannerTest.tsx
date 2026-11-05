@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { CheckCircle2, Circle, Printer } from "lucide-react";
-import { GARMENT_DESIGN_38_LINE, GARMENT_DESIGN_38_QR, el, numericScanCode, type LabelDesign } from "@drycare/shared";
+import { GARMENT_DESIGN_38_LINE, GARMENT_DESIGN_38_QR, el, fitBarcodeToDigits, sampleScanCode, type LabelDesign } from "@drycare/shared";
 import { Alert, Button, Field, Input, cx } from "@/components/ui";
 import type { LabelData } from "@/lib/labelRender";
 
@@ -15,10 +15,10 @@ const textOnly = (design: LabelDesign, codeTop?: number): LabelDesign => ({
 });
 const qr = (moduleDots: number, top: number, codeTop?: number): LabelDesign => ({ ...textOnly(GARMENT_DESIGN_38_QR, codeTop), barcode: { ...GARMENT_DESIGN_38_QR.barcode, moduleDots, y: top, centered: true } });
 
-/** From easiest to read to hardest, using a code as long as a real tag number where it matters. */
-export const SCANNER_SAMPLES: ScannerSample[] = [
-  { id: 1, title: "TEST 1 Thick line", value: "DC1", design: { ...textOnly(GARMENT_DESIGN_38_LINE, 130), barcode: { ...GARMENT_DESIGN_38_LINE.barcode, moduleDots: 3 } } },
-  { id: 2, title: "TEST 2 Real tag line", value: numericScanCode("NEWDEL-2026-00000-02"), design: textOnly(GARMENT_DESIGN_38_LINE, 130) },
+/** From easiest to read to hardest, using a code as long as this shop's real tags where it matters. */
+export const scannerSamples = (digits: number): ScannerSample[] => [
+  { id: 1, title: "TEST 1 Thick line", value: "DC1", design: { ...textOnly(GARMENT_DESIGN_38_LINE, 130), barcode: { ...GARMENT_DESIGN_38_LINE.barcode, moduleDots: 4, y: 36, heightDots: 80 } } },
+  { id: 2, title: "TEST 2 Real tag line", value: sampleScanCode(digits), design: fitBarcodeToDigits({ ...textOnly(GARMENT_DESIGN_38_LINE, 130), barcode: { ...GARMENT_DESIGN_38_LINE.barcode, y: 36, heightDots: 80 } }, digits) },
   { id: 3, title: "TEST 3 Large QR", value: "DCTEST-2026-00001-03", design: qr(7, 62) },
   { id: 4, title: "TEST 4 Small QR", value: "DCTEST-2026-00001-04", design: qr(5, 56, 186) },
 ];
@@ -29,11 +29,12 @@ function advice(passed: Set<number>) {
   if (passed.has(4)) return { text: "Your scanner reads QR codes, even small ones. Use a QR code: it is the smallest and most reliable on taffeta.", sample: 4 };
   if (passed.has(3)) return { text: "Your scanner reads large QR codes. Use a QR code of about 18 mm, or increase the darkness and test the small one again.", sample: 3 };
   if (passed.has(2)) return { text: "Your scanner reads line barcodes at real tag length. Use a line barcode.", sample: 2 };
-  return { text: "Your scanner reads thick line barcodes only, so a full tag number is too fine for it on a tag this narrow. Try darker print, a wider tag, or a scanner that reads QR codes.", sample: 1 };
+  return { text: "Your scanner reads thick line barcodes only, so normal tag bars are too fine for it on a tag this narrow. Try darker print, a wider tag, or a scanner that reads QR codes.", sample: 1 };
 }
 
 /** Prints four sample tags, then checks which ones the scanner reads. A scanner types like a keyboard, so a text box is all it needs. */
-export function ScannerTest({ onPrint, onUse, disabled, approvedScanners }: { onPrint: () => void; onUse: (sample: ScannerSample) => void; disabled?: boolean; approvedScanners?: string[] }) {
+export function ScannerTest({ digits, onPrint, onUse, disabled, approvedScanners }: { digits: number; onPrint: () => void; onUse: (sample: ScannerSample) => void; disabled?: boolean; approvedScanners?: string[] }) {
+  const samples = scannerSamples(digits);
   const [value, setValue] = useState("");
   const [passed, setPassed] = useState<Set<number>>(new Set());
   const [last, setLast] = useState<{ text: string; matched: boolean } | null>(null);
@@ -42,7 +43,7 @@ export function ScannerTest({ onPrint, onUse, disabled, approvedScanners }: { on
   const check = (raw: string) => {
     const text = raw.trim();
     if (!text) return;
-    const match = SCANNER_SAMPLES.find((s) => s.value === text);
+    const match = samples.find((s) => s.value === text);
     if (match) setPassed((p) => new Set(p).add(match.id));
     setLast({ text, matched: !!match });
     setValue("");
@@ -69,7 +70,7 @@ export function ScannerTest({ onPrint, onUse, disabled, approvedScanners }: { on
           <p className="text-xs text-slate-500">If nothing appears, the scanner did not read that tag at all.</p>
         </div>
         <ul className="space-y-1.5">
-          {SCANNER_SAMPLES.map((s) => (
+          {samples.map((s) => (
             <li key={s.id} className="flex items-center gap-2 text-sm text-slate-800">
               {passed.has(s.id) ? <CheckCircle2 className="h-4 w-4 text-brand-600" /> : <Circle className="h-4 w-4 text-slate-300" />}
               {s.title}{passed.has(s.id) ? " — read" : ""}
@@ -80,7 +81,7 @@ export function ScannerTest({ onPrint, onUse, disabled, approvedScanners }: { on
       {tip && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1"><Alert tone="green">{tip.text}</Alert></div>
-          <Button onClick={() => onUse(SCANNER_SAMPLES.find((s) => s.id === tip.sample)!)}>Use this barcode</Button>
+          <Button onClick={() => onUse(samples.find((s) => s.id === tip.sample)!)}>Use this barcode</Button>
         </div>
       )}
     </div>

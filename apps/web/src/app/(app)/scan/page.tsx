@@ -8,6 +8,7 @@ import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { dateTime } from "@/lib/format";
 import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, StageBadge, Textarea, cx } from "@/components/ui";
+import { TagRecord, TagTimeline, type TagTraceData } from "@/components/TagTrace";
 
 const QC_CHECKLIST = [
   ["clean", "Clean — no remaining soil or odour"],
@@ -30,6 +31,10 @@ function ScanInner() {
   const [reworkReason, setReworkReason] = useState("");
   const [locationId, setLocationId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // The record shown under the scan. The count fetches it again after each change, so the history stays current.
+  const [traced, setTraced] = useState<{ code: string; n: number } | null>(null);
+  const trace = useApi<TagTraceData>(traced ? `/tags/trace?code=${encodeURIComponent(traced.code)}&n=${traced.n}` : null);
+  const refreshTrace = () => setTraced((t) => t && { ...t, n: t.n + 1 });
   const locations = useApi<any[]>(`/storage-locations?branchId=${branchId}`);
   const staff = useApi<{ userId: string; name: string }[]>(
     can("garments.process") && branchId ? `/production/staff?branchId=${encodeURIComponent(branchId)}` : null,
@@ -41,15 +46,28 @@ function ScanInner() {
     setMsg(null);
     setBusy(true);
     try {
-      let garment = await api(`/garments/by-tag/${encodeURIComponent(t)}`);
+      // Every scan is recorded, even when nothing about the label changes. A shop in read-only mode can still look.
+      await api("/tags/scans", { body: { code: t } }).catch((e: ApiError) => { if (e.status === 404) throw e; });
+      let garment;
+      try {
+        garment = await api(`/garments/by-tag/${encodeURIComponent(t)}`);
+      } catch (e) {
+        // A bag label has no stage of its own: show what is inside it.
+        if ((e as ApiError).status !== 404) throw e;
+        setG(null);
+        setTraced((current) => ({ code: t, n: (current?.n ?? 0) + 1 }));
+        return;
+      }
       const next = garment.allowed.find((a: any) => a.kind === "advance" || a.kind === "rework_return");
       if (advance && next && next.permitted && !(next.to === "ready" && !garment.storageLocationId)) {
         garment = await api(`/garments/${garment.id}/transitions`, { body: { to: next.to, version: garment.version } });
         setMsg({ tone: "green", text: `${garment.tagCode} → ${STAGE_LABELS[next.to as GarmentStage]}` });
       }
       resetForms(garment);
+      setTraced((current) => ({ code: t, n: (current?.n ?? 0) + 1 }));
     } catch (e) {
       setG(null);
+      setTraced(null);
       const missing = (e as ApiError).status === 404;
       // Tags printed from the designer and the scanner test have no order behind them.
       if (missing && (/^(TEST-|DCTEST-|DC1$)|-\d{4}-00000-/.test(t) || isSampleScanNumber(t))) setMsg({ tone: "green", text: `Scanner is working: it read ${t}. This is a sample tag, so it has no order. Real tags open their garment here.` });
@@ -80,6 +98,7 @@ function ScanInner() {
     setMsg(null);
     try {
       resetForms(await fn());
+      refreshTrace();
       setMsg({ tone: "green", text: success });
     } catch (e) {
       setMsg({ tone: "red", text: (e as ApiError).message });
@@ -102,7 +121,7 @@ function ScanInner() {
 
   return (
     <div>
-      <PageHeader title="Scan station" subtitle="Scan a garment tag with the barcode scanner, or type it and press Enter." />
+      <PageHeader title="Scan station" subtitle="Scan a tag or bag label, or type its number and press Enter, to see its customer, order and complete history." />
       <Card>
         <form
           onSubmit={(e) => {
@@ -113,7 +132,7 @@ function ScanInner() {
         >
           <div className="relative min-w-64 flex-1">
             <ScanLine className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-slate-400" />
-            <Input ref={inputRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. AND-2026-00001-01" className="py-3 pl-11 font-mono text-base" aria-label="Garment tag" />
+            <Input ref={inputRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="Scan the barcode or type its number" className="py-3 pl-11 font-mono text-base" aria-label="Barcode number" />
           </div>
           <Button type="submit" size="lg" loading={busy}>
             Look up
@@ -279,23 +298,14 @@ function ScanInner() {
             )}
           </div>
 
-          <Card title="Garment history" padded={false}>
-            <ul className="max-h-[32rem] divide-y divide-slate-100 overflow-y-auto text-sm">
-              {g.history.map((h: any, i: number) => (
-                <li key={i} className="px-4 py-2">
-                  <p>
-                    {h.transition_kind === "location" ? h.notes : `${STAGE_LABELS[h.new_status as GarmentStage] ?? h.new_status}`}
-                    {h.transition_kind === "qc_fail" && <Badge color="red" className="ml-1">QC fail</Badge>}
-                    {h.transition_kind === "qc_pass" && <Badge color="green" className="ml-1">QC pass</Badge>}
-                  </p>
-                  {h.notes && h.transition_kind !== "location" && <p className="text-xs text-slate-600">“{h.notes}”</p>}
-                  <p className="text-xs text-slate-500">
-                    {dateTime(h.occurred_at)} · {h.actor}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          {trace.data && trace.data.label.id === g.id && <TagTimeline data={trace.data} />}
+        </div>
+      )}
+      {traced && trace.error && <div className="mt-5"><Alert>{trace.error.message}</Alert></div>}
+      {trace.data && (!g || trace.data.label.id === g.id) && traced && (
+        <div className="mt-5 grid items-start gap-5 lg:grid-cols-3">
+          <div className={g ? "lg:col-span-3" : "lg:col-span-2"}><TagRecord data={trace.data} /></div>
+          {!g && <TagTimeline data={trace.data} />}
         </div>
       )}
     </div>

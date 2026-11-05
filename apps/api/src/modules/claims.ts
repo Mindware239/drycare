@@ -78,7 +78,7 @@ export async function claimRoutes(app: FastifyInstance) {
       left join orders o on o.id = cl.order_id left join garments g on g.id = cl.garment_id left join order_items oi on oi.id = g.order_item_id
       where cl.organization_id = ${auth.orgId} ${branchFilter} ${statusFilter}
         ${q.customerId ? sql`and cl.customer_id = ${q.customerId}` : sql``} ${q.orderId ? sql`and cl.order_id = ${q.orderId}` : sql``}
-        ${like ? sql`and (cl.claim_number ilike ${like} or c.name ilike ${like} or c.phone ilike ${like} or o.order_number ilike ${like} or g.tag_code ilike ${like})` : sql``}
+        ${like ? sql`and (cl.claim_number ilike ${like} or c.name ilike ${like} or c.phone ilike ${like} or o.order_number ilike ${like} or g.tag_code ilike ${like} or g.scan_code ilike ${like})` : sql``}
       order by case cl.status when 'open' then 0 when 'investigating' then 1 when 'approved' then 2 else 3 end, cl.created_at desc limit 500`);
   });
 

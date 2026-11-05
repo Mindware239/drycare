@@ -4,7 +4,7 @@ import { Save, Undo2 } from "lucide-react";
 import { LABEL_SIZES, isLineBarcode, type LabelDesign } from "@drycare/shared";
 import { Alert, Button, Select, cx } from "@/components/ui";
 import { Stepper } from "@/components/LabelDesigner";
-import { fitBarcode, resizeBarcode, withBarcodeType } from "@/lib/labelDesign";
+import { barcodeLengthMm, fitBarcode, resizeBarcode, withBarcodeType } from "@/lib/labelDesign";
 import { DOTS_PER_MM, type RenderedLabel } from "@/lib/labelRender";
 
 const TYPES: [LabelDesign["barcode"]["type"], string][] = [["code128", "1D · Code 128"], ["code39", "1D · Code 39"], ["qrcode", "2D · QR code"], ["datamatrix", "2D · Data Matrix"]];
@@ -27,6 +27,7 @@ export function BarcodeAdjust({ kind, onKind, design, onChange, onRollSize, labe
   const box = label?.boxes.find((b) => b.key === "barcode");
   const set = (patch: Partial<LabelDesign["barcode"]>) => onChange({ ...design, barcode: { ...code, ...patch } });
   const resize = (patch: { moduleDots?: number; heightDots?: number }) => (box ? onChange(resizeBarcode(design, box, patch)) : set(patch));
+  const length = box ? barcodeLengthMm(design, box, code.moduleDots) : null;
 
   return (
     <section aria-label="Adjust barcode" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -53,8 +54,8 @@ export function BarcodeAdjust({ kind, onKind, design, onChange, onRollSize, labe
           <Select aria-label="Barcode type" value={code.type} onChange={(e) => onChange(withBarcodeType(design, e.target.value as LabelDesign["barcode"]["type"], kind))}>{TYPES.map(([v, name]) => <option key={v} value={v}>{name}</option>)}</Select>
         </div>
         <div>
-          <span className="mb-1 block text-sm font-medium text-slate-700">{line ? "Length (bar thickness)" : "Size"}</span>
-          <Stepper label={line ? "barcode length" : "barcode size"} value={code.moduleDots} min={1} max={16} onChange={(moduleDots) => resize({ moduleDots })} />
+          <span className="mb-1 block text-sm font-medium text-slate-700">{line ? "Width" : "Size"}</span>
+          <Stepper label={line ? "barcode width" : "barcode size"} value={code.moduleDots} display={line && length ? `${length.toFixed(1)} mm` : undefined} min={1} max={16} onChange={(moduleDots) => resize({ moduleDots })} />
         </div>
         {line && (
           <div>
@@ -69,7 +70,7 @@ export function BarcodeAdjust({ kind, onKind, design, onChange, onRollSize, labe
         <Button variant="secondary" disabled={!box} onClick={() => { if (box) onChange(fitBarcode(design, box)); }}>Auto-fit to tag</Button>
       </div>
 
-      {line && <p className="mt-3 text-xs text-slate-500">Length changes in steps because printers print whole dots: each step adds one dot to every bar. Thicker bars are longer and scan more easily.</p>}
+      {line && <p className="mt-3 text-xs text-slate-500">Width changes in steps because printers print whole dots: each step adds one dot to every bar. A wider barcode scans more easily. Height changes freely.</p>}
       {label?.warnings.length ? <div className="mt-3 space-y-2">{label.warnings.map((w) => <Alert key={w} tone="amber">{w}</Alert>)}</div> : null}
 
       {changed && (

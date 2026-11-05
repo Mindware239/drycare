@@ -47,8 +47,8 @@ export function DispatchModal({ stop, onClose, onDone }: { stop: any; onClose: (
   function scan(e: React.FormEvent) {
     e.preventDefault();
     const typed = expandScanCode(code);
-    // A line barcode holds a number: match it to the tag it was printed for.
-    const t = items.find((i) => numericScanCode(i.tag_code) === typed)?.tag_code ?? typed;
+    // A barcode holds a number: match it to the tag it was printed for. Older tags hold a longer one.
+    const t = items.find((i) => i.scan_code === typed || numericScanCode(i.tag_code) === typed)?.tag_code ?? typed;
     setCode("");
     if (!t) return;
     if (!items.some((i) => i.tag_code === t)) setErr(`${t} is not part of this delivery — keep it out of the bag.`);

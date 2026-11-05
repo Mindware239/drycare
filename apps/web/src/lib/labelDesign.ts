@@ -65,6 +65,20 @@ export function resizeBarcode(design: LabelDesign, box: LabelBox, patch: { modul
   return { ...design, barcode: { ...next, x, y }, elements };
 }
 
+/** How long the barcode would be at this bar thickness, in millimetres. */
+export function barcodeLengthMm(design: LabelDesign, box: LabelBox, moduleDots: number) {
+  const sideways = design.barcode.rotation === 90 || design.barcode.rotation === 270;
+  return (((sideways ? box.h : box.w) / design.barcode.moduleDots) * moduleDots) / DOTS_PER_MM;
+}
+
+/** Puts the barcode number where the long tag or bag number was. Other items keep their place and order. */
+export function withShortNumber(design: LabelDesign, kind: "garment" | "bag"): LabelDesign {
+  const long = kind === "garment" ? "tagCode" : "bagCode";
+  if (!design.elements[long]) return design;
+  const { scanCode: _replaced, ...others } = design.elements;
+  return { ...design, elements: Object.fromEntries(Object.entries(others).map(([key, e]) => (key === long ? ["scanCode", e] : [key, e]))) };
+}
+
 /** The thickest whole-dot barcode that fits the tag with its blank space. */
 export function fitBarcode(design: LabelDesign, box: LabelBox): LabelDesign {
   const code = design.barcode;

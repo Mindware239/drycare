@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [f, setF] = useState<any>(null);
   const [msg, setMsg] = useState<{ t: "green" | "red"; m: string } | null>(null);
   const [nb, setNb] = useState({ name: "", branchCode: "", phone: "", city: "" });
+  const [editingBranchCode, setEditingBranchCode] = useState<{ id: string; value: string } | null>(null);
   const [loc, setLoc] = useState({ code: "", description: "" });
 
   useEffect(() => {
@@ -40,6 +41,15 @@ export default function SettingsPage() {
     }
   };
 
+  const saveBranchCode = async (branchId: string) => {
+    const current = editingBranchCode;
+    if (!current || current.id !== branchId || current.value.length < 2) return;
+    await run(
+      () => api(`/branches/${branchId}`, { method: "PATCH", body: { branchCode: current.value } }).then(() => { branches.reload(); setEditingBranchCode(null); }),
+      "Store code updated. New order numbers will use it; existing orders and printed tags do not change.",
+    );
+  };
+
   if (!f || !branches.data) return <Spinner />;
   return (
     <div className="space-y-5">
@@ -49,11 +59,63 @@ export default function SettingsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Tags and barcodes</h2>
-            <p className="text-sm text-slate-500">{has("labelDesigner") ? "Design your garment tags, choose the printer and test your scanner." : "Choose the printer for your taffeta tags and test your scanner."}</p>
+            <p className="text-sm text-slate-500">{has("labelDesigner") ? "Choose what prints on your tags, the barcode length and size, the printer, and test your scanner." : "Choose the barcode length and printer for your taffeta tags, and test your scanner."} Store codes are under <a href="#branches" className="font-medium text-slate-700 underline underline-offset-2">Branches</a>.</p>
           </div>
           <a href="/print/labels?test=1" target="_blank" rel="noreferrer"><Button>{has("labelDesigner") ? "Open tag designer" : "Open tag setup"}</Button></a>
         </div>
       )}
+      <div id="branches" className="scroll-mt-4">
+      <Card title="Branches and store codes" padded={false}>
+        <p className="px-4 pt-4 text-sm text-slate-500">The store code starts each new order number, like {branches.data[0]?.branchCode ?? "BKC"}-{new Date().getFullYear()}-00001. Use Edit code to change it; existing orders and printed tags stay as they are. Barcodes use their own number, so changing this never affects scanning.</p>
+        <Table head={["Store code", "Name", "Phone", "City", "Status", ""]}>
+          {branches.data.map((b) => (
+            <tr key={b.id}>
+              <Td className="font-mono">
+                {editingBranchCode?.id === b.id
+                  ? <Input aria-label={`Branch code for ${b.name}`} maxLength={8} value={editingBranchCode?.value ?? ""} onChange={(e) => setEditingBranchCode((current) => current && current.id === b.id ? { id: current.id, value: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) } : current)} />
+                  : b.branchCode}
+              </Td>
+              <Td className="font-medium">{b.name}</Td>
+              <Td>{b.phone ?? "—"}</Td>
+              <Td>{b.address?.city ?? "—"}</Td>
+              <Td>{b.status === "active" ? <Badge color="green">Active</Badge> : <Badge>Inactive</Badge>}</Td>
+              <Td>
+                {editingBranchCode?.id === b.id ? (
+                  <div className="flex gap-1">
+                    <Button size="sm" disabled={(editingBranchCode?.value.length ?? 0) < 2} onClick={() => void saveBranchCode(b.id)}>Save code</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingBranchCode(null)}>Cancel</Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setEditingBranchCode({ id: b.id, value: b.branchCode })}>Edit code</Button>
+                    <Button size="sm" variant="ghost" onClick={() => run(() => api(`/branches/${b.id}`, { method: "PATCH", body: { status: b.status === "active" ? "inactive" : "active" } }).then(branches.reload), "Branch updated.")}>
+                      {b.status === "active" ? "Deactivate" : "Activate"}
+                    </Button>
+                  </div>
+                )}
+              </Td>
+            </tr>
+          ))}
+        </Table>
+        <div className="grid gap-2 border-t border-slate-100 p-4 sm:grid-cols-5">
+          <Input placeholder="Branch name" value={nb.name} onChange={(e) => setNb({ ...nb, name: e.target.value })} />
+          <Input placeholder="Store code (e.g. BKC)" value={nb.branchCode} onChange={(e) => setNb({ ...nb, branchCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) })} />
+          <Input placeholder="Phone" value={nb.phone} onChange={(e) => setNb({ ...nb, phone: e.target.value })} />
+          <Input placeholder="City" value={nb.city} onChange={(e) => setNb({ ...nb, city: e.target.value })} />
+          <Button
+            disabled={!nb.name || nb.branchCode.length < 2}
+            onClick={() =>
+              run(
+                () => api("/branches", { body: { name: nb.name, branchCode: nb.branchCode, phone: nb.phone || undefined, address: nb.city ? { city: nb.city } : undefined } }).then(() => (branches.reload(), setNb({ name: "", branchCode: "", phone: "", city: "" }))),
+                "Branch created. Sign out and in again to see it in the branch selector.",
+              )
+            }
+          >
+            Add branch
+          </Button>
+        </div>
+      </Card>
+      </div>
       {can("org.manage") && <DesktopCards />}
       {can("org.manage") && (
         <Card title="Business details & rules">
@@ -128,41 +190,6 @@ export default function SettingsPage() {
 
       {can("org.manage") && org.data && <BillingSettings org={org.data} onSaved={org.reload} />}
 
-      <Card title="Branches" padded={false}>
-        <Table head={["Code", "Name", "Phone", "City", "Status", ""]}>
-          {branches.data.map((b) => (
-            <tr key={b.id}>
-              <Td className="font-mono">{b.branchCode}</Td>
-              <Td className="font-medium">{b.name}</Td>
-              <Td>{b.phone ?? "—"}</Td>
-              <Td>{b.address?.city ?? "—"}</Td>
-              <Td>{b.status === "active" ? <Badge color="green">Active</Badge> : <Badge>Inactive</Badge>}</Td>
-              <Td>
-                <Button size="sm" variant="ghost" onClick={() => run(() => api(`/branches/${b.id}`, { method: "PATCH", body: { status: b.status === "active" ? "inactive" : "active" } }).then(branches.reload), "Branch updated.")}>
-                  {b.status === "active" ? "Deactivate" : "Activate"}
-                </Button>
-              </Td>
-            </tr>
-          ))}
-        </Table>
-        <div className="grid gap-2 border-t border-slate-100 p-4 sm:grid-cols-5">
-          <Input placeholder="Branch name" value={nb.name} onChange={(e) => setNb({ ...nb, name: e.target.value })} />
-          <Input placeholder="Code (e.g. BKC)" value={nb.branchCode} onChange={(e) => setNb({ ...nb, branchCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) })} />
-          <Input placeholder="Phone" value={nb.phone} onChange={(e) => setNb({ ...nb, phone: e.target.value })} />
-          <Input placeholder="City" value={nb.city} onChange={(e) => setNb({ ...nb, city: e.target.value })} />
-          <Button
-            disabled={!nb.name || nb.branchCode.length < 2}
-            onClick={() =>
-              run(
-                () => api("/branches", { body: { name: nb.name, branchCode: nb.branchCode, phone: nb.phone || undefined, address: nb.city ? { city: nb.city } : undefined } }).then(() => (branches.reload(), setNb({ name: "", branchCode: "", phone: "", city: "" }))),
-                "Branch created. Sign out and in again to see it in the branch selector.",
-              )
-            }
-          >
-            Add branch
-          </Button>
-        </div>
-      </Card>
 
       <Card
         title="Racks & storage locations"

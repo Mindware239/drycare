@@ -68,6 +68,8 @@ export const branchSchema = z.object({
   timezone: z.string().default("Asia/Kolkata"),
   status: z.enum(["active", "inactive"]).default("active"),
 });
+/** An edit changes only what was sent. Defaults here would reopen a closed branch whenever its code changed. */
+export const branchUpdateSchema = branchSchema.extend({ timezone: z.string().optional(), status: z.enum(["active", "inactive"]).optional() }).partial();
 
 export const staffCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -443,7 +445,7 @@ const labelBarcodeSchema = z.object({
   heightDots: z.number().int().min(16).max(800),
   /** Clockwise turn of the barcode on the tag. */
   rotation: quarterTurn.default(0),
-  /** Line barcodes only: hold a 12-digit number instead of the full code, so the bars can be thicker. */
+  /** Line barcodes on tags printed before six-digit numbers: hold a 12-digit number instead of the full code. */
   compact: z.boolean().default(true),
   locked: z.boolean().default(false),
 });
@@ -461,33 +463,34 @@ export const isLineBarcode = (type: LabelDesign["barcode"]["type"]) => type === 
 
 export const el = (x: number, y: number, size: number, bold = false): LabelElement => ({ type: "text", show: true, x, y, size, bold, font: "dm", align: "left", rotation: 0, locked: false });
 const code = (type: LabelDesign["barcode"]["type"], x: number, y: number, moduleDots: number, heightDots: number, centered: boolean): LabelDesign["barcode"] => ({ type, show: true, x, y, centered, moduleDots, heightDots, rotation: 0, compact: isLineBarcode(type), locked: false });
+const centre = (x: number, y: number, size: number, bold = false): LabelElement => ({ ...el(x, y, size, bold), align: "center" });
 const GARMENT_TEXT = (top: number) => ({
   orderNumber: el(16, 8, 24, true),
   count: el(340, 8, 24, true),
-  tagCode: el(16, top, 20),
-  garment: el(16, top + 26, 34, true),
+  scanCode: centre(200, top, 20, true),
+  garment: el(16, top + 22, 34, true),
   service: el(16, top + 62, 24),
   colour: el(230, top + 62, 24),
   customer: el(16, top + 90, 24),
   due: el(250, top + 90, 24, true),
 });
 /** Default tag: 50 x 30 mm taffeta with large text. */
-export const GARMENT_DESIGN_CODE128: LabelDesign = { widthMm: 50, heightMm: 30, border: false, barcode: code("code128", 16, 38, 2, 72, true), elements: GARMENT_TEXT(114) };
+export const GARMENT_DESIGN_CODE128: LabelDesign = { widthMm: 50, heightMm: 30, border: false, barcode: code("code128", 16, 38, 4, 72, true), elements: GARMENT_TEXT(114) };
 export const GARMENT_DESIGN_QR: LabelDesign = {
   widthMm: 50, heightMm: 30, border: false,
   barcode: code("qrcode", 28, 58, 5, 105, false),
   elements: {
     orderNumber: el(16, 8, 24, true), count: el(340, 8, 24, true),
     garment: el(160, 44, 34, true), service: el(160, 84, 24), colour: el(160, 112, 24),
-    customer: el(160, 140, 24), due: el(160, 168, 24, true), tagCode: el(16, 202, 24),
+    customer: el(160, 140, 24), due: el(160, 168, 24, true), scanCode: el(16, 202, 24, true),
   },
 };
 const BAG_TEXT = {
   title: el(20, 14, 26, true), orderNumber: el(20, 44, 38, true), pieces: el(470, 14, 44, true),
-  bagCode: el(20, 268, 28), info: el(20, 312, 28), due: el(20, 350, 28, true),
+  scanCode: centre(300, 268, 28, true), info: el(20, 312, 28), due: el(20, 350, 28, true),
 };
-export const BAG_DESIGN_CODE128: LabelDesign = { widthMm: 75, heightMm: 50, border: false, barcode: code("code128", 20, 100, 2, 150, true), elements: BAG_TEXT };
-export const BAG_DESIGN_QR: LabelDesign = { widthMm: 75, heightMm: 50, border: false, barcode: code("qrcode", 220, 92, 7, 170, false), elements: BAG_TEXT };
+export const BAG_DESIGN_CODE128: LabelDesign = { widthMm: 75, heightMm: 50, border: false, barcode: code("code128", 20, 100, 5, 150, true), elements: BAG_TEXT };
+export const BAG_DESIGN_QR: LabelDesign = { widthMm: 75, heightMm: 50, border: false, barcode: code("qrcode", 220, 120, 7, 170, false), elements: { ...BAG_TEXT, scanCode: el(20, 268, 28, true) } };
 
 /**
  * 38 x 30 mm taffeta roll. The tag number and garment run the full width, so long names stay readable,
@@ -498,26 +501,27 @@ export const GARMENT_DESIGN_38_QR: LabelDesign = {
   widthMm: 38, heightMm: 30, border: false,
   barcode: code("qrcode", 20, 52, 5, 105, false),
   elements: {
-    tagCode: el(10, 8, 20, true),
+    orderNumber: el(10, 8, 20, true),
     service: el(149, 46, 22), colour: el(149, 72, 22), customer: el(149, 98, 22), due: el(149, 124, 22, true), count: el(149, 150, 22, true),
-    garment: el(10, 182, 30, true),
+    garment: el(10, 178, 26, true), scanCode: el(10, 208, 22, true),
   },
 };
-/** The default: a line barcode holding a 12-digit number, so 2-dot bars fit this narrow tag with blank space at both sides. */
+/** The default: a line barcode holding the six-digit number, so 3-dot bars fit this narrow tag with blank space at both sides. */
 export const GARMENT_DESIGN_38_LINE: LabelDesign = {
   widthMm: 38, heightMm: 30, border: false,
-  barcode: code("code128", 10, 36, 2, 80, true),
+  barcode: code("code128", 10, 30, 3, 64, true),
   elements: {
-    tagCode: el(10, 8, 20, true),
-    garment: el(10, 120, 28, true), service: el(10, 154, 22), count: right(294, 154, 22, true), colour: el(10, 182, 22), due: right(294, 182, 22, true), customer: el(10, 208, 22),
+    orderNumber: el(10, 6, 20, true),
+    scanCode: centre(152, 97, 22, true),
+    garment: el(10, 124, 26, true), service: el(10, 154, 20), count: right(294, 154, 20, true), colour: el(10, 180, 20), due: right(294, 180, 20, true), customer: el(10, 206, 20),
   },
 };
 export const BAG_DESIGN_38_LINE: LabelDesign = {
   widthMm: 38, heightMm: 30, border: false,
-  barcode: code("code128", 10, 38, 2, 80, true),
+  barcode: code("code128", 10, 36, 3, 72, true),
   elements: {
     title: el(10, 8, 22, true), pieces: right(294, 8, 22, true),
-    bagCode: el(10, 122, 22, true), customer: el(10, 154, 24), due: el(10, 188, 24, true),
+    scanCode: centre(152, 112, 22, true), orderNumber: el(10, 140, 20, true), customer: el(10, 170, 24), due: el(10, 204, 24, true),
   },
 };
 export const BAG_DESIGN_38_QR: LabelDesign = {
@@ -526,7 +530,7 @@ export const BAG_DESIGN_38_QR: LabelDesign = {
   elements: {
     title: el(10, 8, 22, true), pieces: right(294, 8, 22, true),
     customer: el(149, 66, 22), due: el(149, 100, 22, true),
-    bagCode: el(10, 186, 22, true),
+    scanCode: el(10, 182, 22, true), orderNumber: el(10, 210, 20, true),
   },
 };
 
@@ -541,11 +545,11 @@ export const LABEL_PRESETS: { id: string; name: string; kind: "garment" | "bag";
   { id: "garment-qr", name: "Standard tag, QR code (50 × 30)", kind: "garment", design: GARMENT_DESIGN_QR },
   {
     id: "garment-small", name: "Small tag, QR code (40 × 20)", kind: "garment",
-    design: { widthMm: 40, heightMm: 20, border: false, barcode: code("qrcode", 18, 48, 4, 84, false), elements: { tagCode: el(10, 6, 20, true), garment: el(122, 40, 24, true), service: el(122, 70, 20), due: el(122, 96, 20, true), count: el(122, 122, 20) } },
+    design: { widthMm: 40, heightMm: 20, border: false, barcode: code("qrcode", 18, 48, 4, 84, false), elements: { scanCode: el(10, 6, 20, true), garment: el(122, 40, 24, true), service: el(122, 70, 20), due: el(122, 96, 20, true), count: el(122, 122, 20) } },
   },
   {
     id: "garment-large", name: "Large tag, line barcode (70 × 40)", kind: "garment",
-    design: { widthMm: 70, heightMm: 40, border: false, barcode: code("code128", 24, 54, 2, 96, true), elements: { orderNumber: el(24, 12, 34, true), count: el(470, 12, 34, true), tagCode: el(24, 156, 26), garment: el(24, 190, 42, true), service: el(24, 238, 28), colour: el(320, 238, 28), customer: el(24, 276, 28), due: el(340, 276, 28, true) } },
+    design: { widthMm: 70, heightMm: 40, border: false, barcode: code("code128", 24, 54, 5, 96, true), elements: { orderNumber: el(24, 12, 34, true), count: el(470, 12, 34, true), scanCode: centre(280, 156, 26, true), garment: el(24, 190, 42, true), service: el(24, 238, 28), colour: el(320, 238, 28), customer: el(24, 276, 28), due: el(340, 276, 28, true) } },
   },
   { id: "bag-38-line", name: "Bag label, line barcode (38 × 30)", kind: "bag", design: BAG_DESIGN_38_LINE },
   { id: "bag-38-qr", name: "Bag label, QR code (38 × 30)", kind: "bag", design: BAG_DESIGN_38_QR },
@@ -560,6 +564,22 @@ export const labelTemplateSchema = z.object({
   design: labelDesignSchema,
 });
 export type LabelTemplate = z.infer<typeof labelTemplateSchema>;
+
+export const MIN_SCAN_DIGITS = 4;
+export const MAX_SCAN_DIGITS = 18;
+
+/** How many bar widths Code 128 needs for a number this long: pairs of digits are one symbol each, an odd digit costs two. */
+export const code128DigitBars = (digits: number) => 35 + Math.floor(digits / 2) * 11 + (digits % 2 ? 22 : 0);
+
+/** The thickest bars that fit this tag for a number of this length, with blank space at both ends. */
+export function fitBarcodeToDigits(design: LabelDesign, digits: number): LabelDesign {
+  const barcode = design.barcode;
+  if (barcode.type !== "code128") return design;
+  const sideways = barcode.rotation === 90 || barcode.rotation === 270;
+  const room = (sideways ? design.heightMm : design.widthMm) * 8;
+  const moduleDots = Math.min(6, Math.max(1, Math.floor(room / (code128DigitBars(digits) + 20))));
+  return { ...design, barcode: { ...barcode, moduleDots, centered: sideways ? barcode.centered : true } };
+}
 
 /** Tag / label printer layout and print settings. */
 export const labelSettingsSchema = z.object({
@@ -589,6 +609,8 @@ export const labelSettingsSchema = z.object({
   copies: z.number().int().min(1).max(5).default(1),
   /** Line barcode or QR code on the ready-made tag, for shops without the tag designer. */
   basicTagStyle: z.enum(["line", "qr"]).default("line"),
+  /** How many digits each new tag and bag number has. Numbers already issued keep theirs. */
+  scanDigits: z.number().int().min(MIN_SCAN_DIGITS).max(MAX_SCAN_DIGITS).default(6),
 });
 export type LabelSettings = z.infer<typeof labelSettingsSchema>;
 export const DEFAULT_LABEL_SETTINGS: LabelSettings = labelSettingsSchema.parse({});
@@ -599,7 +621,16 @@ export const DEFAULT_LABEL_SETTINGS: LabelSettings = labelSettingsSchema.parse({
  */
 export function withBasicTag(settings: LabelSettings): LabelSettings {
   const qr = settings.basicTagStyle === "qr";
-  return { ...settings, garmentDesign: qr ? GARMENT_DESIGN_38_QR : GARMENT_DESIGN_38_LINE, bagDesign: qr ? BAG_DESIGN_38_QR : BAG_DESIGN_38_LINE };
+  return {
+    ...settings,
+    garmentDesign: fitBarcodeToDigits(qr ? GARMENT_DESIGN_38_QR : GARMENT_DESIGN_38_LINE, settings.scanDigits),
+    bagDesign: fitBarcodeToDigits(qr ? BAG_DESIGN_38_QR : BAG_DESIGN_38_LINE, settings.scanDigits),
+  };
+}
+
+/** Changes the barcode length, and refits both designs so the longer or shorter number still sits properly on the tag. */
+export function withScanDigits(settings: LabelSettings, digits: number): LabelSettings {
+  return { ...settings, scanDigits: digits, garmentDesign: fitBarcodeToDigits(settings.garmentDesign, digits), bagDesign: fitBarcodeToDigits(settings.bagDesign, digits) };
 }
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal("").transform(() => undefined));

@@ -4,7 +4,7 @@
  */
 import type { FastifyInstance } from "fastify";
 import bwipjs from "bwip-js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { TIME_SLOTS } from "@drycare/shared";
 import { db, schema } from "../db/client";
@@ -64,6 +64,15 @@ export async function bookingRoutes(app: FastifyInstance) {
     const shop = await publicShop(slug);
     if (!shop || !(await accessState(shop.org.id)).writable) throw notFound("Online booking for this shop");
     const addr = shop.branch.address ?? {};
+    const membershipEnabled = await hasFeature(shop.org.id, "customerMemberships");
+    const membershipPlans = membershipEnabled
+      ? await db.query.customerMembershipPlans.findMany({
+          where: and(eq(schema.customerMembershipPlans.organizationId, shop.org.id), eq(schema.customerMembershipPlans.active, true)),
+          columns: { id: true, name: true, description: true, price: true, durationDays: true, discountBps: true, freeExpress: true, perks: true },
+          orderBy: [schema.customerMembershipPlans.price],
+          limit: 50,
+        })
+      : [];
     return {
       shopName: shop.org.name,
       branchName: shop.branch.name,
@@ -72,7 +81,46 @@ export async function bookingRoutes(app: FastifyInstance) {
       message: shop.message,
       slots: TIME_SLOTS,
       firstDate: istToday(),
+      membershipPlans,
     };
+  });
+
+  app.post("/public/booking/:slug/membership", { config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } }, async (req) => {
+    const { slug } = z.object({ slug: z.string().min(2).max(80) }).parse(req.params);
+    const body = z.object({
+      name: z.string().trim().min(2).max(80),
+      phone: z.string().trim().regex(/^[+\d][\d\s-]{9,15}$/),
+    }).parse(req.body);
+    const shop = await publicShop(slug);
+    if (!shop || !(await accessState(shop.org.id)).writable || !(await hasFeature(shop.org.id, "customerMemberships"))) {
+      throw notFound("Memberships for this shop");
+    }
+    const phoneNormalized = normalizePhone(body.phone);
+    if (!phoneNormalized) return { memberships: [] };
+    const customer = await db.query.customers.findFirst({
+      where: and(
+        eq(schema.customers.organizationId, shop.org.id),
+        eq(schema.customers.phoneNormalized, phoneNormalized),
+        eq(schema.customers.status, "active"),
+      ),
+      columns: { id: true, name: true },
+    });
+    if (!customer || customer.name.trim().toLocaleLowerCase() !== body.name.trim().toLocaleLowerCase()) {
+      return { memberships: [] };
+    }
+    const now = new Date();
+    const memberships = await db.query.customerMemberships.findMany({
+      where: and(
+        eq(schema.customerMemberships.organizationId, shop.org.id),
+        eq(schema.customerMemberships.customerId, customer.id),
+        eq(schema.customerMemberships.status, "active"),
+        gt(schema.customerMemberships.endsAt, now),
+      ),
+      columns: { planName: true, discountBps: true, startsAt: true, endsAt: true },
+      orderBy: [schema.customerMemberships.startsAt],
+      limit: 10,
+    });
+    return { memberships };
   });
 
   app.post("/public/booking/:slug", { config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } }, async (req, reply) => {

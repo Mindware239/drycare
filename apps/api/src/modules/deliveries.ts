@@ -42,7 +42,7 @@ async function deliveryView(tx: Tx | typeof db, auth: AuthContext, id: string): 
     where d.id = ${id} and d.organization_id = ${auth.orgId}`);
   if (!row) throw notFound("Pickup / delivery");
   const items = await tx.execute(sql`
-    select g.id, g.tag_code, g.current_status, oi.garment_type_name, oi.service_name, oi.colour, di.verified_at
+    select g.id, g.tag_code, g.scan_code, g.current_status, oi.garment_type_name, oi.service_name, oi.colour, di.verified_at
     from delivery_items di join garments g on g.id = di.garment_id join order_items oi on oi.id = g.order_item_id
     where di.delivery_id = ${id} order by g.tag_code`);
   const events = await tx.execute(sql`

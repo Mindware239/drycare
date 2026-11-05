@@ -22,6 +22,7 @@ import {
   PanelLeftOpen,
   Receipt,
   ScanLine,
+  Barcode,
   Search,
   Settings,
   Shirt,
@@ -69,6 +70,7 @@ const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; g
   { href: "/customers", label: "Customers", icon: Users, perm: "customers.read", group: "store" },
   { href: "/production", label: "Production board", icon: Factory, perm: "orders.read", group: "garments" },
   { href: "/scan", label: "Scan station", icon: ScanLine, perm: "garments.process", group: "garments" },
+  { href: "/tags", label: "Tag tracking", icon: Barcode, perm: "orders.read", group: "garments" },
   { href: "/transfers", label: "Facility transfers", icon: Truck, perm: "orders.read", group: "garments" },
   { href: "/exceptions", label: "Garment exceptions", icon: TriangleAlert, perm: "orders.read", group: "garments" },
   { href: "/laundry", label: "Machines & live status", icon: WashingMachine, perm: "laundry.view", group: "laundry", feature: "laundry" },
@@ -148,11 +150,18 @@ function Shell({ children }: { children: ReactNode }) {
     if (here && ((here.perm && !can(here.perm)) || (here.feature && !has(here.feature))) && items[0]) router.replace(items[0].href);
   }, [pathname, can, has, items, router]);
 
-  function search(event: FormEvent<HTMLFormElement>) {
+  async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = query.trim();
     if (!value) return;
-    if (/^[A-Z0-9]+-\d{4}-\d+-\d+$/i.test(value)) router.push(`/scan?tag=${encodeURIComponent(value.toUpperCase())}`);
+    const openLabel = (code: string) => router.push(can("garments.process") ? `/scan?tag=${encodeURIComponent(code)}` : `/tags/view?code=${encodeURIComponent(code)}`);
+    // A number could be a barcode or a phone number: a barcode wins, otherwise it is a customer search.
+    if (/^\d{4,18}$/.test(value) && can("orders.read") && (await api(`/scan/resolve?code=${value}`).then(() => true, () => false))) {
+      openLabel(value);
+      setQuery("");
+      return;
+    }
+    if (/^[A-Z0-9]+-\d{4}-\d+-(\d+|B\d+)$/i.test(value)) openLabel(value.toUpperCase());
     else if (/^[A-Z0-9]+-\d{4}-\d+$/i.test(value) || !can("customers.read")) router.push(`/orders?q=${encodeURIComponent(value)}`);
     else router.push(`/customers?q=${encodeURIComponent(value)}`);
     setQuery("");

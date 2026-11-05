@@ -8,10 +8,13 @@ import { cx } from "@/components/ui";
 
 const plainBox = inputBox.replace("pl-11", "pl-3");
 
-type Shop = { shopName: string; branchName: string; phone: string | null; address: string; message: string; slots: string[]; firstDate: string };
+type MembershipPlan = { id: string; name: string; description: string | null; price: number; durationDays: number; discountBps: number; freeExpress: boolean; perks: string[] };
+type CustomerMembership = { planName: string; discountBps: number; startsAt: string; endsAt: string };
+type Shop = { shopName: string; branchName: string; phone: string | null; address: string; message: string; slots: string[]; firstDate: string; membershipPlans: MembershipPlan[] };
 
 const slotLabel = (s: string) => s.split("-").map((t) => { const [h, m] = t.split(":").map(Number); return `${((h + 11) % 12) + 1}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "am" : "pm"}`; }).join(" – ");
 const nextDays = (first: string, n: number) => Array.from({ length: n }, (_, i) => new Date(Date.parse(first) + i * 86_400_000).toISOString().slice(0, 10));
+const rupees = (paise: number) => paise === 0 ? "Free" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(paise / 100);
 
 function BookingForm() {
   const slug = useSearchParams().get("s") ?? "";
@@ -21,6 +24,9 @@ function BookingForm() {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState<{ reference: string; date: string; slot: string } | null>(null);
+  const [memberships, setMemberships] = useState<CustomerMembership[] | null>(null);
+  const [membershipError, setMembershipError] = useState("");
+  const [checkingMembership, setCheckingMembership] = useState(false);
 
   useEffect(() => {
     if (!slug) { setMissing("This booking link is incomplete. Ask the shop for its booking link."); return; }
@@ -29,7 +35,33 @@ function BookingForm() {
       .then((s) => { setShop(s); setF((x) => ({ ...x, date: s.firstDate, slot: s.slots[1] ?? s.slots[0] })); })
       .catch(() => setMissing("This shop is not taking online bookings right now. Please call the shop."));
   }, [slug]);
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => {
+    setF((current) => ({ ...current, [k]: e.target.value }));
+    if (k === "name" || k === "phone") {
+      setMemberships(null);
+      setMembershipError("");
+    }
+  };
+
+  async function checkMembership() {
+    setCheckingMembership(true);
+    setMembershipError("");
+    setMemberships(null);
+    try {
+      const r = await fetch(`/api/v1/public/booking/${encodeURIComponent(slug)}/membership`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-drycare-csrf": "1" },
+        body: JSON.stringify({ name: f.name, phone: f.phone }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.error?.message ?? "Could not check your membership. Please try again.");
+      setMemberships(j.memberships as CustomerMembership[]);
+    } catch (err) {
+      setMembershipError((err as Error).message);
+    } finally {
+      setCheckingMembership(false);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -73,6 +105,53 @@ function BookingForm() {
         <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-800">Your name</span><IconInput icon={UserRound} required value={f.name} onChange={set("name")} autoComplete="name" placeholder="Full name" /></label>
         <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-800">Mobile number</span><IconInput icon={Phone} required type="tel" inputMode="tel" value={f.phone} onChange={set("phone")} autoComplete="tel" placeholder="98XXXXXXXX" /></label>
       </div>
+      {shop.membershipPlans.length > 0 && (
+        <section className="space-y-3 rounded-2xl border border-brand-100 bg-brand-50/50 p-4" aria-labelledby="membership-plans-title">
+          <div>
+            <h2 id="membership-plans-title" className="font-bold text-slate-900">Membership plans</h2>
+            <p className="mt-1 text-xs text-slate-600">Get a discount on your orders. Buy or renew at the shop; online payment is not available.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {shop.membershipPlans.map((plan) => (
+              <article key={plan.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold text-slate-900">{plan.name}</h3>
+                  <span className="whitespace-nowrap text-sm font-bold text-brand-800">{rupees(plan.price)}</span>
+                </div>
+                {plan.description && <p className="mt-1 text-xs text-slate-600">{plan.description}</p>}
+                <ul className="mt-2 space-y-0.5 text-xs text-slate-700">
+                  <li>✓ {plan.discountBps / 100}% off every order</li>
+                  {plan.freeExpress && <li>✓ Free express service</li>}
+                  {plan.perks.map((perk) => <li key={perk}>✓ {perk}</li>)}
+                </ul>
+                <p className="mt-2 text-xs text-slate-500">Valid for {plan.durationDays} days</p>
+              </article>
+            ))}
+          </div>
+          <div className="border-t border-brand-100 pt-3">
+            <p className="text-sm font-semibold text-slate-800">Already a member?</p>
+            <p className="mt-1 text-xs text-slate-600">Enter the name and mobile number registered with the shop to check your membership.</p>
+            <button type="button" disabled={checkingMembership || f.name.trim().length < 2 || f.phone.trim().length < 10} onClick={() => void checkMembership()} className="mt-2 rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-800 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50">
+              {checkingMembership ? "Checking…" : "Check membership"}
+            </button>
+            {membershipError && <p role="alert" className="mt-2 text-sm text-red-700">{membershipError}</p>}
+            {memberships && (
+              memberships.length === 0
+                ? <p className="mt-2 text-sm text-slate-600">No current or upcoming membership was found for those details.</p>
+                : <ul className="mt-2 space-y-2">
+                    {memberships.map((membership, index) => {
+                      const startsAt = new Date(membership.startsAt);
+                      const endsAt = new Date(membership.endsAt);
+                      const upcoming = startsAt.getTime() > Date.now();
+                      return <li key={`${membership.planName}-${membership.startsAt}-${index}`} className="rounded-lg bg-white px-3 py-2 text-sm text-slate-700">
+                        <span className="font-semibold text-slate-900">{membership.planName}</span> · {membership.discountBps / 100}% off · {upcoming ? "Starts" : "Valid through"} {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(upcoming ? startsAt : endsAt)}
+                      </li>;
+                    })}
+                  </ul>
+            )}
+          </div>
+        </section>
+      )}
       <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-800">Pickup address</span><IconInput icon={MapPin} required value={f.line1} onChange={set("line1")} autoComplete="street-address" placeholder="House / flat, building, street" /></label>
       <div className="grid grid-cols-3 gap-3">
         <input className={plainBox} value={f.area} onChange={set("area")} placeholder="Area" aria-label="Area" />
@@ -105,7 +184,7 @@ function BookingForm() {
       {/* Hidden from people; bots fill it and are ignored. */}
       <input type="text" name="website" value={f.website} onChange={set("website")} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" />
       <button type="submit" disabled={sending} className={primaryButton}>{sending ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <><Truck className="h-5 w-5" />Request pickup</>}</button>
-      <p className="text-center text-xs text-slate-500">Your number is used only by {shop.shopName} to arrange this pickup.</p>
+      <p className="text-center text-xs text-slate-500">Your number is shared with {shop.shopName} to arrange pickup{shop.membershipPlans.length ? " and check your membership." : "."}</p>
     </form>
   );
 }

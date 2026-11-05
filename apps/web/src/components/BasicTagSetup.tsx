@@ -4,7 +4,7 @@ import { Printer, RefreshCw, Sparkles } from "lucide-react";
 import { BASIC_TAG_SIZE, withBasicTag, type LabelSettings } from "@drycare/shared";
 import { renderLabel, type LabelData } from "@/lib/labelRender";
 import { Button, Field, Input, Select } from "@/components/ui";
-import { Stepper, type PrinterDetails } from "@/components/LabelDesigner";
+import { SCAN_DIGIT_OPTIONS, Stepper, type PrinterDetails } from "@/components/LabelDesigner";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -52,6 +52,11 @@ export function BasicTagSetup({ settings, onChange, sample, printers, directAvai
             <Select value={settings.basicTagStyle} onChange={(e) => onChange(withBasicTag({ ...settings, basicTagStyle: e.target.value as LabelSettings["basicTagStyle"] }))}>
               <option value="line">Line barcode</option>
               <option value="qr">QR code</option>
+            </Select>
+          </Field>
+          <Field label="Barcode length" hint="For new orders. Tags already issued keep their number and still scan.">
+            <Select value={settings.scanDigits} onChange={(e) => onChange(withBasicTag({ ...settings, scanDigits: Number(e.target.value) }))}>
+              {SCAN_DIGIT_OPTIONS.map(([digits, label]) => <option key={digits} value={digits}>{label}</option>)}
             </Select>
           </Field>
           <p className="flex items-start gap-2 rounded-lg bg-brand-50 p-3 text-xs leading-5 text-brand-900">

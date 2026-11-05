@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FEATURE_KEYS, isPrinterApproved, resolveFeatures, splitInclusiveTax } from "./features";
-import { DEFAULT_LABEL_SETTINGS, withBasicTag } from "./schemas";
+import { DEFAULT_LABEL_SETTINGS, LABEL_PRESETS, branchUpdateSchema, code128DigitBars, fitBarcodeToDigits, isLineBarcode, withBasicTag, withScanDigits } from "./schemas";
 import { signedLicenseSchema } from "./license";
 
 describe("plan features", () => {
@@ -48,6 +48,54 @@ describe("approved printers", () => {
   it("refuses anything else, and a blank entry never matches", () => {
     expect(isPrinterApproved({ name: "Microsoft Print to PDF", driver: "Microsoft" }, ["TSC TE244"])).toBe(false);
     expect(isPrinterApproved({ name: "Any Printer" }, ["  "])).toBe(false);
+  });
+});
+
+describe("ready-made tag designs", () => {
+  // Code 128 holds six digits in 3 pairs: start, 3 symbols and a check digit at 11 bars each, then a 13-bar stop.
+  const SIX_DIGIT_BARS = 68;
+  it("every line barcode fits its tag, with blank space at both sides", () => {
+    for (const preset of LABEL_PRESETS.filter((p) => isLineBarcode(p.design.barcode.type))) {
+      const { moduleDots } = preset.design.barcode;
+      expect((SIX_DIGIT_BARS + 20) * moduleDots, preset.name).toBeLessThanOrEqual(preset.design.widthMm * 8);
+      expect(moduleDots, preset.name).toBeGreaterThanOrEqual(3);
+    }
+  });
+  it("every design prints the six-digit number and not the long one", () => {
+    for (const preset of LABEL_PRESETS) {
+      expect(preset.design.elements.scanCode?.show, preset.name).toBe(true);
+      expect(preset.design.elements.tagCode, preset.name).toBeUndefined();
+      expect(preset.design.elements.bagCode, preset.name).toBeUndefined();
+    }
+  });
+});
+
+describe("barcode length", () => {
+  it("knows how much room a number needs", () => {
+    expect(code128DigitBars(6)).toBe(68);
+    expect(code128DigitBars(12)).toBe(101);
+    expect(code128DigitBars(13)).toBe(123);
+  });
+  it("thins the bars for a longer number, and thickens them again for a shorter one", () => {
+    const tag = DEFAULT_LABEL_SETTINGS.garmentDesign;
+    expect(tag.widthMm).toBe(38);
+    expect(fitBarcodeToDigits(tag, 6).barcode.moduleDots).toBe(3);
+    expect(fitBarcodeToDigits(tag, 13).barcode.moduleDots).toBe(2);
+    expect(fitBarcodeToDigits(tag, 18).barcode.moduleDots).toBe(1);
+    const long = withScanDigits(DEFAULT_LABEL_SETTINGS, 13);
+    expect([long.scanDigits, long.garmentDesign.barcode.moduleDots, long.bagDesign.barcode.moduleDots]).toEqual([13, 2, 2]);
+    expect(withScanDigits(long, 6).garmentDesign.barcode.moduleDots).toBe(3);
+  });
+  it("leaves QR codes alone, and the basic tag follows the length too", () => {
+    const qr = LABEL_PRESETS.find((p) => p.design.barcode.type === "qrcode")!.design;
+    expect(fitBarcodeToDigits(qr, 13)).toEqual(qr);
+    expect(withBasicTag({ ...DEFAULT_LABEL_SETTINGS, scanDigits: 13 }).garmentDesign.barcode.moduleDots).toBe(2);
+  });
+});
+
+describe("branch edits", () => {
+  it("changing a store code changes nothing else", () => {
+    expect(branchUpdateSchema.parse({ branchCode: "bkc" })).toEqual({ branchCode: "BKC" });
   });
 });
 

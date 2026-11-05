@@ -116,6 +116,7 @@ export async function renderLabel(design: LabelDesign, data: LabelData): Promise
   const boxes: LabelBox[] = [];
   const warnings: string[] = [];
   const addWarning = (w: string) => { if (!warnings.includes(w)) warnings.push(w); };
+  const drawnTexts: { text: string; box: LabelBox }[] = [];
   for (const [key, element] of Object.entries(design.elements)) {
     if (!element.show) continue;
     if (element.type === "line" || element.type === "box") {
@@ -134,6 +135,10 @@ export async function renderLabel(design: LabelDesign, data: LabelData): Promise
     if (!text) continue;
     const box = drawText(ctx, key, element, text, widthDots, heightDots, warnings);
     boxes.push(box);
+    // Lines of text sit a little inside their boxes, so boxes may just touch without the words touching.
+    const clash = drawnTexts.find((other) => box.x < other.box.x + other.box.w && box.x + box.w > other.box.x && box.y + 3 < other.box.y + other.box.h && box.y + box.h > other.box.y + 3);
+    if (clash) addWarning(`"${clash.text}" and "${text}" are printing on top of each other. Move one of them.`);
+    drawnTexts.push({ text, box });
     if (box.x < 0 || box.y < 0 || box.x + box.w > widthDots || box.y + box.h > heightDots) addWarning(`"${text}" goes off the tag. Move it or make it smaller.`);
     else if (box.x < SAFE_EDGE || box.y < SAFE_EDGE || box.x + box.w > widthDots - SAFE_EDGE || box.y + box.h > heightDots - SAFE_EDGE) addWarning(`"${text}" is very close to the edge and may be cut when printed.`);
   }

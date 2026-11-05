@@ -3,6 +3,7 @@
  * The provider is a log adapter until SMS / WhatsApp / email providers are configured
  * (FR-NOT-002). Failures never affect the business transaction that produced the event.
  */
+import { remindExpiringMemberships } from "./lib/memberships";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { formatMoney } from "@drycare/shared";
 import { db, schema } from "./db/client";
@@ -59,6 +60,14 @@ async function buildMessage(eventType: string, payload: Record<string, unknown>,
       body = `${shop}: Order ${order!.orderNumber} booked — ${n} item(s), total ${formatMoney(order!.grandTotal)}. Expected ready by ${fmtDate(order!.promisedAt)}.`;
       break;
     }
+    case "membership.sold": {
+      const benefits = [`${Number(payload.discountBps) / 100}% off every order`, ...(payload.freeExpress ? ["free express service"] : []), ...((payload.perks as string[] | undefined) ?? [])];
+      body = `${shop}: Welcome to ${payload.planName}! Your benefits: ${benefits.join(", ")}. Valid until ${fmtDate(new Date(payload.endsAt as string))}.`;
+      break;
+    }
+    case "membership.expiring":
+      body = `${shop}: Your ${payload.planName} membership ends on ${fmtDate(new Date(payload.endsAt as string))}. Renew at the shop to keep your benefits.`;
+      break;
     case "order.ready":
       body = `${shop}: Your order ${order!.orderNumber} is ready for collection.`;
       break;
@@ -259,8 +268,14 @@ async function updateCampaignStatus(campaignId: string | null) {
 }
 
 console.log("DryCare worker started");
+const HOUR = 3_600_000;
+let remindersCheckedAt = 0;
 for (;;) {
   try {
+    if (Date.now() - remindersCheckedAt >= HOUR) {
+      remindersCheckedAt = Date.now();
+      await remindExpiringMemberships();
+    }
     await processDueMarketingCampaigns();
     await processOutbox();
     await sendQueued();

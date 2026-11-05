@@ -56,7 +56,9 @@ rmSync(before0027, { recursive: true, force: true });
 await sqlClient.unsafe(`
   alter table organizations add column feature_overrides_json jsonb not null default '{}'::jsonb, add column branch_limit_override integer;
   alter table orders add column customer_membership_id uuid;
-  create table customer_memberships (id uuid, organization_id uuid, customer_id uuid, plan_id uuid, branch_id uuid, plan_name text, discount_bps integer, price_paid integer, tax_bps integer, tax_amount integer, invoice_number text, payment_id uuid,
+  alter table garments add column scan_code text;
+  alter table bags add column scan_code text;
+  create table customer_memberships (id uuid, organization_id uuid, customer_id uuid, plan_id uuid, branch_id uuid, plan_name text, discount_bps integer, free_express boolean, perks_json jsonb, renewal_reminder_sent_at timestamptz, price_paid integer, tax_bps integer, tax_amount integer, invoice_number text, payment_id uuid,
     starts_at timestamptz, ends_at timestamptz, status text, cancelled_at timestamptz, cancel_reason text, created_by uuid, created_at timestamptz, updated_at timestamptz);
 `);
 
@@ -100,6 +102,8 @@ check("business data exists before the sync migration", Number(beforeFp.orders.s
 await sqlClient.unsafe(`
   alter table organizations drop column feature_overrides_json, drop column branch_limit_override;
   alter table orders drop column customer_membership_id;
+  alter table garments drop column scan_code;
+  alter table bags drop column scan_code;
   drop table customer_memberships;
 `);
 await runMigrations(db, migrations);

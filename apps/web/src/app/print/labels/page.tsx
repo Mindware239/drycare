@@ -3,7 +3,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Printer, ScanLine, Settings2, TriangleAlert, XCircle } from "lucide-react";
-import { DEFAULT_LABEL_SETTINGS, GARMENT_DESIGN_38_LINE, GARMENT_DESIGN_38_QR, formatMoney, labelSettingsSchema, withBasicTag, type FeatureMap, type LabelDesign, type LabelSettings } from "@drycare/shared";
+import { DEFAULT_LABEL_SETTINGS, GARMENT_DESIGN_38_LINE, GARMENT_DESIGN_38_QR, fitBarcodeToDigits, formatMoney, sampleScanCode, labelSettingsSchema, withBasicTag, type FeatureMap, type LabelDesign, type LabelSettings } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { dateOnly } from "@/lib/format";
 import { withRollSize } from "@/lib/labelDesign";
@@ -13,7 +13,7 @@ import { BarcodeAdjust } from "@/components/BarcodeAdjust";
 import { BasicTagSetup } from "@/components/BasicTagSetup";
 import { LabelDesigner, type PrinterDetails } from "@/components/LabelDesigner";
 import { PrinterQueueStatus, usePrinterQueue } from "@/components/PrinterQueue";
-import { SCANNER_SAMPLES, ScannerTest, sampleData } from "@/components/ScannerTest";
+import { ScannerTest, sampleData, scannerSamples } from "@/components/ScannerTest";
 
 type Scope = "all" | "bag" | "garments";
 type PrintItem = { key: string; design: LabelDesign; data: LabelData };
@@ -74,7 +74,7 @@ function LabelsPageInner() {
   // The sample is created once: a new object on each render would redraw the labels forever.
   const branches = useApi<any[]>(test ? "/branches" : null);
   const sampleBranch = branches.data?.[0]?.branchCode as string | undefined;
-  const o = useMemo(() => (test ? sampleOrder(sampleBranch ?? "TEST") : order.data), [test, sampleBranch, order.data]);
+  const o = useMemo(() => (test ? sampleOrder(sampleBranch ?? "TEST", settings.scanDigits) : order.data), [test, sampleBranch, settings.scanDigits, order.data]);
   const direct = printerInfo.data?.available ?? false;
   // Only printers the software owner accepts can be chosen. The server refuses any other.
   const printers = useMemo(() => (printerInfo.data?.printers ?? []).filter((p) => p.approved !== false), [printerInfo.data]);
@@ -91,19 +91,19 @@ function LabelsPageInner() {
   const garmentData = (g: any, i: number): LabelData => {
     const it = o.items.find((x: any) => x.id === g.orderItemId);
     return {
-      barcodeValue: g.tagCode,
+      barcodeValue: g.scanCode ?? g.tagCode,
       texts: {
-        orderNumber: o.orderNumber, count: `${i + 1}/${live.length}`, tagCode: g.tagCode, garment: it?.garmentTypeName ?? "", service: it?.serviceName ?? "", colour: it?.colour ?? "", customer,
+        orderNumber: o.orderNumber, count: `${i + 1}/${live.length}`, tagCode: g.tagCode, scanCode: g.scanCode ?? "", garment: it?.garmentTypeName ?? "", service: it?.serviceName ?? "", colour: it?.colour ?? "", customer,
         due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}`,
         ...commonTexts(),
         brand: it?.brand ?? "", quantity: `${live.length} pcs`, price: it?.unitPrice !== undefined && it?.unitPrice !== null ? formatMoney(it.unitPrice) : "", notes: it?.careInstructions ?? "",
       },
     };
   };
-  const commonTexts = () => ({ phone: o.customer?.phone ?? "", store: o.branch?.name ?? "", orderDate: o.createdAt ? dateOnly(o.createdAt).slice(0, 6) : "" });
+  const commonTexts = () => ({ phone: o.customer?.phone ?? "", store: o.branch?.name ?? "", branchCode: o.branch?.code ?? "", orderSerial: String(o.orderNumber).split("-").at(-1) ?? "", orderDate: o.createdAt ? dateOnly(o.createdAt).slice(0, 6) : "" });
   const bagData = (b: any): LabelData => ({
-    barcodeValue: b.bagCode,
-    texts: { title: "BAG", orderNumber: o.orderNumber, pieces: `${b.garmentCount ?? b.expectedCount} pcs`, bagCode: b.bagCode, info: [o.branch?.name, customer].filter(Boolean).join(" · "), due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}`, customer, ...commonTexts() },
+    barcodeValue: b.scanCode ?? b.bagCode,
+    texts: { title: "BAG", orderNumber: o.orderNumber, pieces: `${b.garmentCount ?? b.expectedCount} pcs`, bagCode: b.bagCode, scanCode: b.scanCode ?? "", info: [o.branch?.name, customer].filter(Boolean).join(" · "), due: `Due ${dateOnly(o.promisedAt).slice(0, 6)}${o.express ? " EXP" : ""}`, customer, ...commonTexts() },
   });
 
   const items: PrintItem[] = useMemo(() => {
@@ -147,8 +147,8 @@ function LabelsPageInner() {
     const g = live[0];
     const b = bags[0];
     return {
-      garment: g && o ? garmentData(g, 0) : { barcodeValue: "NEWDEL-2026-00001-01", texts: { orderNumber: "NEWDEL-2026-00001", count: "1/3", tagCode: "NEWDEL-2026-00001-01", garment: "Blazer", service: "Dry clean", colour: "Blue", customer: "Neelam", due: "Due 06 Nov" } },
-      bag: b && o ? bagData(b) : { barcodeValue: "NEWDEL-2026-00001-B1", texts: { title: "BAG", orderNumber: "NEWDEL-2026-00001", pieces: "3 pcs", bagCode: "NEWDEL-2026-00001-B1", info: "Main Store · Neelam", due: "Due 06 Nov" } },
+      garment: g && o ? garmentData(g, 0) : { barcodeValue: sampleScanCode(settings.scanDigits), texts: { orderNumber: "NEWDEL-2026-00001", count: "1/3", tagCode: "NEWDEL-2026-00001-01", scanCode: sampleScanCode(settings.scanDigits), garment: "Blazer", service: "Dry clean", colour: "Blue", customer: "Neelam", due: "Due 06 Nov" } },
+      bag: b && o ? bagData(b) : { barcodeValue: sampleScanCode(settings.scanDigits), texts: { title: "BAG", orderNumber: "NEWDEL-2026-00001", pieces: "3 pcs", bagCode: "NEWDEL-2026-00001-B1", scanCode: sampleScanCode(settings.scanDigits), info: "Main Store · Neelam", due: "Due 06 Nov" } },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [o, live, bags, customer]);
@@ -271,7 +271,7 @@ function LabelsPageInner() {
 
   const applySample = (sampleId: number) => {
     const preset = sampleId >= 3 ? GARMENT_DESIGN_38_QR : GARMENT_DESIGN_38_LINE;
-    setSettings(canDesign ? { ...settings, garmentDesign: preset } : withBasicTag({ ...settings, basicTagStyle: sampleId >= 3 ? "qr" : "line" }));
+    setSettings(canDesign ? { ...settings, garmentDesign: fitBarcodeToDigits(preset, settings.scanDigits) } : withBasicTag({ ...settings, basicTagStyle: sampleId >= 3 ? "qr" : "line" }));
     setPanel("design");
     setNotice(canDesign ? "Barcode updated in the designer. Check it, then press Save design." : "Tag updated. Check it, then press Save.");
   };
@@ -396,7 +396,8 @@ function LabelsPageInner() {
           <ScannerTest
             disabled={busy}
             approvedScanners={hardware.data?.scanners}
-            onPrint={() => printSamples(SCANNER_SAMPLES.map((s) => ({ key: `sample-${s.id}`, design: s.design, data: sampleData(s) })))}
+            digits={settings.scanDigits}
+            onPrint={() => printSamples(scannerSamples(settings.scanDigits).map((s) => ({ key: `sample-${s.id}`, design: s.design, data: sampleData(s) })))}
             onUse={(s) => applySample(s.id)}
           />
         )}
@@ -423,14 +424,15 @@ function LabelsPageInner() {
 }
 
 /** A realistic sample for setup: no database records are created. */
-function sampleOrder(branchCode: string) {
+function sampleOrder(branchCode: string, digits: number) {
+  const scanCode = sampleScanCode(digits);
   // Same length as a real number, so a test tag scans as a real one would. Order 00000 is never issued.
   const orderNumber = `${branchCode}-${new Date().getFullYear()}-00000`;
   const items = [{ id: "i1", garmentTypeName: "Shirt", serviceName: "Dry clean", colour: "Blue", brand: "Sample Brand", unitPrice: 15000, careInstructions: "Sample instructions" }];
   return {
-    orderNumber, promisedAt: new Date().toISOString(), createdAt: new Date().toISOString(), express: false, customer: { name: "Sample Customer", phone: "98765 43210" }, branch: { name: "Main Store" },
-    items, garments: [{ id: "g1", tagCode: `${orderNumber}-01`, orderItemId: "i1", currentStatus: "received" }],
-    bags: [{ id: "b1", bagCode: `${orderNumber}-B1`, garmentCount: 1 }], printJobs: [],
+    orderNumber, promisedAt: new Date().toISOString(), createdAt: new Date().toISOString(), express: false, customer: { name: "Sample Customer", phone: "98765 43210" }, branch: { name: "Main Store", code: branchCode },
+    items, garments: [{ id: "g1", tagCode: `${orderNumber}-01`, scanCode, orderItemId: "i1", currentStatus: "received" }],
+    bags: [{ id: "b1", bagCode: `${orderNumber}-B1`, scanCode, garmentCount: 1 }], printJobs: [],
   };
 }
 

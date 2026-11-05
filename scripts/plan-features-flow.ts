@@ -158,7 +158,8 @@ try {
   const garmentTypeId = (await shop.req("POST", "/garment-types", { name: `Feature Shirt ${runId}`, category: "Men" })).json.id;
   const priceList = (await shop.req("GET", "/price-lists")).json[0];
   await shop.req("POST", `/price-lists/${priceList.id}/prices`, { garmentTypeId, serviceId, unitPrice: 10000, taxBps: 0 });
-  const customerId = (await shop.req("POST", "/customers", { name: "Member Customer", phone: `+91 97${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}` })).json.id;
+  const customerPhone = `+91 97${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
+  const customerId = (await shop.req("POST", "/customers", { name: "Member Customer", phone: customerPhone })).json.id;
   const quoteBody = (extra: object = {}) => ({ customerId, branchId, items: [{ garmentTypeId, serviceId, quantity: 1 }], ...extra });
 
   r = await shop.req("POST", "/membership-plans", { name: "Gold", price: 99900, durationDays: 365, discountBps: 0 });
@@ -167,6 +168,8 @@ try {
   check("a shop can create a membership plan", r.status === 201, r.json);
   const gold = r.json;
   const silver = (await shop.req("POST", "/membership-plans", { name: "Silver", price: 0, durationDays: 30, discountBps: 500 })).json;
+  r = await pub.req("GET", `/public/booking/${slug}`);
+  check("the public booking page lists active membership plans", r.status === 200 && r.json.membershipPlans.some((p: { id: string }) => p.id === gold.id) && r.json.membershipPlans.some((p: { id: string }) => p.id === silver.id), r.json);
 
   r = await shop.req("POST", "/orders/quote", quoteBody());
   check("before buying, no discount applies", r.status === 200 && r.json.totals.discountTotal === 0 && r.json.membership === null, r.json);
@@ -177,6 +180,10 @@ try {
   r = await shop.req("POST", `/customers/${customerId}/memberships`, { planId: gold.id, branchId, method: "cash" });
   check("selling a membership works", r.status === 201 && r.json.pricePaid === 99900, r.json);
   const firstMembership = r.json;
+  r = await pub.req("POST", `/public/booking/${slug}/membership`, { name: "Member Customer", phone: customerPhone });
+  check("the customer can see their current membership using their registered name and phone", r.status === 200 && r.json.memberships.length === 1 && r.json.memberships[0].planName === "Gold", r.json);
+  r = await pub.req("POST", `/public/booking/${slug}/membership`, { name: "Someone Else", phone: customerPhone });
+  check("membership details are not returned when the name does not match", r.status === 200 && r.json.memberships.length === 0, r.json);
   const payment = await db.query.payments.findFirst({ where: (p, { eq }) => eq(p.id, firstMembership.paymentId) });
   check("the fee is recorded as money received, in the open shift", payment?.amount === 99900 && payment.status === "succeeded" && !!payment.shiftId, payment);
 
@@ -192,6 +199,96 @@ try {
   const [lowCoupon] = await db.insert(schema.marketingCoupons).values({ organizationId: orgId, campaignId: campaign.id, code: `LOW${runId}`.toUpperCase(), discountBps: 500, startsAt: new Date(now.getTime() - 3600_000), expiresAt: new Date(now.getTime() + 86_400_000) }).returning();
   r = await shop.req("POST", "/orders", { ...quoteBody({ couponCode: lowCoupon.code }), promisedAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), payments: [] }, { "idempotency-key": `feat-${runId}` });
   check("the order uses the membership over a smaller coupon", r.status === 201 && r.json.customerMembershipId === firstMembership.id && r.json.couponId === null && r.json.discountBps === 1000, r.json);
+  const tracedOrderId = r.json.id as string;
+  const createdGarment = r.json.garments[0];
+  const createdBag = r.json.bags[0];
+  check("new order labels get unique six-digit scan codes", /^\d{6}$/.test(createdGarment.scanCode) && /^\d{6}$/.test(createdBag.scanCode) && createdGarment.scanCode !== createdBag.scanCode, { garment: createdGarment, bag: createdBag });
+  check("the printed tag keeps its full readable order code", createdGarment.tagCode.startsWith(`${r.json.orderNumber}-`), createdGarment);
+  r = await shop.req("GET", `/scan/resolve?code=${createdGarment.scanCode}`);
+  check("scanning a six-digit garment barcode opens the correct garment", r.status === 200 && r.json.kind === "garment" && r.json.garmentId === createdGarment.id, r.json);
+  r = await shop.req("GET", `/scan/resolve?code=${createdBag.scanCode}`);
+  check("scanning a six-digit bag barcode opens the correct bag", r.status === 200 && r.json.kind === "bag" && r.json.bagId === createdBag.id, r.json);
+
+  // ---- Tag tracking: from any barcode, the whole record
+  await shop.req("POST", "/tags/scans", { code: createdGarment.scanCode });
+  const printJob = (await shop.req("POST", `/orders/${tracedOrderId}/print-jobs`, { scope: "garments", garmentIds: [createdGarment.id], labelCount: 1 })).json;
+  await shop.req("POST", `/print-jobs/${printJob.id}/result`, { status: "printed" });
+  r = await shop.req("GET", `/tags/trace?code=${createdGarment.scanCode}`);
+  check("a scan shows the customer, the order and the sale behind the tag", r.status === 200 && r.json.customer.name === "Member Customer" && r.json.order.id === tracedOrderId && typeof r.json.order.total === "number" && r.json.membership?.planName === "Gold", r.json);
+  check("it shows every label on the order", r.json.tags.some((t: { id: string }) => t.id === createdGarment.id) && r.json.bags.some((b: { id: string }) => b.id === createdBag.id), r.json);
+  const events = r.json.timeline as { type: string; kind?: string; step?: string; actor?: string }[];
+  check("the history shows booking, the scan and the print, with who did each", events.some((e) => e.type === "status" && e.kind === "intake") && events.some((e) => e.type === "scan" && e.step === "lookup" && !!e.actor) && events.some((e) => e.type === "print"), events);
+  r = await shop.req("GET", `/tags/trace?code=${createdBag.scanCode}`);
+  check("a bag label shows what is inside it", r.status === 200 && r.json.kind === "bag" && r.json.timeline.some((e: { type: string }) => e.type === "status"), r.json);
+  check("a bag's history leaves out a reprint of only some tags", !r.json.timeline.some((e: { type: string; scope?: string }) => e.type === "print" && e.scope === "garments"), r.json.timeline);
+  r = await shop.req("GET", `/tags/trace?code=999999`);
+  check("a number nobody issued is reported as not found", r.status === 404, r.json);
+  r = await shop.req("GET", `/tags?search=${createdGarment.scanCode}`);
+  check("the tag list finds a tag by barcode", r.status === 200 && r.json.rows.length === 1 && r.json.rows[0].customerName === "Member Customer" && r.json.rows[0].printCount === 1 && r.json.summary.total === 1, r.json);
+  r = await shop.req("GET", `/tags?search=Member%20Customer&status=in_process`);
+  check("the tag list finds tags by customer, and counts sales", r.status === 200 && r.json.rows.length >= 1 && r.json.summary.sales > 0, r.json.summary);
+  r = await shop.req("GET", `/customers/${customerId}/garments`);
+  check("the customer's record lists barcode numbers", r.status === 200 && r.json.some((g: { scan_code: string }) => g.scan_code === createdGarment.scanCode), r.json);
+
+  // ---- Barcode length: whatever the shop chooses
+  const orderBody = () => ({ ...quoteBody(), promisedAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), payments: [] });
+  const setDigits = (scanDigits: number) => shop.req("PATCH", "/organizations/current", { settings: { labels: { scanDigits } } });
+  for (const digits of [13, 12, 8, 18]) {
+    r = await setDigits(digits);
+    check(`a shop can choose ${digits} digits`, r.status === 200, r.json);
+    r = await shop.req("POST", "/orders", orderBody(), { "idempotency-key": `digits-${digits}-${runId}` });
+    const tag = r.json.garments?.[0];
+    check(`new tags then have ${digits} digits`, r.status === 201 && tag.scanCode.length === digits && /^\d+$/.test(tag.scanCode), r.json);
+    const found = await shop.req("GET", `/scan/resolve?code=${tag.scanCode}`);
+    check(`a ${digits}-digit barcode scans to the right tag`, found.status === 200 && found.json.garmentId === tag.id, found.json);
+  }
+  r = await shop.req("GET", `/scan/resolve?code=${createdGarment.scanCode}`);
+  check("tags issued before the change still scan", r.status === 200 && r.json.garmentId === createdGarment.id, r.json);
+  r = await setDigits(3);
+  check("too short a barcode is refused", r.status === 400, r.json);
+  await sqlClient`update number_sequences set next_value = 20000 where organization_id = ${orgId} and scope = 'tag_scan'`;
+  r = await setDigits(4);
+  check("a length too short for the numbers already issued is refused, and says why", r.status === 422 && r.json.error.code === "SCAN_DIGITS_TOO_SHORT", r.json);
+  r = await setDigits(6);
+  check("the length can go back", r.status === 200, r.json);
+  await sqlClient`update number_sequences set next_value = 999999 where organization_id = ${orgId} and scope = 'tag_scan'`;
+  r = await shop.req("POST", "/orders", orderBody(), { "idempotency-key": `digits-full-${runId}` });
+  check("when numbers run out the order is refused, and says what to do", r.status === 422 && r.json.error.code === "TAG_SCAN_CODES_EXHAUSTED" && r.json.error.message.includes("Tag setup"), r.json);
+  await sqlClient`update number_sequences set next_value = 20000 where organization_id = ${orgId} and scope = 'tag_scan'`;
+
+  // ---- Membership benefits
+  const clubCustomer = (await shop.req("POST", "/customers", { name: "Club Customer", phone: `+91 98${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}` })).json.id;
+  const clubQuote = { customerId: clubCustomer, branchId, items: [{ garmentTypeId, serviceId, quantity: 1 }], express: true };
+  r = await shop.req("POST", "/orders/quote", clubQuote);
+  const expressBefore = r.json.surchargeBps;
+  check("a non-member pays the express surcharge", expressBefore > 0, r.json);
+  r = await shop.req("POST", "/membership-plans", { name: "Club", price: 0, durationDays: 30, discountBps: 500, freeExpress: true, perks: ["Free home pickup", "Free stain treatment"] });
+  check("a plan can include free express and other benefits", r.status === 201 && r.json.freeExpress === true && r.json.perks.length === 2, r.json);
+  const club = r.json;
+  r = await shop.req("POST", "/membership-plans", { name: "Too many", price: 0, durationDays: 30, discountBps: 500, perks: Array(9).fill("x") });
+  check("a plan cannot list too many benefits", r.status === 400, r.json);
+  r = await pub.req("GET", `/public/booking/${slug}`);
+  check("customers see the benefits on the booking page", r.json.membershipPlans.some((p: { id: string; freeExpress: boolean; perks: string[] }) => p.id === club.id && p.freeExpress && p.perks.includes("Free home pickup")), r.json.membershipPlans);
+  const clubSale = (await shop.req("POST", `/customers/${clubCustomer}/memberships`, { planId: club.id, branchId })).json;
+  check("a sale keeps the benefits that were bought", clubSale.freeExpress === true && clubSale.perks.length === 2, clubSale);
+  const welcome = await sqlClient`select payload from outbox_events where organization_id = ${orgId} and event_type = 'membership.sold' and payload ->> 'customerId' = ${clubCustomer}`;
+  check("the customer gets a welcome message listing the benefits", welcome.length === 1 && welcome[0].payload.perks.length === 2, welcome);
+  r = await shop.req("POST", "/orders/quote", clubQuote);
+  check("a member with free express pays no surcharge", r.json.surchargeBps === 0 && r.json.membership.freeExpress === true && r.json.totals.discountTotal > 0, r.json);
+  r = await shop.req("PATCH", `/membership-plans/${club.id}`, { freeExpress: false });
+  r = await shop.req("POST", "/orders/quote", clubQuote);
+  check("changing a plan does not take a benefit from someone who bought it", r.json.surchargeBps === 0, r.json);
+  r = await shop.req("POST", "/orders/quote", quoteBody({ express: true }));
+  check("a member of a plan without free express still pays the surcharge", r.json.surchargeBps > 0, r.json);
+  const { remindExpiringMemberships } = await import("../apps/api/src/lib/memberships");
+  await sqlClient`update customer_memberships set ends_at = now() + interval '3 days' where id = ${clubSale.id}`;
+  await remindExpiringMemberships();
+  await remindExpiringMemberships();
+  const reminders = await sqlClient`select payload from outbox_events where organization_id = ${orgId} and event_type = 'membership.expiring' and payload ->> 'customerId' = ${clubCustomer}`;
+  check("a member gets one renewal reminder before the plan ends", reminders.length === 1 && reminders[0].payload.planName === "Club", reminders);
+  r = await shop.req("GET", "/customer-memberships/summary");
+  check("the Memberships screen shows members and sales", r.status === 200 && r.json.current >= 2 && r.json.expiring >= 1 && r.json.sales >= 99900 && r.json.discountGiven > 0, r.json);
+
   const redeemed = await sqlClient`select id from marketing_coupon_redemptions where coupon_id = ${lowCoupon.id}`;
   check("that coupon is not used up", redeemed.length === 0, redeemed);
 
@@ -222,6 +319,10 @@ try {
   await sa.req("PUT", `/platform-admin/organizations/${orgId}/entitlements`, { overrides: { customerMemberships: false }, reason: REASON });
   r = await shop.req("POST", "/orders/quote", quoteBody());
   check("with memberships switched off, no discount applies", r.json.totals.discountTotal === 0 && r.json.membership === null, r.json);
+  r = await pub.req("GET", `/public/booking/${slug}`);
+  check("with memberships switched off, no plans are shown publicly", r.status === 200 && r.json.membershipPlans.length === 0, r.json);
+  r = await pub.req("POST", `/public/booking/${slug}/membership`, { name: "Member Customer", phone: customerPhone });
+  check("with memberships switched off, public membership lookup is refused", r.status === 404, r.json);
   await sa.req("PUT", `/platform-admin/organizations/${orgId}/entitlements`, { overrides: {}, reason: REASON });
 
   r = await shop.req("POST", `/customer-memberships/${firstMembership.id}/cancel`, { reason: "short" });
@@ -276,6 +377,10 @@ try {
   check("reopening a branch over the limit is refused too", r.status === 403 && r.json.error.code === "BRANCH_LIMIT_REACHED", r.json);
   r = await basic.req("PATCH", `/branches/${basicBranch}`, { name: "Renamed Main Store" });
   check("editing an open branch still works at the limit", r.status === 200, r.json);
+  r = await basic.req("PATCH", `/branches/${extraBranch}`, { branchCode: `NEW${runId}`.slice(0, 8).toUpperCase() });
+  check("changing a closed branch's store code does not reopen it", r.status === 200 && r.json.status === "inactive", r.json);
+  r = await basic.req("PATCH", `/branches/${basicBranch}`, { branchCode: `NEW${runId}`.slice(0, 8).toUpperCase() });
+  check("two branches cannot share a store code", r.status === 409, r.json);
   r = await sa.req("PUT", `/platform-admin/organizations/${basicOrg}/entitlements`, { overrides: {}, branchLimit: 2, reason: REASON });
   check("super admin can allow more branches for one shop", r.status === 200, r.json);
   r = await sa.req("GET", `/platform-admin/organizations/${basicOrg}/entitlements`);

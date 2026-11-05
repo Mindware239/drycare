@@ -9,7 +9,7 @@ import { dateOnly, money } from "@/lib/format";
 import { Alert, Badge, Button, Card, Field, Input, Modal, Select, Spinner, Table, Td } from "@/components/ui";
 
 type Plan = { id: string; name: string; price: number; durationDays: number; discountBps: number; active: boolean };
-type Membership = { id: string; planId: string; planName: string; discountBps: number; pricePaid: number; invoiceNumber: string | null; startsAt: string; endsAt: string; status: string; cancelReason: string | null; method: string | null; reference: string | null };
+type Membership = { id: string; planId: string; planName: string; discountBps: number; freeExpress: boolean; perks: string[]; pricePaid: number; invoiceNumber: string | null; startsAt: string; endsAt: string; status: string; cancelReason: string | null; method: string | null; reference: string | null };
 const METHODS = ["cash", "upi", "card", "bank_transfer"] as const;
 
 /** This customer's membership: what they have now, selling or renewing one, and past purchases. */
@@ -35,7 +35,8 @@ export function CustomerMembership({ customerId, customerName }: { customerId: s
           {!data ? <p className="text-sm text-slate-500">Loading…</p> : current ? (
             <>
               <p className="text-xl font-bold text-slate-900">{current.planName}</p>
-              <p className="text-sm text-emerald-700">{current.discountBps / 100}% off every order, applied automatically</p>
+              <p className="text-sm text-emerald-700">{current.discountBps / 100}% off every order{current.freeExpress ? " and free express" : ""}, applied automatically</p>
+              {current.perks.length > 0 && <p className="text-sm text-slate-600">Also promised: {current.perks.join(", ")}</p>}
               <p className="text-xs text-slate-500">Valid until {dateOnly(latestLive?.endsAt ?? current.endsAt)}</p>
             </>
           ) : (

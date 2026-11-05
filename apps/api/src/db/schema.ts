@@ -224,6 +224,10 @@ export const customerMembershipPlans = pgTable(
     taxBps: integer("tax_bps").notNull().default(0),
     durationDays: integer("duration_days").notNull(),
     discountBps: integer("discount_bps").notNull(),
+    /** Members pay no express surcharge. */
+    freeExpress: boolean("free_express").notNull().default(false),
+    /** Other benefits the shop promises, in its own words, for staff and customers to see. */
+    perks: jsonb("perks_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     active: boolean("active").notNull().default(true),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -247,6 +251,9 @@ export const customerMemberships = pgTable(
     branchId: uuid("branch_id").references(() => branches.id),
     planName: text("plan_name").notNull(),
     discountBps: integer("discount_bps").notNull(),
+    freeExpress: boolean("free_express").notNull().default(false),
+    perks: jsonb("perks_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    renewalReminderSentAt: timestamp("renewal_reminder_sent_at", { withTimezone: true }),
     pricePaid: integer("price_paid").notNull().default(0), // paise, including GST
     taxBps: integer("tax_bps").notNull().default(0),
     taxAmount: integer("tax_amount").notNull().default(0), // paise, part of pricePaid
@@ -682,6 +689,7 @@ export const garments = pgTable(
     orderId: uuid("order_id").notNull().references(() => orders.id),
     orderItemId: uuid("order_item_id").notNull().references(() => orderItems.id),
     tagCode: text("tag_code").notNull(),
+    scanCode: text("scan_code").notNull(),
     tagVersion: integer("tag_version").notNull().default(1),
     garmentTypeId: uuid("garment_type_id").notNull(),
     serviceId: uuid("service_id").notNull(),
@@ -702,6 +710,7 @@ export const garments = pgTable(
   },
   (t) => [
     uniqueIndex("garments_org_tag_uq").on(t.organizationId, t.tagCode),
+    uniqueIndex("garments_org_scan_code_uq").on(t.organizationId, t.scanCode),
     index("garments_order_idx").on(t.orderId),
     index("garments_org_status_idx").on(t.organizationId, t.currentStatus),
   ],
@@ -718,6 +727,7 @@ export const bags = pgTable(
     branchId: uuid("branch_id").notNull().references(() => branches.id),
     orderId: uuid("order_id").notNull().references(() => orders.id),
     bagCode: text("bag_code").notNull(),
+    scanCode: text("scan_code").notNull(),
     expectedCount: integer("expected_count").notNull(),
     location: text("location").notNull().default("shop_counter"),
     labelPrintCount: integer("label_print_count").notNull().default(0),
@@ -725,7 +735,7 @@ export const bags = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("bags_org_code_uq").on(t.organizationId, t.bagCode), index("bags_order_idx").on(t.orderId)],
+  (t) => [uniqueIndex("bags_org_code_uq").on(t.organizationId, t.bagCode), uniqueIndex("bags_org_scan_code_uq").on(t.organizationId, t.scanCode), index("bags_order_idx").on(t.orderId)],
 );
 
 /**
@@ -784,7 +794,7 @@ export const scanEvents = pgTable(
     id: id(),
     organizationId: orgId(),
     batchId: uuid("batch_id").references(() => transferBatches.id),
-    step: text("step").notNull(), // dispatch | receipt
+    step: text("step").notNull(), // dispatch | receipt | lookup (scan station)
     scannedCode: text("scanned_code").notNull(),
     bagId: uuid("bag_id"),
     garmentId: uuid("garment_id"),
@@ -831,6 +841,8 @@ export const labelPrintJobs = pgTable(
     organizationId: orgId(),
     orderId: uuid("order_id").notNull().references(() => orders.id),
     scope: text("scope").notNull(), // all | bag | garments
+    /** Exactly which tags, when only some were reprinted. */
+    garmentIds: jsonb("garment_ids").$type<string[]>(),
     labelCount: integer("label_count").notNull(),
     status: text("status").notNull().default("pending"), // pending | printed | failed
     error: text("error"),

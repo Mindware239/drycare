@@ -478,7 +478,7 @@ function PosInner() {
                 <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
                   <strong>{quote.membership.planName} member.</strong>{" "}
                   {quote.membership.applied
-                    ? `${quote.membership.discountBps / 100}% off applied.${couponCode ? " Discounts do not add up, so the coupon was not used." : ""}`
+                    ? `${quote.membership.discountBps / 100}% off applied.${couponCode ? " Discounts do not add up, so the coupon was not used." : ""}${quote.membership.freeExpress ? " Express is free." : ""}`
                     : `A bigger discount is being used instead of the ${quote.membership.discountBps / 100}% membership discount.`}
                 </p>
               )}

@@ -2,29 +2,36 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Barcode, Check, CircleAlert, CircleCheck, Copy, Download, Eye, EyeOff, Lock, Minus, Pencil, Plus, Printer, RefreshCw, RotateCcw, Square, Trash2, Type, Undo2, Redo2, Unlock, Upload, ZoomIn, ZoomOut } from "lucide-react";
-import { LABEL_PRESETS, LABEL_SIZES, el, isLineBarcode, labelDesignSchema, type LabelDesign, type LabelElement, type LabelSettings, type LabelTemplate } from "@drycare/shared";
+import { LABEL_PRESETS, LABEL_SIZES, MAX_SCAN_DIGITS, MIN_SCAN_DIGITS, el, isLineBarcode, labelDesignSchema, withScanDigits, type LabelDesign, type LabelElement, type LabelSettings, type LabelTemplate } from "@drycare/shared";
 import { Alert, Button, Field, Input, Select, cx } from "@/components/ui";
-import { fitBarcode, withBarcodeType } from "@/lib/labelDesign";
+import { barcodeLengthMm, fitBarcode, resizeBarcode, withBarcodeType, withShortNumber } from "@/lib/labelDesign";
 import { DOTS_PER_MM, renderLabel, type LabelData, type RenderedLabel } from "@/lib/labelRender";
 
 type Kind = "garment" | "bag";
+/** Every length a shop can choose, and how many tags that allows. */
+export const SCAN_DIGIT_OPTIONS: [number, string][] = Array.from({ length: MAX_SCAN_DIGITS - MIN_SCAN_DIGITS + 1 }, (_, i) => {
+  const digits = MIN_SCAN_DIGITS + i;
+  return [digits, `${digits} digits${digits === 6 ? " (recommended)" : ""}${digits <= 12 ? `, up to ${(10 ** digits - 1).toLocaleString("en-IN")} tags` : ""}`];
+});
 const FIELDS: Record<Kind, [string, string][]> = {
-  garment: [["orderNumber", "Order number"], ["count", "Tag count (1/3)"], ["tagCode", "Tag number"], ["garment", "Garment"], ["service", "Service"], ["colour", "Colour"], ["brand", "Brand"], ["customer", "Customer name"], ["phone", "Customer phone"], ["due", "Due date"], ["orderDate", "Order date"], ["quantity", "Pieces in order"], ["store", "Store name"], ["price", "Price"], ["notes", "Special instructions"]],
-  bag: [["title", "Heading"], ["orderNumber", "Order number"], ["pieces", "Pieces"], ["bagCode", "Bag number"], ["info", "Store and customer"], ["customer", "Customer name"], ["phone", "Customer phone"], ["store", "Store name"], ["due", "Due date"], ["orderDate", "Order date"]],
+  garment: [["scanCode", "Barcode number"], ["orderNumber", "Order number"], ["orderSerial", "Order serial number"], ["branchCode", "Store code"], ["count", "Tag count (1/3)"], ["tagCode", "Full tag number"], ["garment", "Garment"], ["service", "Service"], ["colour", "Colour"], ["brand", "Brand"], ["customer", "Customer name"], ["phone", "Customer phone"], ["due", "Due date"], ["orderDate", "Order date"], ["quantity", "Pieces in order"], ["store", "Store name"], ["price", "Price"], ["notes", "Special instructions"]],
+  bag: [["scanCode", "Barcode number"], ["title", "Heading"], ["orderNumber", "Order number"], ["orderSerial", "Order serial number"], ["branchCode", "Store code"], ["pieces", "Pieces"], ["bagCode", "Full bag number"], ["info", "Store and customer"], ["customer", "Customer name"], ["phone", "Customer phone"], ["store", "Store name"], ["due", "Due date"], ["orderDate", "Order date"]],
 };
 const BARCODE_TYPES: [LabelDesign["barcode"]["type"], string][] = [["code128", "1D · Code 128 (recommended)"], ["code39", "1D · Code 39"], ["qrcode", "2D · QR code"], ["datamatrix", "2D · Data Matrix"]];
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const mm = (dots: number) => Math.round((dots / DOTS_PER_MM) * 10) / 10;
-/** How close to the barcode's corner, in printer dots, counts as grabbing the resize handle. */
+/** How close to the barcode's edge, in printer dots, counts as grabbing a resize handle. */
 const HANDLE = 8;
+const RESIZE_CURSOR = { corner: "nwse-resize", right: "ew-resize", bottom: "ns-resize" } as const;
+type ResizeHandle = keyof typeof RESIZE_CURSOR;
 /** Half a millimetre. */
 const GRID = 4;
 
-export function Stepper({ label, value, unit, onChange, min, max, step = 1 }: { label: string; value: number; unit?: string; onChange: (value: number) => void; min: number; max: number; step?: number }) {
+export function Stepper({ label, value, unit, display, onChange, min, max, step = 1 }: { label: string; value: number; unit?: string; display?: string; onChange: (value: number) => void; min: number; max: number; step?: number }) {
   return (
     <div className="flex items-center gap-1" role="group" aria-label={label}>
       <button type="button" aria-label={`Decrease ${label}`} disabled={value <= min} onClick={() => onChange(clamp(value - step, min, max))} className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-40"><Minus className="h-3.5 w-3.5" /></button>
-      <span className="min-w-13 text-center text-sm font-semibold tabular-nums">{value}{unit ?? ""}</span>
+      <span className="min-w-13 text-center text-sm font-semibold tabular-nums">{display ?? `${value}${unit ?? ""}`}</span>
       <button type="button" aria-label={`Increase ${label}`} disabled={value >= max} onClick={() => onChange(clamp(value + step, min, max))} className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-40"><Plus className="h-3.5 w-3.5" /></button>
     </div>
   );
@@ -129,7 +136,8 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
   const previewRef = useRef<HTMLCanvasElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const drag = useRef<{ key: string; startX: number; startY: number; x: number; y: number; anchorX: number; w: number } | null>(null);
-  const resizing = useRef<{ x: number; y: number; w: number; h: number; moduleDots: number } | null>(null);
+  const resizing = useRef<{ handle: ResizeHandle; atX: number; atY: number; x: number; y: number; w: number; h: number; design: LabelDesign } | null>(null);
+  const [hoverHandle, setHoverHandle] = useState<ResizeHandle | null>(null);
   const past = useRef<LabelDesign[]>([]);
   const future = useRef<LabelDesign[]>([]);
 
@@ -226,13 +234,25 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
     return { x: ((event.clientX - rect.left) / rect.width) * widthDots, y: ((event.clientY - rect.top) / rect.height) * heightDots };
   };
   const barcodeBox = render?.boxes.find((b) => b.key === "barcode");
+  /** Which of the barcode's handles is under the pointer: the corner changes both sizes, the edges change one. */
+  const handleAt = (at: { x: number; y: number }): ResizeHandle | null => {
+    if (selected !== "barcode" || !barcodeBox || design.barcode.locked) return null;
+    const right = Math.abs(at.x - (barcodeBox.x + barcodeBox.w)) <= HANDLE;
+    const bottom = Math.abs(at.y - (barcodeBox.y + barcodeBox.h)) <= HANDLE;
+    if (right && bottom) return "corner";
+    if (right && at.y >= barcodeBox.y && at.y <= barcodeBox.y + barcodeBox.h) return "right";
+    if (bottom && at.x >= barcodeBox.x && at.x <= barcodeBox.x + barcodeBox.w) return "bottom";
+    return null;
+  };
   const onPointerDown = (event: ReactPointerEvent) => {
     const at = toDots(event);
     event.currentTarget.setPointerCapture(event.pointerId);
-    // The corner handle resizes the barcode. Everything else on the tag drags.
-    if (selected === "barcode" && barcodeBox && !design.barcode.locked && Math.abs(at.x - (barcodeBox.x + barcodeBox.w)) <= HANDLE && Math.abs(at.y - (barcodeBox.y + barcodeBox.h)) <= HANDLE) {
+    // The handles resize the barcode. Everything else on the tag drags.
+    const handle = handleAt(at);
+    if (handle && barcodeBox) {
       past.current = [...past.current.slice(-49), design];
-      resizing.current = { x: barcodeBox.x, y: barcodeBox.y, w: barcodeBox.w, h: barcodeBox.h, moduleDots: design.barcode.moduleDots };
+      future.current = [];
+      resizing.current = { handle, atX: at.x, atY: at.y, x: barcodeBox.x, y: barcodeBox.y, w: barcodeBox.w, h: barcodeBox.h, design };
       return;
     }
     const hit = [...(render?.boxes ?? [])].reverse().find((b) => at.x >= b.x - 3 && at.x <= b.x + b.w + 3 && at.y >= b.y - 3 && at.y <= b.y + b.h + 3);
@@ -249,16 +269,27 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
     const at = toDots(event);
     if (resizing.current) {
       const start = resizing.current;
-      const wide = Math.max(1, at.x - start.x);
-      const tall = Math.max(1, at.y - start.y);
-      const sideways = design.barcode.rotation === 90 || design.barcode.rotation === 270;
+      const startCode = start.design.barcode;
+      const box = { key: "barcode", x: start.x, y: start.y, w: start.w, h: start.h };
+      // Follows how far the pointer moved, so grabbing a handle off-centre does not make the barcode jump.
+      const wide = Math.max(1, start.w + at.x - start.atX);
+      const tall = Math.max(1, start.h + at.y - start.atY);
+      const sideways = startCode.rotation === 90 || startCode.rotation === 270;
+      const changesX = start.handle !== "bottom";
+      const changesY = start.handle !== "right";
       // Bar thickness moves in whole printer dots, so the length changes in steps and always stays scannable.
-      const units = (sideways ? start.h : start.w) / start.moduleDots;
-      if (!isLineBarcode(design.barcode.type)) replace({ ...design, barcode: { ...design.barcode, moduleDots: clamp(Math.round(wide / units), 1, 16) } });
-      else replace({ ...design, barcode: { ...design.barcode, moduleDots: clamp(Math.round((sideways ? tall : wide) / units), 1, 16), heightDots: clamp(Math.round(sideways ? wide : tall), 16, 800), centered: false, x: start.x, y: start.y } });
+      const patch: { moduleDots?: number; heightDots?: number } = {};
+      if (!isLineBarcode(startCode.type)) {
+        patch.moduleDots = clamp(Math.round(changesX ? wide / (start.w / startCode.moduleDots) : tall / (start.h / startCode.moduleDots)), 1, 16);
+      } else {
+        if (sideways ? changesY : changesX) patch.moduleDots = clamp(Math.round((sideways ? tall : wide) / ((sideways ? start.h : start.w) / startCode.moduleDots)), 1, 16);
+        if (sideways ? changesX : changesY) patch.heightDots = clamp(Math.round(startCode.heightDots + (sideways ? at.x - start.atX : at.y - start.atY)), 16, 800);
+      }
+      // Always worked out from where the drag began, so text moved out of the way comes back when the barcode shrinks.
+      replace(resizeBarcode(start.design, box, patch));
       return;
     }
-    if (!drag.current) return;
+    if (!drag.current) { setHoverHandle(handleAt(at)); return; }
     const d = drag.current;
     let x = Math.max(0, Math.round(d.x + at.x - d.startX));
     let y = Math.max(0, Math.round(d.y + at.y - d.startY));
@@ -272,6 +303,27 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
     else replace({ ...design, elements: { ...design.elements, [d.key]: { ...design.elements[d.key], x, y } } });
   };
   const onPointerUp = () => { drag.current = null; resizing.current = null; setGuide(false); };
+  /** Grows or shrinks the barcode from the side panel, moving text below it the same way dragging does. */
+  const resizeFromPanel = (patch: { moduleDots?: number; heightDots?: number }) => (barcodeBox ? setDesign(resizeBarcode(design, barcodeBox, patch)) : setBarcode(patch));
+  /** Finds room on the tag for a new item: the first gap, top to bottom, that its text fits in. */
+  const freeSpot = (key: string, size: number) => {
+    const taken = render?.boxes ?? [];
+    const sample = kind === "garment" ? samples.garment : samples.bag;
+    const wide = Math.ceil((sample.texts[key]?.length ?? 8) * size * 0.62) + 4;
+    const tall = Math.ceil(size * 1.15);
+    for (let y = 6; y + tall <= heightDots - 4; y += 2) {
+      for (const x of [10, ...taken.map((b) => b.x + b.w + 8)]) {
+        const fits = x + wide <= widthDots - 4 && !taken.some((b) => b.x < x + wide && b.x + b.w > x && b.y < y + tall && b.y + b.h > y);
+        if (fits) return { x, y };
+      }
+    }
+    return { x: 10, y: Math.max(6, heightDots - tall - 6) };
+  };
+  /** Ticked items print. Unticking keeps the item's place, so ticking it again puts it back there. */
+  const setOnTag = (key: string, on: boolean) => {
+    if (design.elements[key]) { setElement(key, { show: on }); if (on) setSelected(key); return; }
+    if (on) { const spot = freeSpot(key, 20); addElement(el(spot.x, spot.y, 20, key === "scanCode"), key); }
+  };
   const onKey = (event: KeyboardEvent) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
@@ -325,8 +377,10 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
   const line = isLineBarcode(code.type);
   const element = selected !== "barcode" ? design.elements[selected] : undefined;
   const sizeValue = `${design.widthMm}x${design.heightMm}`;
-  const unused = FIELDS[kind].filter(([key]) => !design.elements[key]);
   const designKey = JSON.stringify(design);
+  const longKey = kind === "garment" ? "tagCode" : "bagCode";
+  const showsLongNumber = !!design.elements[longKey]?.show;
+  const barsAtWidth = barcodeBox ? barcodeLengthMm(design, barcodeBox, code.moduleDots) : null;
   const warnings = render?.warnings ?? [];
   const layers = Object.keys(design.elements).reverse();
   const finishRename = () => {
@@ -395,7 +449,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
           {/* Left: designs, things to add, and everything on the tag. */}
           <div className="border-slate-200 xl:border-r">
             <div className="flex gap-1 border-b border-slate-200 p-2" role="tablist" aria-label="Tools">
-              {([["designs", "Designs"], ["add", "Add"], ["layers", "Layers"]] as const).map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={leftTab === k} onClick={() => setLeftTab(k)} className={cx("flex-1 rounded-md px-2 py-1.5 text-sm font-semibold", leftTab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100")}>{name}</button>)}
+              {([["designs", "Designs"], ["add", "On tag"], ["layers", "Layers"]] as const).map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={leftTab === k} onClick={() => setLeftTab(k)} className={cx("flex-1 rounded-md px-2 py-1.5 text-sm font-semibold", leftTab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100")}>{name}</button>)}
             </div>
             {leftTab === "designs" && (
               <div className="max-h-180 overflow-y-auto">
@@ -435,9 +489,10 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
                     {([["Text", <Type key="t" className="h-5 w-5" />, () => addElement({ ...el(16, 16, 24), text: "Your text" }, "custom")], ["Line", <Minus key="l" className="h-5 w-5" />, () => addElement({ ...el(16, Math.round(heightDots / 2), 8), type: "line", w: widthDots - 32, h: 2 }, "line")], ["Box", <Square key="b" className="h-5 w-5" />, () => addElement({ ...el(16, 16, 8), type: "box", w: 120, h: 60 }, "box")]] as [string, ReactNode, () => void][]).map(([name, icon, add]) => <button key={name} type="button" onClick={add} className="grid justify-items-center gap-1 rounded-xl border border-slate-200 py-3 text-xs font-medium text-slate-800 hover:border-slate-400">{icon}{name}</button>)}
                   </div>
                 </Section>
-                <Section title="Order details">
-                  {unused.length === 0 && <p className="text-xs text-slate-500">All details are already on the tag.</p>}
-                  <div className="space-y-1">{unused.map(([key, name]) => <button key={key} type="button" onClick={() => addElement(el(16, 16, 24), key)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100"><Plus className="h-3.5 w-3.5 text-slate-400" />{name}</button>)}</div>
+                <Section title="On the tag">
+                  <p className="text-xs leading-5 text-slate-500">Tick what you want printed, then drag it into place on the tag.</p>
+                  <div className="space-y-0.5">{FIELDS[kind].map(([key, name]) => <label key={key} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100"><input type="checkbox" checked={!!design.elements[key]?.show} onChange={(e) => setOnTag(key, e.target.checked)} />{name}</label>)}</div>
+                  <p className="text-xs leading-5 text-slate-500">Change your store code in <a href="/settings#branches" target="_blank" rel="noreferrer" className="font-semibold text-slate-800 underline underline-offset-2">Business settings, Branches</a>.</p>
                 </Section>
                 <Section title="Tag">
                   <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={design.border} onChange={(e) => setDesign({ ...design, border: e.target.checked })} />Border around the tag</label>
@@ -481,14 +536,20 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               </div>
             </div>
             <div ref={panelRef} className="flex flex-1 overflow-auto p-3" style={{ backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)", backgroundSize: "16px 16px" }}>
-              <div className="m-auto grid w-max grid-cols-[22px_auto] grid-rows-[22px_auto]">
+              <div className="mx-auto grid h-max w-max grid-cols-[22px_auto] grid-rows-[22px_auto]">
                 <span aria-hidden="true" className="grid place-items-center text-[9px] font-semibold text-slate-500">mm</span>
                 <Ruler lengthMm={design.widthMm} scale={scale} from={box ? box.x * zoom : undefined} to={box ? (box.x + box.w) * zoom : undefined} />
                 <Ruler vertical lengthMm={design.heightMm} scale={scale} from={box ? box.y * zoom : undefined} to={box ? (box.y + box.h) * zoom : undefined} />
                 <div className="relative" style={{ width: widthDots * zoom, height: heightDots * zoom }}>
-                  <canvas ref={previewRef} tabIndex={0} onKeyDown={onKey} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="absolute inset-0 h-full w-full cursor-move touch-none bg-white shadow-lg ring-1 ring-slate-300 focus:outline-2 focus:outline-offset-2 focus:outline-[#3d6fb5]" style={{ imageRendering: "pixelated" }} aria-label="Tag preview. Use the arrow keys to move the selected item. Delete removes it." />
+                  <canvas ref={previewRef} tabIndex={0} onKeyDown={onKey} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="absolute inset-0 h-full w-full cursor-move touch-none bg-white shadow-lg ring-1 ring-slate-300 focus:outline-2 focus:outline-offset-2 focus:outline-[#3d6fb5]" style={{ imageRendering: "pixelated", cursor: hoverHandle ? RESIZE_CURSOR[hoverHandle] : undefined }} aria-label="Tag preview. Use the arrow keys to move the selected item. Delete removes it." />
                   {box && <span aria-hidden="true" className="pointer-events-none absolute rounded-sm border-2 border-[#3d6fb5]" style={{ left: (box.x - 2) * zoom, top: (box.y - 2) * zoom, width: (box.w + 4) * zoom, height: (box.h + 4) * zoom }} />}
-                  {selected === "barcode" && barcodeBox && !code.locked && <span aria-hidden="true" title="Drag to resize" className="pointer-events-none absolute h-3.5 w-3.5 rounded-sm border-2 border-white bg-[#3d6fb5]" style={{ left: (barcodeBox.x + barcodeBox.w) * zoom - 7, top: (barcodeBox.y + barcodeBox.h) * zoom - 7 }} />}
+                  {selected === "barcode" && barcodeBox && !code.locked && (
+                    <>
+                      <span aria-hidden="true" data-handle="right" className="pointer-events-none absolute h-3.5 w-3.5 rounded-sm border-2 border-white bg-[#3d6fb5]" style={{ left: (barcodeBox.x + barcodeBox.w) * zoom - 7, top: (barcodeBox.y + barcodeBox.h / 2) * zoom - 7 }} />
+                      <span aria-hidden="true" data-handle="bottom" className="pointer-events-none absolute h-3.5 w-3.5 rounded-sm border-2 border-white bg-[#3d6fb5]" style={{ left: (barcodeBox.x + barcodeBox.w / 2) * zoom - 7, top: (barcodeBox.y + barcodeBox.h) * zoom - 7 }} />
+                      <span aria-hidden="true" data-handle="corner" className="pointer-events-none absolute h-3.5 w-3.5 rounded-sm border-2 border-white bg-[#3d6fb5]" style={{ left: (barcodeBox.x + barcodeBox.w) * zoom - 7, top: (barcodeBox.y + barcodeBox.h) * zoom - 7 }} />
+                    </>
+                  )}
                   {guide && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-[#d9661b]" style={{ left: (widthDots / 2) * zoom }} />}
                 </div>
               </div>
@@ -501,10 +562,16 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               {directAvailable && current && <span>{current.name}: <span className={current.offline ? "font-semibold text-red-700" : ""}>{current.status}</span></span>}
               <span className={cx("ml-auto flex items-center gap-1 font-semibold", warnings.length ? "text-amber-700" : "text-emerald-700")}>{warnings.length ? <CircleAlert className="h-3.5 w-3.5" /> : <CircleCheck className="h-3.5 w-3.5" />}{warnings.length ? `${warnings.length} to check` : "Ready to print"}</span>
             </div>
-            {(usingSample || warnings.length > 0) && (
+            {(usingSample || warnings.length > 0 || showsLongNumber) && (
               <div className="space-y-2 border-t border-slate-200 p-3">
+                {showsLongNumber && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                    <span>This design prints the full {kind === "garment" ? "tag" : "bag"} number. The barcode only holds {settings.scanDigits} digits.</span>
+                    <Button size="sm" variant="secondary" onClick={() => { setDesign(withShortNumber(design, kind)); setSelected("scanCode"); }}>Print the barcode number instead</Button>
+                  </div>
+                )}
                 {warnings.map((w) => <Alert key={w} tone="amber">{w}</Alert>)}
-                {usingSample && <Alert tone="blue">This preview uses sample details, with order number 00000. Real tags print each customer&apos;s own order number and garment.</Alert>}
+                {usingSample && <Alert tone="blue">This preview uses sample details, with an all-zero barcode number and order number 00000. Each real tag prints its own numbers and garment.</Alert>}
               </div>
             )}
           </div>
@@ -522,12 +589,16 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               <>
                 <Section title="Type">
                   <Select aria-label="Barcode type" value={code.type} onChange={(e) => setDesign(withBarcodeType(design, e.target.value as LabelDesign["barcode"]["type"], kind))}>{BARCODE_TYPES.map(([v, name]) => <option key={v} value={v}>{name}</option>)}</Select>
-                  {line && <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" className="mt-1" checked={code.compact} onChange={(e) => setBarcode({ compact: e.target.checked })} /><span>Number barcode (recommended)<span className="block text-xs text-slate-500">The barcode holds 12 digits, so thicker bars fit. The full tag number still prints as text.</span></span></label>}
+                  <Field label="Barcode length" hint="For new orders. Tags already issued keep their number and still scan.">
+                    <Select value={settings.scanDigits} onChange={(e) => onChange(withScanDigits(settings, Number(e.target.value)))}>
+                      {SCAN_DIGIT_OPTIONS.map(([digits, label]) => <option key={digits} value={digits}>{label}</option>)}
+                    </Select>
+                  </Field>
                 </Section>
                 <Section title="Size" action={<button type="button" onClick={autoFit} className="text-xs font-semibold text-slate-900 underline underline-offset-4">Auto-fit</button>}>
-                  <Row label={line ? "Bar thickness" : "Square size"}><Stepper label={line ? "bar thickness" : "square size"} value={code.moduleDots} min={1} max={16} onChange={(moduleDots) => setBarcode({ moduleDots })} /></Row>
-                  {line && <Row label="Height"><Stepper label="barcode height" value={mm(code.heightDots)} unit=" mm" min={2} max={100} step={0.5} onChange={(h) => setBarcode({ heightDots: Math.round(h * DOTS_PER_MM) })} /></Row>}
-                  <p className="text-xs leading-5 text-slate-500">{line ? "Thicker bars scan better but make the barcode longer." : `Each square is ${(code.moduleDots / DOTS_PER_MM).toFixed(3)} mm. Needs a 2D scanner.`}</p>
+                  <Row label={line ? "Width" : "Square size"}><Stepper label={line ? "barcode width" : "square size"} value={code.moduleDots} display={line && barsAtWidth ? `${barsAtWidth.toFixed(1)} mm` : undefined} min={1} max={16} onChange={(moduleDots) => resizeFromPanel({ moduleDots })} /></Row>
+                  {line && <Row label="Height"><Stepper label="barcode height" value={mm(code.heightDots)} unit=" mm" min={2} max={100} step={0.5} onChange={(h) => resizeFromPanel({ heightDots: Math.round(h * DOTS_PER_MM) })} /></Row>}
+                  <p className="text-xs leading-5 text-slate-500">{line ? "Width moves in steps, because each bar is a whole number of printer dots. Height moves freely. You can also drag the blue squares on the barcode." : `Each square is ${(code.moduleDots / DOTS_PER_MM).toFixed(3)} mm. Needs a 2D scanner.`}</p>
                   {line && code.moduleDots === 1 && <Button size="sm" onClick={() => setBarcode({ moduleDots: 2, compact: true, centered: true })}>Fix: use thicker bars</Button>}
                 </Section>
                 <Section title="Position">

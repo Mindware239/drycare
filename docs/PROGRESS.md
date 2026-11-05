@@ -6,6 +6,25 @@ Last updated: 29 Oct 2026 · Source documents: *DRYCARE-SRS-001 v1.0*, *Complete
 
 **Legend:** ✅ Done & tested · 🟡 Partial (works, but missing pieces listed) · ⬜ Not started
 
+## Tag tracking, barcode length, membership benefits (5 Nov 2026): not deployed
+
+Migration `0033_membership_benefits_print_detail` is additive; the dev DB was backed up first to `.local/backups/before-0033-*.sql`.
+
+- **Tag tracking screen** (`/tags`, `modules/tracking.ts`): every tag issued, searchable by barcode, order, customer, phone or garment, with stage counts, sales and a CSV export. `/tags/view` shows one label's full record.
+- **Scan station:** every scan is recorded (`scan_events`, step `lookup`). It shows the customer, order, sale, every label on the order and a history joining stage changes, scans, transfers, deliveries and prints. Bag labels now work there.
+- **Print history:** `label_print_jobs.garment_ids` records which tags a reprint covered. Older jobs do not have this, so they count for every tag on the order.
+- **Barcode length:** `labels.scanDigits`, 4 to 18 digits (default 6), for new orders only. Existing numbers keep working. Changing it refits the Code 128 bars. A length too short for the numbers already issued is refused. This also removes the 999,999 limit: choose a longer barcode.
+- **Membership benefits:** a plan can include free express (applied automatically) and up to 8 other benefits in the shop's words (shown to staff and customers, given by hand). Each sale keeps the benefits it was sold with. Customers get a welcome message and one reminder 7 days before the plan ends. The Memberships screen shows members, sales and discount given this month.
+
+Migration `0032` gives every garment and bag a six-digit `scan_code`, unique within the business and counted across all its branches. It fits because the PC edition allows one linked PC per business. The series stops at 999,999, and new orders are then refused with `TAG_SCAN_CODES_EXHAUSTED`.
+
+- **Barcode:** holds only the six-digit number. Tags already printed with the 12-digit or short form still scan. The sample number `000000` is never issued.
+- **Ready-made designs:** print the six-digit number under a barcode with thicker bars (38 mm tag: 3 dots, 25.5 mm wide). Saved designs are not changed; the designer offers "Print the 6-digit number instead", and Auto-fit widens the bars.
+- **Tag designer:** an "On tag" checklist chooses what prints, including new items for the barcode number, store code and order serial number. The barcode resizes with Width and Height buttons, or by dragging its right edge, bottom edge or corner. Text below it moves out of the way and comes back. Text printed over other text now gets a warning.
+- **Store codes:** Business settings, "Branches and store codes". New orders use the new code; existing orders and printed tags do not change.
+- **Fixed:** editing a store code reopened a closed branch and reset its timezone; two branches with one code, like every other duplicate record, showed a 500 error instead of a clear message; the delivery scan screen refused six-digit barcodes.
+- **Booking page:** lists active membership plans and lets a customer check their membership with their registered name and mobile number. Buying and renewing stay at the shop.
+
 ## Plan features, super admin control, approved hardware, customer memberships (5 Nov 2026): not deployed
 
 Migration `0030_plan_features_memberships` is additive; the dev DB was backed up first to `.local/backups/before-0030-*.sql`. Test with `pnpm features-test`.
