@@ -1,3 +1,5 @@
+import { todayInZone } from "@drycare/shared";
+import { localDateText, orgRegion } from "../lib/region";
 /**
  * Reports centre: a catalogue of ready-made shop reports, each returning typed columns, rows and totals so the web
  * screen can show, total, print and export any of them the same way. All reports are branch-scoped by role.
@@ -18,16 +20,16 @@ type Col = { key: string; label: string; type: ColType; total?: boolean };
 type Ctx = { auth: AuthContext; from: string; to: string; branchId?: string; days: number };
 type Report = { key: string; group: string; title: string; description: string; perm: Permission; columns: Col[]; usesDates?: boolean; run: (c: Ctx) => Promise<Record<string, unknown>[]> };
 
-const TZ = "Asia/Kolkata";
-const day = (col: string) => sql.raw(`(${col} at time zone '${TZ}')::date`);
-const inRange = (col: string, c: Ctx) => sql`${day(col)} between ${c.from}::date and ${c.to}::date`;
+
+const day = (col: string, c: Ctx) => sql.raw(localDateText(col, c.auth.timezone));
+const inRange = (col: string, c: Ctx) => sql`${day(col, c)} between ${c.from}::date and ${c.to}::date`;
 const br = (c: Ctx, col: string) => branchSql(c.auth, col, c.branchId);
 const rows = async (q: SQL) => (await db.execute(q)) as unknown as Record<string, unknown>[];
 
-const salesBy = (label: string, key: string): Pick<Report, "columns" | "run"> => ({
+const salesBy = (label: string, key: string | ((c: Ctx) => string)): Pick<Report, "columns" | "run"> => ({
   columns: [{ key: "label", label, type: "text" }, { key: "orders", label: "Orders", type: "int", total: true }, { key: "quantity", label: "Qty", type: "int", total: true }, { key: "discount", label: "Discount", type: "money", total: true }, { key: "tax", label: "GST", type: "money", total: true }, { key: "total", label: "Total", type: "money", total: true }],
   run: (c) => rows(sql`
-    select ${sql.raw(key)} as label, count(distinct o.id)::int as orders, sum(oi.quantity)::int as quantity, sum(oi.discount_amount) as discount, sum(oi.tax_amount) as tax, sum(oi.line_total) as total
+    select ${sql.raw(typeof key === "string" ? key : key(c))} as label, count(distinct o.id)::int as orders, sum(oi.quantity)::int as quantity, sum(oi.discount_amount) as discount, sum(oi.tax_amount) as tax, sum(oi.line_total) as total
     from order_items oi join orders o on o.id = oi.order_id join invoices i on i.order_id = o.id join branches b on b.id = o.branch_id
     where o.organization_id = ${c.auth.orgId} and i.status <> 'cancelled' and ${inRange("i.issued_at", c)} ${br(c, "o.branch_id")}
     group by 1 order by total desc`),
@@ -37,7 +39,7 @@ const REPORTS: Report[] = [
   // ---------------- sales
   { key: "sales-service", group: "Sales", title: "Sales by service", description: "Billed quantity and value for each service", perm: "reports.financial", usesDates: true, ...salesBy("Service", "oi.service_name") },
   { key: "sales-garment", group: "Sales", title: "Sales by garment", description: "Which garments bring the most business", perm: "reports.financial", usesDates: true, ...salesBy("Garment", "oi.garment_type_name") },
-  { key: "sales-day", group: "Sales", title: "Daily sales", description: "Billed value day by day", perm: "reports.financial", usesDates: true, ...salesBy("Date", `(i.issued_at at time zone '${TZ}')::date::text`) },
+  { key: "sales-day", group: "Sales", title: "Daily sales", description: "Billed value day by day", perm: "reports.financial", usesDates: true, ...salesBy("Date", (c) => `${localDateText("i.issued_at", c.auth.timezone)}::text`) },
   {
     key: "sales-branch", group: "Sales", title: "Branch-wise sales", description: "Dry cleaning, self-service laundry and collections per branch", perm: "reports.financial", usesDates: true,
     columns: [{ key: "branch", label: "Branch", type: "text" }, { key: "orders", label: "Orders", type: "int", total: true }, { key: "billed", label: "Dry cleaning", type: "money", total: true }, { key: "laundry", label: "Self-service", type: "money", total: true }, { key: "collected", label: "Collected", type: "money", total: true }, { key: "dues", label: "Dues now", type: "money", total: true }],
@@ -75,11 +77,11 @@ const REPORTS: Report[] = [
     columns: [{ key: "date", label: "Date", type: "date" }, { key: "reference", label: "Order / note", type: "text" }, { key: "customer", label: "Customer", type: "text" }, { key: "kind", label: "Type", type: "text" }, { key: "reason", label: "Reason / coupon", type: "text" }, { key: "amount", label: "Amount", type: "money", total: true }],
     run: (c) => rows(sql`
       select * from (
-        select ${day("o.received_at")} as date, o.order_number as reference, cu.name as customer, 'Order discount' as kind, coalesce(mc.code, '') as reason, o.discount_total as amount
+        select ${day("o.received_at", c)} as date, o.order_number as reference, cu.name as customer, 'Order discount' as kind, coalesce(mc.code, '') as reason, o.discount_total as amount
         from orders o join customers cu on cu.id = o.customer_id left join marketing_coupons mc on mc.id = o.coupon_id
         where o.organization_id = ${c.auth.orgId} and o.discount_total > 0 and o.cancelled_at is null and ${inRange("o.received_at", c)} ${br(c, "o.branch_id")}
         union all
-        select ${day("cn.created_at")}, cn.credit_note_number, cu.name, 'Credit note', coalesce(cn.reason, ''), cn.total_amount
+        select ${day("cn.created_at", c)}, cn.credit_note_number, cu.name, 'Credit note', coalesce(cn.reason, ''), cn.total_amount
         from credit_notes cn join invoices i on i.id = cn.invoice_id join customers cu on cu.id = i.customer_id
         where cn.organization_id = ${c.auth.orgId} and cn.status = 'issued' and ${inRange("cn.created_at", c)} ${br(c, "i.branch_id")}
       ) x order by date desc`),
@@ -90,8 +92,8 @@ const REPORTS: Report[] = [
     columns: [{ key: "date", label: "Date", type: "date" }, { key: "cash", label: "Cash in", type: "money", total: true }, { key: "upi", label: "UPI", type: "money", total: true }, { key: "card", label: "Card", type: "money", total: true }, { key: "other", label: "Bank / other", type: "money", total: true }, { key: "refunds", label: "Refunds", type: "money", total: true }, { key: "expenses", label: "Expenses", type: "money", total: true }, { key: "net", label: "Net", type: "money", total: true }],
     run: (c) => rows(sql`
       with days as (select generate_series(${c.from}::date, ${c.to}::date, interval '1 day')::date as d),
-      p as (select ${day("p.received_at")} as d, p.payment_method as m, sum(p.amount) as amt from payments p where p.organization_id = ${c.auth.orgId} and p.status = 'succeeded' and p.payment_method <> 'store_credit' and ${inRange("p.received_at", c)} ${br(c, "p.branch_id")} group by 1, 2),
-      r as (select ${day("r.created_at")} as d, sum(r.amount) as amt from refunds r join payments p on p.id = r.payment_id where r.organization_id = ${c.auth.orgId} and r.status = 'succeeded' and p.payment_method <> 'store_credit' and ${inRange("r.created_at", c)} ${br(c, "p.branch_id")} group by 1),
+      p as (select ${day("p.received_at", c)} as d, p.payment_method as m, sum(p.amount) as amt from payments p where p.organization_id = ${c.auth.orgId} and p.status = 'succeeded' and p.payment_method <> 'store_credit' and ${inRange("p.received_at", c)} ${br(c, "p.branch_id")} group by 1, 2),
+      r as (select ${day("r.created_at", c)} as d, sum(r.amount) as amt from refunds r join payments p on p.id = r.payment_id where r.organization_id = ${c.auth.orgId} and r.status = 'succeeded' and p.payment_method <> 'store_credit' and ${inRange("r.created_at", c)} ${br(c, "p.branch_id")} group by 1),
       e as (select e.spent_on::date as d, sum(e.amount) as amt from expenses e where e.organization_id = ${c.auth.orgId} and e.voided_at is null and e.spent_on::date between ${c.from}::date and ${c.to}::date ${br(c, "e.branch_id")} group by 1)
       select days.d as date,
         coalesce((select amt from p where p.d = days.d and m = 'cash'),0) as cash,
@@ -129,7 +131,7 @@ const REPORTS: Report[] = [
     key: "top-customers", group: "Customers", title: "Top customers", description: "Best customers by billed value in the period", perm: "reports.financial", usesDates: true,
     columns: [{ key: "customer", label: "Customer", type: "text" }, { key: "phone", label: "Phone", type: "text" }, { key: "orders", label: "Orders", type: "int", total: true }, { key: "billed", label: "Billed", type: "money", total: true }, { key: "last_order", label: "Last order", type: "date" }],
     run: (c) => rows(sql`
-      select cu.name as customer, cu.phone, count(distinct o.id)::int as orders, sum(i.grand_total) as billed, max(${day("o.received_at")}) as last_order
+      select cu.name as customer, cu.phone, count(distinct o.id)::int as orders, sum(i.grand_total) as billed, max(${day("o.received_at", c)}) as last_order
       from orders o join customers cu on cu.id = o.customer_id join invoices i on i.order_id = o.id and i.status <> 'cancelled'
       where o.organization_id = ${c.auth.orgId} and ${inRange("o.received_at", c)} ${br(c, "o.branch_id")}
       group by cu.id, cu.name, cu.phone order by billed desc limit 100`),
@@ -139,7 +141,7 @@ const REPORTS: Report[] = [
     columns: [{ key: "customer", label: "Customer", type: "text" }, { key: "phone", label: "Phone", type: "text" }, { key: "orders", label: "Lifetime orders", type: "int" }, { key: "last_order", label: "Last order", type: "date" }, { key: "days_away", label: "Days away", type: "int" }],
     run: (c) => rows(sql`
       select * from (
-        select cu.name as customer, cu.phone, count(o.id)::int as orders, max(${day("o.received_at")}) as last_order, (current_date - max(${day("o.received_at")}))::int as days_away
+        select cu.name as customer, cu.phone, count(o.id)::int as orders, max(${day("o.received_at", c)}) as last_order, (current_date - max(${day("o.received_at", c)}))::int as days_away
         from customers cu join orders o on o.customer_id = cu.id
         where cu.organization_id = ${c.auth.orgId} and cu.status = 'active' ${br(c, "o.branch_id")}
         group by cu.id, cu.name, cu.phone
@@ -149,7 +151,7 @@ const REPORTS: Report[] = [
     key: "new-customers", group: "Customers", title: "New customers", description: "Customers added in the period and what they ordered", perm: "customers.read", usesDates: true,
     columns: [{ key: "added", label: "Added", type: "date" }, { key: "customer", label: "Customer", type: "text" }, { key: "phone", label: "Phone", type: "text" }, { key: "orders", label: "Orders", type: "int", total: true }],
     run: (c) => rows(sql`
-      select ${day("cu.created_at")} as added, cu.name as customer, cu.phone, (select count(*)::int from orders o where o.customer_id = cu.id) as orders
+      select ${day("cu.created_at", c)} as added, cu.name as customer, cu.phone, (select count(*)::int from orders o where o.customer_id = cu.id) as orders
       from customers cu where cu.organization_id = ${c.auth.orgId} and ${inRange("cu.created_at", c)} ${br(c, "cu.home_branch_id")} order by cu.created_at desc`),
   },
   // ---------------- operations
@@ -209,7 +211,8 @@ export async function reportsCenterRoutes(app: FastifyInstance) {
   app.get("/reports/catalogue", async (req) => {
     const auth = requirePermission(req, "reports.view");
     const advanced = await hasFeature(auth.orgId, "advancedReports");
-    return REPORTS.filter((r) => can(auth, r.perm)).map(({ key, group, title, description, columns, usesDates }) => ({ key, locked: !advanced && ADVANCED_REPORTS.has(key), group, title, description, columns, usesDates: Boolean(usesDates) }));
+    const region = await orgRegion(auth.orgId);
+    return REPORTS.filter((r) => can(auth, r.perm)).map(({ key, group, title, description: text, columns, usesDates }) => ({ key, description: region.splitsGst ? text : text.replace(", for GSTR-1 / 3B", ""), locked: !advanced && ADVANCED_REPORTS.has(key), group, title, columns, usesDates: Boolean(usesDates) }));
   });
 
   app.get("/reports/run/:key", async (req) => {
@@ -219,7 +222,7 @@ export async function reportsCenterRoutes(app: FastifyInstance) {
     if (!report) throw notFound("Report");
     if (!can(auth, report.perm)) throw forbidden("You do not have access to this report");
     if (ADVANCED_REPORTS.has(key)) await requireFeature(auth.orgId, "advancedReports");
-    const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+    const today = todayInZone(auth.timezone);
     const q = z.object({ from: z.iso.date().default(today), to: z.iso.date().default(today), branchId: z.uuid().optional(), days: z.coerce.number().int().min(7).max(730).default(60) }).parse(req.query);
     if (q.from > q.to) throw badRequest("The start date must be before the end date");
     if ((Date.parse(q.to) - Date.parse(q.from)) / 86_400_000 > 731) throw badRequest("Choose a period of at most two years");

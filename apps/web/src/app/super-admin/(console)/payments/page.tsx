@@ -1,4 +1,5 @@
 "use client";
+import { formatMoney, rupeeRate } from "@drycare/shared";
 import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -25,7 +26,7 @@ function PaymentsInner() {
   const [prefill, setPrefill] = useState<Prefill | null>(null);
 
   const rows = (payments.data ?? []).filter((p) => channel === "all" || p.provider === channel);
-  const total = rows.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.amountPaise), 0);
+  const total = rows.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.amountPaise) / rupeeRate(p.currency ?? "INR"), 0);
 
   return (
     <>
@@ -58,7 +59,7 @@ function PaymentsInner() {
                   <td className="px-5 py-3"><Link href={`/super-admin/customers/view?id=${p.organizationId}`} className="font-medium text-slate-900 hover:text-brand-700">{p.organizationName}</Link></td>
                   <td className="px-5 py-3 text-slate-700">{CHANNEL_LABELS[p.provider] ?? p.provider}</td>
                   <td className="px-5 py-3 font-mono text-xs">{p.reference}</td>
-                  <td className="px-5 py-3 font-semibold tabular-nums">{money(p.amountPaise)}</td>
+                  <td className="px-5 py-3 font-semibold tabular-nums">{formatMoney(p.amountPaise, p.currency ?? "INR")}</td>
                   <td className="px-5 py-3"><StatusBadge status={p.status} /></td>
                   <td className="px-5 py-3">{p.invoiceId ? <Link href={`/super-admin/invoices/view?id=${p.invoiceId}`} className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-brand-700 hover:underline"><FileText className="h-3.5 w-3.5" />{p.invoiceNumber}</Link> : <span className="text-xs text-slate-400">—</span>}</td>
                 </tr>
@@ -168,8 +169,8 @@ function RecordPayment({ preselect, prefill, onClearPrefill, onRecorded }: { pre
           <Field label="Business" required>
             <div className="space-y-2">
               <label className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search business or owner email" className="pl-9" aria-label="Search businesses" />
+                <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search business or owner email" className="ps-9" aria-label="Search businesses" />
               </label>
               <Select required value={orgId} onChange={(e) => setOrgId(e.target.value)} aria-label="Business">
                 <option value="">Select a business…</option>
@@ -191,7 +192,7 @@ function RecordPayment({ preselect, prefill, onClearPrefill, onRecorded }: { pre
             </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Amount received (₹)" required hint={plan ? `Due ${money(plan.payablePaise)}${plan.gstInclusive ? " (GST included)" : ` = ${money(plan.pricePaise)} + GST`}` : undefined}>
+            <Field label="Amount received, in the shop's currency" required hint={plan ? `Due ${money(plan.payablePaise)}${plan.gstInclusive ? " (GST included)" : ` = ${money(plan.pricePaise)} + GST`}` : undefined}>
               <Input type="number" min={plan ? plan.payablePaise / 100 : 1} step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} />
             </Field>
             <Field label={method === "upi" ? "UPI reference / UTR" : method === "bank_transfer" ? "Bank UTR number" : "Receipt reference"} required>

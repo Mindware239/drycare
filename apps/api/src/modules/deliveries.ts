@@ -1,3 +1,4 @@
+import { formatMoney } from "@drycare/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { createHash, randomInt } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -271,7 +272,7 @@ export async function deliveryRoutes(app: FastifyInstance) {
       if (d.collectAmount > 0) {
         const invoice = await tx.query.invoices.findFirst({ where: eq(schema.invoices.orderId, d.orderId!) });
         const totals = invoice && (await invoiceTotals(tx, auth.orgId, invoice.id));
-        if (totals && totals.balance > 0) throw unprocessable(`Collect the remaining ₹${(totals.balance / 100).toFixed(2)} before handing over, or mark the attempt as failed`, "BALANCE_DUE");
+        if (totals && totals.balance > 0) throw unprocessable(`Collect the remaining ${formatMoney(totals.balance, auth.currency)} before handing over, or mark the attempt as failed`, "BALANCE_DUE");
       }
 
       for (const { garment } of items) {

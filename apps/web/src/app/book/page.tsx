@@ -1,4 +1,7 @@
 "use client";
+import type { Region } from "@drycare/shared";
+import { setRegion, wholeMoney } from "@/lib/format";
+import { appLocale } from "@/lib/format";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { CalendarDays, CheckCircle2, Clock3, LoaderCircle, MapPin, Phone, Shirt, Truck, UserRound } from "lucide-react";
@@ -6,15 +9,15 @@ import { Logo } from "@/components/Brand";
 import { BrandName, IconInput, inputBox, primaryButton } from "@/components/AuthUi";
 import { cx } from "@/components/ui";
 
-const plainBox = inputBox.replace("pl-11", "pl-3");
+const plainBox = inputBox.replace("ps-11", "ps-3");
 
 type MembershipPlan = { id: string; name: string; description: string | null; price: number; durationDays: number; discountBps: number; freeExpress: boolean; perks: string[] };
 type CustomerMembership = { planName: string; discountBps: number; startsAt: string; endsAt: string };
-type Shop = { shopName: string; branchName: string; phone: string | null; address: string; message: string; slots: string[]; firstDate: string; membershipPlans: MembershipPlan[] };
+type Shop = { region?: Region; shopName: string; branchName: string; phone: string | null; address: string; message: string; slots: string[]; firstDate: string; membershipPlans: MembershipPlan[] };
 
 const slotLabel = (s: string) => s.split("-").map((t) => { const [h, m] = t.split(":").map(Number); return `${((h + 11) % 12) + 1}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "am" : "pm"}`; }).join(" – ");
 const nextDays = (first: string, n: number) => Array.from({ length: n }, (_, i) => new Date(Date.parse(first) + i * 86_400_000).toISOString().slice(0, 10));
-const rupees = (paise: number) => paise === 0 ? "Free" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(paise / 100);
+const rupees = (minor: number) => (minor === 0 ? "Free" : wholeMoney(minor));
 
 function BookingForm() {
   const slug = useSearchParams().get("s") ?? "";
@@ -32,7 +35,7 @@ function BookingForm() {
     if (!slug) { setMissing("This booking link is incomplete. Ask the shop for its booking link."); return; }
     fetch(`/api/v1/public/booking/${encodeURIComponent(slug)}`)
       .then(async (r) => { if (!r.ok) throw new Error(); return r.json() as Promise<Shop>; })
-      .then((s) => { setShop(s); setF((x) => ({ ...x, date: s.firstDate, slot: s.slots[1] ?? s.slots[0] })); })
+      .then((s) => { if (s.region) setRegion(s.region, false); setShop(s); setF((x) => ({ ...x, date: s.firstDate, slot: s.slots[1] ?? s.slots[0] })); })
       .catch(() => setMissing("This shop is not taking online bookings right now. Please call the shop."));
   }, [slug]);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => {
@@ -86,7 +89,7 @@ function BookingForm() {
       <div className="py-6 text-center">
         <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-500" />
         <h2 className="mt-4 text-2xl font-bold text-slate-900">Pickup requested</h2>
-        <p className="mt-2 text-slate-600">{shop.shopName} will collect your clothes on <strong>{new Date(done.date).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</strong>, {slotLabel(done.slot)}.</p>
+        <p className="mt-2 text-slate-600">{shop.shopName} will collect your clothes on <strong>{new Date(done.date).toLocaleDateString(appLocale(), { weekday: "long", day: "numeric", month: "long" })}</strong>, {slotLabel(done.slot)}.</p>
         <p className="mt-1 text-sm text-slate-500">The shop may call you to confirm. Reference <span className="font-mono font-semibold">{done.reference}</span></p>
         {shop.phone && <a href={`tel:${shop.phone}`} className="mt-6 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Phone className="h-4 w-4" />Call {shop.shopName}</a>}
       </div>
@@ -144,7 +147,7 @@ function BookingForm() {
                       const endsAt = new Date(membership.endsAt);
                       const upcoming = startsAt.getTime() > Date.now();
                       return <li key={`${membership.planName}-${membership.startsAt}-${index}`} className="rounded-lg bg-white px-3 py-2 text-sm text-slate-700">
-                        <span className="font-semibold text-slate-900">{membership.planName}</span> · {membership.discountBps / 100}% off · {upcoming ? "Starts" : "Valid through"} {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(upcoming ? startsAt : endsAt)}
+                        <span className="font-semibold text-slate-900">{membership.planName}</span> · {membership.discountBps / 100}% off · {upcoming ? "Starts" : "Valid through"} {new Intl.DateTimeFormat(appLocale(), { day: "numeric", month: "short", year: "numeric" }).format(upcoming ? startsAt : endsAt)}
                       </li>;
                     })}
                   </ul>
@@ -165,9 +168,9 @@ function BookingForm() {
             const dt = new Date(d);
             return (
               <button key={d} type="button" onClick={() => setF({ ...f, date: d })} className={cx("flex min-w-[64px] flex-col items-center rounded-xl border px-3 py-2 text-xs transition", f.date === d ? "border-brand-600 bg-brand-50 text-brand-900 ring-2 ring-brand-600/15" : "border-slate-200 text-slate-600 hover:border-slate-300")}>
-                <span className="font-semibold">{i === 0 ? "Today" : i === 1 ? "Tomorrow" : dt.toLocaleDateString("en-IN", { weekday: "short" })}</span>
+                <span className="font-semibold">{i === 0 ? "Today" : i === 1 ? "Tomorrow" : dt.toLocaleDateString(appLocale(), { weekday: "short" })}</span>
                 <span className="mt-0.5 text-lg font-bold">{dt.getDate()}</span>
-                <span>{dt.toLocaleDateString("en-IN", { month: "short" })}</span>
+                <span>{dt.toLocaleDateString(appLocale(), { month: "short" })}</span>
               </button>
             );
           })}
@@ -182,7 +185,7 @@ function BookingForm() {
       <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-800">What should we pick up? (optional)</span><IconInput icon={Shirt} value={f.items} onChange={set("items")} placeholder="e.g. 2 suits, 1 saree, curtains" /></label>
       <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-800">Note for the driver (optional)</span><textarea className={cx(plainBox, "h-20 py-2")} value={f.notes} onChange={set("notes")} maxLength={300} placeholder="Landmark, gate code…" /></label>
       {/* Hidden from people; bots fill it and are ignored. */}
-      <input type="text" name="website" value={f.website} onChange={set("website")} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" />
+      <input type="text" name="website" value={f.website} onChange={set("website")} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -start-[9999px] h-0 w-0 opacity-0" />
       <button type="submit" disabled={sending} className={primaryButton}>{sending ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <><Truck className="h-5 w-5" />Request pickup</>}</button>
       <p className="text-center text-xs text-slate-500">Your number is shared with {shop.shopName} to arrange pickup{shop.membershipPlans.length ? " and check your membership." : "."}</p>
     </form>
@@ -192,7 +195,7 @@ function BookingForm() {
 export default function BookPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#f7f7f5] px-4 py-8">
-      <div className="pointer-events-none absolute -right-28 -top-28 h-80 w-80 rounded-full bg-brand-100/80 blur-2xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -end-28 -top-28 h-80 w-80 rounded-full bg-brand-100/80 blur-2xl" aria-hidden="true" />
       <div className="relative mx-auto w-full max-w-xl rounded-3xl border border-white bg-white p-5 shadow-[0_30px_80px_-30px_rgba(21,21,20,0.25)] sm:p-8">
         <Suspense><BookingForm /></Suspense>
         <p className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400"><Logo className="h-4 w-auto" />Powered by <BrandName className="text-xs text-slate-500" /></p>

@@ -1,4 +1,7 @@
 "use client";
+import { SlideGroup } from "@/components/SlideGroup";
+import { shopMethods } from "@/lib/format";
+import { appLocale } from "@/lib/format";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronDown, MapPin, Minus, Plus, Search, ShoppingCart, UserRound, X } from "lucide-react";
@@ -34,7 +37,7 @@ const FLAGS: [string, string][] = [
 ];
 
 const DISCOUNT_REASONS = ["Regular customer", "Service delay", "Festival offer", "Price match", "Other"];
-const readyLabel = (d: Date) => (isNaN(d.getTime()) ? "the chosen date" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }));
+const readyLabel = (d: Date) => (isNaN(d.getTime()) ? "the chosen date" : d.toLocaleDateString(appLocale(), { weekday: "short", day: "numeric", month: "short" }));
 
 const CATEGORY_ORDER = [
   "Men", "Women", "Ethnic", "Kids & Baby", "Household Linen", "Home Furnishing", "Accessories", "Premium & Delicate",
@@ -277,7 +280,7 @@ function PosInner() {
           {steps.map((s, i) => (
             <li key={s.label} className="flex items-center gap-2" aria-current={s.current ? "step" : undefined}>
               {i > 0 && <span aria-hidden="true" className="h-0.5 w-5 rounded" style={{ background: steps[i - 1].done ? "var(--dc-green)" : "var(--dc-line)" }} />}
-              <span className="flex min-h-10 items-center gap-2 rounded-full border pl-1.5 pr-3.5 text-sm font-semibold" style={{ borderColor: s.current ? "var(--dc-solid)" : s.done ? "#cfe9d6" : "var(--dc-line)", background: s.current ? "var(--dc-card)" : s.done ? "var(--dc-green-bg)" : "transparent", color: s.current || s.done ? "var(--dc-ink)" : "var(--dc-sub)" }}>
+              <span className="flex min-h-10 items-center gap-2 rounded-full border ps-1.5 pe-3.5 text-sm font-semibold" style={{ borderColor: s.current ? "var(--dc-solid)" : s.done ? "#cfe9d6" : "var(--dc-line)", background: s.current ? "var(--dc-card)" : s.done ? "var(--dc-green-bg)" : "transparent", color: s.current || s.done ? "var(--dc-ink)" : "var(--dc-sub)" }}>
                 <span className="grid h-7 w-7 place-items-center rounded-full text-[13px]" style={{ background: s.done ? "var(--dc-green)" : s.current ? "var(--dc-solid)" : "transparent", color: s.done ? "#151514" : s.current ? "var(--dc-on-solid)" : "var(--dc-sub)", border: s.done || s.current ? 0 : "1.5px solid var(--dc-line)" }}>{s.done ? <Check className="h-4 w-4" /> : i + 1}</span>
                 {s.label}
               </span>
@@ -300,17 +303,17 @@ function PosInner() {
                 <h2 id="gar-h" className="dcd-h text-[22px]">Garments</h2>
                 <span className="rounded-full px-2.5 py-0.5 text-[13px] font-semibold" style={{ background: garmentCount ? "var(--dc-green)" : "var(--dc-soft)", color: garmentCount ? "#151514" : "var(--dc-ink)" }}>{garmentCount} pc{garmentCount === 1 ? "" : "s"}</span>
               </div>
-              <div role="radiogroup" aria-label="Service" className="flex flex-wrap gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
+              <SlideGroup label="Service" className="flex flex-wrap gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
                 {services.data?.filter((s) => s.active).map((s) => {
                   const on = serviceId === s.id;
-                  return <button type="button" key={s.id} role="radio" aria-checked={on} onClick={() => setServiceId(s.id)} className="dcd-pill min-h-10 cursor-pointer rounded-full px-4 text-sm font-semibold" style={{ background: on ? "var(--dc-solid)" : "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{s.name}</button>;
+                  return <button type="button" key={s.id} role="radio" aria-checked={on} onClick={() => setServiceId(s.id)} className="dcd-pill min-h-10 cursor-pointer rounded-full px-4 text-sm font-semibold" style={{ background: "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{s.name}</button>;
                 })}
-              </div>
+              </SlideGroup>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <label className="relative min-w-52 flex-1">
-                <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-                <Input value={garmentSearch} onChange={(event) => setGarmentSearch(event.target.value)} placeholder="Find a garment" className="h-10 rounded-xl pl-10" aria-label="Find a garment" />
+                <Search aria-hidden="true" className="pointer-events-none absolute start-3.5 top-3 h-4 w-4 text-slate-400" />
+                <Input value={garmentSearch} onChange={(event) => setGarmentSearch(event.target.value)} placeholder="Find a garment" className="h-10 rounded-xl ps-10" aria-label="Find a garment" />
               </label>
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter garments by category">
                 {["All", ...categories].map((category) => {
@@ -329,7 +332,7 @@ function PosInner() {
                   const also = lines.filter((l) => l.garmentTypeId === g.id && l.serviceId !== serviceId).map((l) => `${l.quantity} × ${services.data?.find((s) => s.id === l.serviceId)?.name ?? ""}`).join(", ");
                   return (
                     <div key={g.id} className={cx("dcd-lift flex flex-col overflow-hidden rounded-2xl border", unpriced && "opacity-60")} style={{ borderColor: qty ? "var(--dc-green)" : "var(--dc-line)", background: "var(--dc-card)", boxShadow: qty ? "0 6px 16px rgba(60,191,90,.18)" : undefined }}>
-                      <button type="button" onClick={() => addGarment(g.id)} disabled={!serviceId || unpriced} title={unpriced ? `No ${serviceName} price set for ${g.name}. Add it in Services & prices.` : `Add ${g.name}`} className="flex flex-1 items-start gap-2 px-3.5 pb-2 pt-3 text-left disabled:cursor-not-allowed">
+                      <button type="button" onClick={() => addGarment(g.id)} disabled={!serviceId || unpriced} title={unpriced ? `No ${serviceName} price set for ${g.name}. Add it in Services & prices.` : `Add ${g.name}`} className="flex flex-1 items-start gap-2 px-3.5 pb-2 pt-3 text-start disabled:cursor-not-allowed">
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--dc-sub)" }}>{g.category}</span>
                           <span className="block truncate text-[15px] font-semibold" title={g.name}>{g.name}</span>
@@ -341,7 +344,7 @@ function PosInner() {
                       <div className="flex items-center gap-1 border-t p-2" style={{ borderColor: qty ? "#d7ecdc" : "var(--dc-line2)", background: qty ? "var(--dc-green-bg)" : "var(--dc-soft2)" }}>
                         <button type="button" onClick={() => removeOne(g.id)} disabled={!qty} aria-label={`Remove one ${g.name}`} className="grid h-9 w-9 place-items-center rounded-lg border disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: qty ? "var(--dc-solid)" : "var(--dc-line)", background: "var(--dc-card)" }}><Minus className="h-4 w-4" /></button>
                         <span className="flex-1 text-center text-sm font-medium" style={{ color: qty ? "var(--dc-ink)" : "var(--dc-sub)" }}>{qty ? `${qty} in order` : "Add"}</span>
-                        <button type="button" onClick={() => addGarment(g.id)} disabled={!serviceId || unpriced} aria-label={`Add one ${g.name}`} className="grid h-9 w-9 place-items-center rounded-lg disabled:cursor-not-allowed disabled:opacity-40" style={{ background: "var(--dc-solid)", color: "var(--dc-on-solid)" }}><Plus className="h-4 w-4" strokeWidth={2.6} /></button>
+                        <button type="button" onClick={() => addGarment(g.id)} disabled={!serviceId || unpriced} aria-label={`Add one ${g.name}`} className="dc-press grid h-9 w-9 place-items-center rounded-lg disabled:cursor-not-allowed disabled:opacity-40" style={{ background: "var(--dc-solid)", color: "var(--dc-on-solid)" }}><Plus className="h-4 w-4" strokeWidth={2.6} /></button>
                       </div>
                     </div>
                   );
@@ -365,7 +368,7 @@ function PosInner() {
               {([[false, "Standard", turnaround], [true, `Express +${expressBps / 100}%`, Math.max(1, Math.round(turnaround / 2))]] as [boolean, string, number][]).map(([isExpress, label, hours]) => {
                 const on = express === isExpress;
                 return (
-                  <button key={label} type="button" aria-pressed={on} onClick={() => pickSpeed(isExpress)} className="dcd-lift cursor-pointer rounded-2xl border-[1.5px] p-3.5 text-left" style={{ borderColor: on ? "var(--dc-solid)" : "var(--dc-line)", background: on ? "var(--dc-soft)" : "var(--dc-card)" }}>
+                  <button key={label} type="button" aria-pressed={on} onClick={() => pickSpeed(isExpress)} className="dcd-lift cursor-pointer rounded-2xl border-[1.5px] p-3.5 text-start" style={{ borderColor: on ? "var(--dc-solid)" : "var(--dc-line)", background: on ? "var(--dc-soft)" : "var(--dc-card)" }}>
                     <span className="block text-[15px] font-semibold">{label}{isExpress && quote?.membership?.freeExpress ? " · free for this member" : ""}</span>
                     <span className="block text-sm" style={{ color: "var(--dc-sub)" }}>Ready {readyLabel(new Date(Date.now() + hours * 3600_000))}</span>
                   </button>
@@ -376,12 +379,12 @@ function PosInner() {
               <Field label="Ready by, exact date and time"><Input type="datetime-local" value={promisedAt} onChange={(e) => setPromisedAt(e.target.value)} /></Field>
               <div>
                 <span className="mb-1 block text-sm font-medium text-slate-700">Handover</span>
-                <div role="radiogroup" aria-label="Handover" className="flex gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
+                <SlideGroup label="Handover" className="flex gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
                   {([["counter", "Counter pickup"], ["home_delivery", "Home delivery"]] as const).map(([value, label]) => {
                     const on = deliveryMethod === value;
-                    return <button key={value} type="button" role="radio" aria-checked={on} onClick={() => setDeliveryMethod(value)} className="dcd-pill min-h-10 flex-1 cursor-pointer rounded-full text-sm font-semibold" style={{ background: on ? "var(--dc-solid)" : "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{label}</button>;
+                    return <button key={value} type="button" role="radio" aria-checked={on} onClick={() => setDeliveryMethod(value)} className="dcd-pill min-h-10 flex-1 cursor-pointer rounded-full text-sm font-semibold" style={{ background: "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{label}</button>;
                   })}
-                </div>
+                </SlideGroup>
               </div>
             </div>
             <p className="mt-2 text-sm" style={{ color: "var(--dc-sub)" }}>{deliveryMethod === "counter" ? `Customer collects from the store from ${readyLabel(new Date(promisedAt))}.` : `Delivered on or after ${readyLabel(new Date(promisedAt))}. Schedule the stop in Pickups & deliveries when it is ready.`}</p>
@@ -420,10 +423,10 @@ function PosInner() {
                             <div className="flex items-start gap-2">
                               <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900" title={gt?.name}>{gt?.name}</p>
                               <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{amount === null ? "—" : money(amount)}</span>
-                              <button type="button" aria-label={`Remove ${gt?.name}`} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} className="-mr-1 shrink-0 rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><X className="h-4 w-4" /></button>
+                              <button type="button" aria-label={`Remove ${gt?.name}`} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} className="-me-1 shrink-0 rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><X className="h-4 w-4" /></button>
                             </div>
                             <div className="mt-1.5 flex items-center gap-1.5">
-                              <Select value={l.serviceId} onChange={(e) => update(l.key, { serviceId: e.target.value })} className="h-7 w-[112px] py-0 pl-2 pr-6 text-xs sm:w-[132px] sm:pr-7" aria-label="Service">
+                              <Select value={l.serviceId} onChange={(e) => update(l.key, { serviceId: e.target.value })} className="h-7 w-[112px] py-0 ps-2 pe-6 text-xs sm:w-[132px] sm:pe-7" aria-label="Service">
                                 {services.data?.filter((sv) => sv.active).map((sv) => <option key={sv.id} value={sv.id}>{sv.name}</option>)}
                               </Select>
                               <div className="flex h-7 items-center rounded-md border border-slate-300">
@@ -431,7 +434,7 @@ function PosInner() {
                                 <span className="w-7 text-center text-sm font-semibold tabular-nums">{l.quantity}</span>
                                 <button type="button" className="flex h-full w-7 items-center justify-center hover:bg-slate-100" aria-label="Increase" onClick={() => update(l.key, { quantity: Math.min(200, l.quantity + 1) })}><Plus className="h-3.5 w-3.5" /></button>
                               </div>
-                              <button type="button" onClick={() => setOpenLine(open ? null : l.key)} aria-expanded={open} className={cx("ml-auto inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium", detailCount ? "text-amber-800 hover:bg-amber-50" : "text-brand-700 hover:bg-brand-50")}>
+                              <button type="button" onClick={() => setOpenLine(open ? null : l.key)} aria-expanded={open} className={cx("ms-auto inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium", detailCount ? "text-amber-800 hover:bg-amber-50" : "text-brand-700 hover:bg-brand-50")}>
                                 {detailCount ? `Details · ${detailCount}` : "Details"}<ChevronDown className={cx("h-3.5 w-3.5 transition", open && "rotate-180")} />
                               </button>
                             </div>
@@ -441,7 +444,7 @@ function PosInner() {
                           </div>
                         </div>
                         {open && (
-                          <div className="mt-2.5 space-y-2 pl-[50px]">
+                          <div className="mt-2.5 space-y-2 ps-[50px]">
                             <div className="grid grid-cols-2 gap-2">
                               <Input placeholder="Colour" value={l.colour} onChange={(e) => update(l.key, { colour: e.target.value })} className="h-8 py-1 text-xs" />
                               <Input placeholder="Brand" value={l.brand} onChange={(e) => update(l.key, { brand: e.target.value })} className="h-8 py-1 text-xs" />
@@ -455,7 +458,7 @@ function PosInner() {
                             {l.conditionFlags.includes("stain") && (
                               <label className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
                                 Stain treatment charge, per piece
-                                <Input inputMode="decimal" value={l.stainCharge} onChange={(e) => update(l.key, { stainCharge: e.target.value.replace(/[^0-9.]/g, "") })} placeholder="₹ 0" aria-label="Stain treatment charge per piece" className="h-8 w-24 py-1 text-right text-xs" />
+                                <Input inputMode="decimal" value={l.stainCharge} onChange={(e) => update(l.key, { stainCharge: e.target.value.replace(/[^0-9.]/g, "") })} placeholder="₹ 0" aria-label="Stain treatment charge per piece" className="h-8 w-24 py-1 text-end text-xs" />
                               </label>
                             )}
                             {(l.conditionFlags.length > 0 || l.conditionNotes) && <Input placeholder="Where is the damage / stain? (shown to QC)" value={l.conditionNotes} onChange={(e) => update(l.key, { conditionNotes: e.target.value })} className="h-8 py-1 text-xs" />}
@@ -476,12 +479,12 @@ function PosInner() {
               <div className="space-y-2 border-t px-5 py-4" style={{ borderColor: "var(--dc-line2)" }}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">Discount <span className="font-normal" style={{ color: "var(--dc-sub)" }}>(optional · up to {maxDiscountPct}%)</span></p>
-                  <div role="radiogroup" aria-label="Discount type" className="flex gap-0.5 rounded-full p-0.5" style={{ background: "var(--dc-soft)" }}>
+                  <SlideGroup label="Discount type" className="flex gap-0.5 rounded-full p-0.5" style={{ background: "var(--dc-soft)" }}>
                     {([["amount", "₹"], ["percent", "%"]] as const).map(([value, label]) => {
                       const on = discType === value;
-                      return <button key={value} type="button" role="radio" aria-checked={on} aria-label={value === "amount" ? "Fixed amount" : "Percentage"} onClick={() => { setDiscType(value); setDiscValue(""); }} className="h-8 w-9 cursor-pointer rounded-full text-sm font-bold" style={{ background: on ? "var(--dc-solid)" : "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{label}</button>;
+                      return <button key={value} type="button" role="radio" aria-checked={on} aria-label={value === "amount" ? "Fixed amount" : "Percentage"} onClick={() => { setDiscType(value); setDiscValue(""); }} className="h-8 w-9 cursor-pointer rounded-full text-sm font-bold" style={{ background: "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{label}</button>;
                     })}
-                  </div>
+                  </SlideGroup>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Input inputMode="decimal" value={discValue} onChange={(e) => { setDiscValue(e.target.value.replace(/[^0-9.]/g, "")); if (e.target.value) setCouponCode(""); }} placeholder={discType === "amount" ? "₹ 0" : "0 %"} disabled={!!couponCode} aria-label="Discount" />
@@ -497,13 +500,13 @@ function PosInner() {
                 <div className="space-y-2 border-t px-5 py-4" style={{ borderColor: "var(--dc-line2)" }}>
                   <p className="text-sm font-semibold">Advance payment</p>
                   {approvalHoldsRequired && <Alert>Advance collection is disabled while approval is pending.</Alert>}
-                  <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Payment method">
-                    {PAYMENT_METHODS.map((m) => {
+                  <SlideGroup label="Payment method" radius={12} className="grid grid-cols-3 gap-1.5">
+                    {shopMethods(PAYMENT_METHODS).map((m) => {
                       const on = payMethod === m;
                       const off = approvalHoldsRequired || (m === "store_credit" && !walletBalance);
-                      return <button key={m} type="button" role="radio" aria-checked={on} disabled={off} onClick={() => setPayMethod(m)} className="dcd-pill min-h-10 cursor-pointer rounded-xl border px-1 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: on ? "var(--dc-solid)" : "var(--dc-line)", background: on ? "var(--dc-solid)" : "var(--dc-card)", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{m === "store_credit" ? `Wallet ${money(walletBalance).replace(/\.00$/, "")}` : PAYMENT_METHOD_LABELS[m]}</button>;
+                      return <button key={m} type="button" role="radio" aria-checked={on} disabled={off} onClick={() => setPayMethod(m)} className="dcd-pill min-h-10 cursor-pointer rounded-xl border px-1 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: on ? "var(--dc-solid)" : "var(--dc-line)", background: "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{m === "store_credit" ? `Wallet ${money(walletBalance).replace(/\.00$/, "")}` : PAYMENT_METHOD_LABELS[m]}</button>;
                     })}
-                  </div>
+                  </SlideGroup>
                   <div className={cx("grid gap-2", payMethod !== "cash" && payMethod !== "store_credit" && "grid-cols-2")}>
                     <Input inputMode="decimal" value={payAmount} onChange={(e) => setPayAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="Amount ₹" aria-label="Advance amount" disabled={approvalHoldsRequired} />
                     {payMethod !== "cash" && payMethod !== "store_credit" && <Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Reference no." aria-label="Transaction reference" disabled={approvalHoldsRequired} />}
@@ -715,7 +718,7 @@ function CustomerPicker({ customer, onChange, canCreate }: { customer: any; onCh
               </div>
               <p className="mt-1 text-sm text-slate-500">
                 {customer.customerCode} <span className="mx-1 text-slate-300">·</span> {customer.phone ?? "No phone"}
-                {customer.stats?.outstanding > 0 && <span className="ml-2 font-medium text-amber-700">Previous dues {money(customer.stats.outstanding)}</span>}
+                {customer.stats?.outstanding > 0 && <span className="ms-2 font-medium text-amber-700">Previous dues {money(customer.stats.outstanding)}</span>}
               </p>
               {primaryAddressText ? (
                 <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-slate-600">
@@ -767,20 +770,20 @@ function CustomerPicker({ customer, onChange, canCreate }: { customer: any; onCh
       {!creating ? (
         <div className="space-y-2">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="pointer-events-none absolute start-3 top-2.5 h-4 w-4 text-slate-400" />
             <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
               if (e.key === "ArrowDown" && results.length) { e.preventDefault(); setHighlight((highlight + 1) % results.length); }
               else if (e.key === "ArrowUp" && results.length) { e.preventDefault(); setHighlight((highlight - 1 + results.length) % results.length); }
               else if (e.key === "Enter" && results[highlight]) { e.preventDefault(); void choose(results[highlight].id); }
               else if (e.key === "Escape") setQ("");
-            }} placeholder="Mobile number, name, email or customer code" aria-label="Find customer" className="h-12 rounded-xl pl-9" />
+            }} placeholder="Mobile number, name, email or customer code" aria-label="Find customer" className="h-12 rounded-xl ps-9" />
           </div>
           <p className="text-[13px] text-slate-500">Type at least 2 letters or digits. ↑ ↓ to move, Enter to select.</p>
           {results.length > 0 && (
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
               {results.map((c, i) => (
                 <li key={c.id}>
-                  <button type="button" onClick={() => void choose(c.id)} className={cx("flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition hover:bg-brand-50/60", i === highlight && "bg-slate-100")}>
+                  <button type="button" onClick={() => void choose(c.id)} className={cx("flex w-full items-center justify-between gap-3 px-3 py-3 text-start text-sm transition hover:bg-brand-50/60", i === highlight && "bg-slate-100")}>
                     <span className="flex min-w-0 items-center gap-3">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">{c.name?.slice(0, 1)?.toUpperCase()}</span>
                       <span className="min-w-0">

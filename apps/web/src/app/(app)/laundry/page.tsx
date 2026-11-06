@@ -265,7 +265,7 @@ function HistoryDialog({ machine, canMaintain, onClose, onResolved }: { machine:
                 {h.data.cycles.map((c) => (
                   <li key={c.id} className="flex items-center justify-between gap-2 py-2">
                     <span><span className="font-medium">{c.order_number}</span> <span className="text-xs text-slate-500">{c.program_name ?? ""}</span>{c.error && <span className="block text-xs text-red-600">{c.error}</span>}</span>
-                    <span className="text-right text-xs"><Badge color={c.status === "completed" ? "green" : c.status === "failed" ? "red" : c.status === "running" ? "violet" : "slate"}>{c.status}</Badge><span className="block text-slate-400">{c.started_at ? dateTime(c.started_at) : "not started"}</span></span>
+                    <span className="text-end text-xs"><Badge color={c.status === "completed" ? "green" : c.status === "failed" ? "red" : c.status === "running" ? "violet" : "slate"}>{c.status}</Badge><span className="block text-slate-400">{c.started_at ? dateTime(c.started_at) : "not started"}</span></span>
                   </li>
                 ))}
               </ul>

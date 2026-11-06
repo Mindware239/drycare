@@ -33,6 +33,8 @@ cpSync(path.join(repo, "apps/web/out"), path.join(stage, "resources/web"), { rec
 cpSync(path.join(repo, "apps/api/drizzle"), path.join(stage, "resources/drizzle"), { recursive: true });
 cpSync(path.join(root, "build/icon.ico"), path.join(stage, "resources/icon.ico"));
 cpSync(licensePublicKey, path.join(stage, "resources/license-public.pem"));
+// Where installed copies look for new versions. Without it they still run, and say updates are not set up.
+writeFileSync(path.join(stage, "resources/update.json"), JSON.stringify({ url: process.env.DRYCARE_UPDATE_URL ?? "" }));
 
 console.log("› Bundling main process + API…");
 await build({

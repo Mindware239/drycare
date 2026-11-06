@@ -106,9 +106,9 @@ function CustomerProfileInner() {
                 <Td className="font-medium text-brand-700">{o.order_number}</Td>
                 <Td>{dateTime(o.received_at)}</Td>
                 <Td>{dateTime(o.promised_at)}</Td>
-                <Td className="text-right">{o.garment_count}</Td>
-                {c.financialVisible && <Td className="text-right tabular-nums">{money(o.grand_total)}</Td>}
-                {c.financialVisible && <Td className={cx("text-right tabular-nums", Number(o.balance) > 0 && "font-medium text-amber-700")}>{money(o.balance)}</Td>}
+                <Td className="text-end">{o.garment_count}</Td>
+                {c.financialVisible && <Td className="text-end tabular-nums">{money(o.grand_total)}</Td>}
+                {c.financialVisible && <Td className={cx("text-end tabular-nums", Number(o.balance) > 0 && "font-medium text-amber-700")}>{money(o.balance)}</Td>}
                 <Td>
                   <OrderStatusBadge status={o.operational_status} />
                 </Td>
@@ -133,7 +133,7 @@ function CustomerProfileInner() {
                   <Td>{dateTime(g.received_at)}</Td>
                   <Td>{g.colour ?? "—"}</Td>
                   <Td><Badge color={g.current_status === "delivered" ? "green" : g.current_status === "exception" ? "red" : "blue"}>{String(g.current_status).replace(/_/g, " ")}</Badge></Td>
-                  {c.financialVisible && <Td className="text-right tabular-nums">{money(g.unit_price)}</Td>}
+                  {c.financialVisible && <Td className="text-end tabular-nums">{money(g.unit_price)}</Td>}
                 </tr>
               ))}
             </Table>
@@ -152,8 +152,8 @@ function CustomerProfileInner() {
                 <Td className="font-mono text-xs">{p.payment_reference}</Td>
                 <Td>{p.order_number}</Td>
                 <Td>{p.payment_method.toUpperCase()}</Td>
-                <Td className="text-right tabular-nums">{money(p.amount)}</Td>
-                <Td className="text-right tabular-nums">{Number(p.refunded) ? money(p.refunded) : "—"}</Td>
+                <Td className="text-end tabular-nums">{money(p.amount)}</Td>
+                <Td className="text-end tabular-nums">{Number(p.refunded) ? money(p.refunded) : "—"}</Td>
               </tr>
             ))}
           </Table>

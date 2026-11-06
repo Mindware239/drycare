@@ -1,3 +1,5 @@
+import { countryPack, validTaxId } from "@drycare/shared";
+import { orgRegion } from "../lib/region";
 import type { FastifyInstance } from "fastify";
 import { and, desc, eq, ilike, or, sql, ne } from "drizzle-orm";
 import { z } from "zod";
@@ -52,6 +54,15 @@ async function getCustomer(orgId: string, customerId: string) {
   const c = await db.query.customers.findFirst({ where: and(eq(schema.customers.id, customerId), eq(schema.customers.organizationId, orgId)) });
   if (!c) throw notFound("Customer");
   return c;
+}
+
+async function assertCustomerTaxId(orgId: string, value: string | null | undefined) {
+  if (!value) return;
+  const { country } = await orgRegion(orgId);
+  if (!validTaxId(country, value)) {
+    const pack = countryPack(country);
+    throw badRequest(`${pack.taxIdLabel} should look like ${pack.taxIdExample ?? "the customer's registered number"}`);
+  }
 }
 
 export async function customerRoutes(app: FastifyInstance) {
@@ -112,7 +123,7 @@ export async function customerRoutes(app: FastifyInstance) {
 
   app.post("/customers", async (req, reply) => {
     const auth = requirePermission(req, "customers.write");
-    const body = customerSchema.parse(req.body);
+    const body = customerSchema.parse(req.body); await assertCustomerTaxId(auth.orgId, body.gstin);
     const force = z.object({ force: z.coerce.boolean().default(false) }).parse(req.query).force;
     const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId), columns: { settings: true } });
     const duplicateRules = customerDuplicateMatchesSchema.parse(org?.settings.customerDuplicateMatch);
@@ -191,7 +202,7 @@ export async function customerRoutes(app: FastifyInstance) {
   app.patch("/customers/:customerId", async (req) => {
     const auth = requirePermission(req, "customers.write");
     const { customerId } = idParam.parse(req.params);
-    const body = customerUpdateSchema.parse(req.body);
+    const body = customerUpdateSchema.parse(req.body); await assertCustomerTaxId(auth.orgId, body.gstin);
     return db.transaction(async (tx) => {
       const before = await getCustomer(auth.orgId, customerId);
       if (before.status === "merged") throw badRequest("Merged customers cannot be edited");

@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { Flame, Shirt, Wind, type LucideIcon } from "lucide-react";
 import { LAUNDRY_MACHINE_LABELS, type LaundryMachineType, type LaundryPricingMethod } from "@drycare/shared";
 import { cx } from "@/components/ui";
@@ -42,7 +43,7 @@ export const ORDER_STATUS: Record<string, { label: string; color: "slate" | "amb
 };
 
 export const machineTypeLabel = (t: LaundryMachineType) => LAUNDRY_MACHINE_LABELS[t];
-export const kg = (grams: number | null | undefined) => (grams ? `${(grams / 1000).toLocaleString("en-IN", { maximumFractionDigits: 2 })} kg` : "—");
+export const kg = (grams: number | null | undefined) => (grams ? `${(grams / 1000).toLocaleString(appLocale(), { maximumFractionDigits: 2 })} kg` : "—");
 
 export function StatusChip({ status }: { status: string }) {
   const s = STATUS_STYLE[status] ?? STATUS_STYLE.available;

@@ -61,7 +61,7 @@ export function PriceList({ services, branchId, onSaved }: { services: LaundrySe
         {err && <div className="p-4"><Alert>{err}</Alert></div>}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-sm">
-            <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <tr><th className="px-4 py-2.5">Service</th>{LAUNDRY_PRICING_METHODS.map((m) => <th key={m} className="px-3 py-2.5">{LAUNDRY_METHOD_LABELS[m]}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -80,7 +80,7 @@ export function PriceList({ services, branchId, onSaved }: { services: LaundrySe
                           {d.enabled ? "Offered" : "Off"}{r?.branchId && <Badge color="blue">this store</Badge>}
                         </label>
                         {m === "item" ? <p className="text-xs text-slate-500">{s.items.filter((i) => i.active).length} item prices</p>
-                          : <div className="relative"><span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₹</span><Input value={d.price} disabled={!d.enabled} onChange={(e) => setDraft({ ...draft, [k]: { ...d, price: e.target.value.replace(/[^0-9.]/g, "") } })} className="h-8 w-28 pl-6 tabular-nums" aria-label={`${s.name} ${LAUNDRY_METHOD_LABELS[m]} price`} /></div>}
+                          : <div className="relative"><span className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₹</span><Input value={d.price} disabled={!d.enabled} onChange={(e) => setDraft({ ...draft, [k]: { ...d, price: e.target.value.replace(/[^0-9.]/g, "") } })} className="h-8 w-28 ps-6 tabular-nums" aria-label={`${s.name} ${LAUNDRY_METHOD_LABELS[m]} price`} /></div>}
                         {d.enabled && m !== "item" && <p className="mt-0.5 text-[10px] text-slate-400">{m === "weight" ? "per kg" : m === "cycle" ? "per cycle" : m === "time" ? "per minute" : "fixed"}</p>}
                       </td>
                     );
@@ -160,7 +160,7 @@ export function KioskAndScale({ branchId, branchName, canManageStaff }: { branch
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <Card title={<span className="flex items-center gap-2"><MonitorSmartphone className="h-4 w-4" />Customer kiosk tablet</span>}>
-        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-700">
+        <ol className="list-decimal space-y-1.5 ps-5 text-sm text-slate-700">
           <li>Create a kiosk login below. It can take self-service orders and see machines at <b>{branchName}</b> only — no prices setup, refunds, reports or other stores.</li>
           <li>On the tablet, sign in with that login, then open the kiosk address and tap <b>Full screen</b>.</li>
           <li>Never leave the owner&apos;s login on a customer-facing tablet.</li>

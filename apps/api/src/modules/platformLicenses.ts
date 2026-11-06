@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { resolveFeatures, signedLicenseSchema } from "@drycare/shared";
-import { hardwarePolicy, rfidModuleActive } from "../lib/entitlements";
+import { hardwarePolicy, rfidModuleActive, featureRegistry } from "../lib/entitlements";
 import { soldPrintersFor } from "./printerRegistry";
 import { db, schema } from "../db/client";
 import { requirePlatformAdmin } from "../lib/context";
@@ -157,8 +157,9 @@ async function grantsFor(planName: string, organizationId?: string | null) {
   const [plan] = await db.select({ entitlements: schema.commercialPlans.entitlements, deviceLimit: schema.commercialPlans.deviceLimit, branchLimit: schema.commercialPlans.branchLimit }).from(schema.commercialPlans)
     .where(eq(schema.commercialPlans.name, planName)).orderBy(desc(schema.commercialPlans.published)).limit(1);
   if (!plan) return null;
-  const org = organizationId ? await db.query.organizations.findFirst({ where: eq(schema.organizations.id, organizationId), columns: { featureOverrides: true, branchLimitOverride: true } }) : undefined;
-  return { planName, deviceLimit: plan.deviceLimit, features: resolveFeatures(plan.entitlements, org?.featureOverrides), limits: { branches: org?.branchLimitOverride ?? plan.branchLimit } };
+  const org = organizationId ? await db.query.organizations.findFirst({ where: eq(schema.organizations.id, organizationId), columns: { featureOverrides: true, featureOverrideExpiry: true, branchLimitOverride: true } }) : undefined;
+  const { globallyOff } = await featureRegistry();
+  return { planName, deviceLimit: plan.deviceLimit, features: resolveFeatures(plan.entitlements, org?.featureOverrides, { expiry: org?.featureOverrideExpiry, globallyOff }), limits: { branches: org?.branchLimitOverride ?? plan.branchLimit } };
 }
 
 /** Counts this key's PCs together with the customer's other keys still in force. A renewal repeats the same PCs, so they count once. */

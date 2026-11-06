@@ -77,6 +77,8 @@ try {
   r = await req("POST", "/branches", { name: "Second Branch", branchCode: "PCSECOND" });
   check("the branch limit in the key is enforced, with no internet", r.status === 403 && r.json.error.code === "BRANCH_LIMIT_REACHED", r.json);
 
+  // Shops cannot remove a device, so numbers from an earlier run of this test are cleared here.
+  await sqlClient`delete from shop_printers where serial_number in ('SN100', 'SN101', 'SC100')`;
   // Printers sold by Mindware: the key lists them, so connecting works with no internet.
   writeFileSync(licenseFile, makeKey({ hardware: { printers: [], scanners: [], soldPrinters: [{ serial: "SN100", bill: "B200", model: "Sold Model" }] } }));
   r = await req("POST", "/labels/shop-printers", { serial: "SN100", bill: "NOPE", printerName: "Any" });
@@ -85,7 +87,42 @@ try {
   check("on a PC, the Windows printer must be chosen", r.status === 400, r.json);
   r = await req("POST", "/labels/shop-printers", { serial: "SN100", bill: "B200", printerName: "Counter Printer" });
   check("the right numbers connect it, with no internet", r.status === 201 && r.json.model === "Sold Model", r.json);
-  await req("DELETE", `/labels/shop-printers/${r.json.id}`);
+  r = await req("DELETE", `/labels/shop-printers/${r.json.id}`);
+  check("on a PC, a shop cannot remove a printer either", r.status === 404, r.json);
+  writeFileSync(licenseFile, makeKey({ hardware: { printers: [], scanners: [], soldPrinters: [{ serial: "SN101", bill: "B201", model: "New Model" }, { serial: "SC100", bill: "B300", model: "Sold Scanner", kind: "scanner" }] } }));
+  r = await req("GET", "/labels/shop-printers");
+  check("a renewed key that leaves a printer out disables it", r.json.printers.find((p: { serialNumber: string }) => p.serialNumber === "SN100")?.disabled === true && r.json.missing.printer === true, r.json);
+  r = await req("POST", "/labels/shop-printers", { serial: "SN101", bill: "B201", printerName: "Counter Printer" });
+  check("its replacement connects under the same Windows name", r.status === 201, r.json);
+  r = await req("POST", "/labels/shop-printers", { serial: "SC100", bill: "B300", printerName: "Counter Printer" });
+  check("a scanner's numbers do not connect a printer on a PC", r.status === 403, r.json);
+  r = await req("POST", "/labels/shop-printers", { deviceType: "scanner", serial: "SC100", bill: "B300" });
+  check("a scanner connects with no internet, and needs no Windows printer", r.status === 201 && r.json.deviceType === "scanner", r.json);
+  r = await req("GET", "/labels/shop-printers");
+  check("nothing is missing after that", r.json.missing.printer === false && r.json.missing.scanner === false, r.json.missing);
+  // A real TSC printer, if one is plugged in: it reports its own serial number. Nothing is printed here.
+  const { readPrinterSerial } = await import("../apps/api/src/lib/printerSerial");
+  const realName = process.env.TEST_TSC_PRINTER ?? "TSC P210";
+  const realSerial = await readPrinterSerial(realName);
+  if (!realSerial) results.push(`  - no ${realName} answering: real printer checks skipped`);
+  else {
+    const useKey = (serial: string) => writeFileSync(licenseFile, makeKey({ hardware: { printers: [], scanners: [], soldPrinters: [{ serial, bill: "BR1", model: "Real TSC" }] } }));
+    const leftover = await db.query.shopPrinters.findFirst({ where: (p, { eq }) => eq(p.serialNumber, realSerial) });
+    if (leftover) throw new Error(`${realSerial} is connected in this database; this test would disturb it.`);
+    useKey("NOTTHISUNIT");
+    r = await req("POST", "/labels/shop-printers", { serial: "NOTTHISUNIT", bill: "BR1", printerName: realName });
+    check("the real printer refuses a serial number that is not its own", r.status === 403 && r.json.error.code === "PRINTER_SERIAL_MISMATCH" && r.json.error.message.includes(realSerial), r.json);
+    useKey(realSerial);
+    r = await req("POST", "/labels/shop-printers", { serial: realSerial, bill: "BR1", printerName: realName });
+    check("the real printer confirms its own serial number", r.status === 201 && r.json.serialConfirmed === true, r.json);
+    const realRow = r.json.id;
+    // Registered as a different unit, as if the physical printer had been swapped under the same Windows name.
+    await sqlClient`update shop_printers set serial_number = 'SWAPPEDUNIT' where id = ${realRow}`;
+    useKey("SWAPPEDUNIT");
+    r = await req("POST", "/labels/print", { printer: realName, widthMm: 38, heightMm: 30, gapMm: 2, density: 8, speed: 4, copies: 1, labels: [{ widthDots: 8, heightDots: 8, data: "AAAAAAAAAAA=" }] });
+    check("a swapped printer is refused before anything prints", r.status === 403 && r.json.error.code === "PRINTER_SERIAL_MISMATCH", r.json);
+    await sqlClient`delete from shop_printers where id = ${realRow}`;
+  }
   writeFileSync(licenseFile, makeKey({ features: { rfid: true } }));
   r = await req("GET", "/rfid/summary");
   check("the RFID module follows the key", r.status === 200, r.json);

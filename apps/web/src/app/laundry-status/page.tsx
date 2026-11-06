@@ -59,7 +59,7 @@ function StatusInner() {
                       <p className="font-medium text-slate-900">{s.machine}</p>
                       <p className="text-xs text-slate-500">{s.program ?? ""}</p>
                     </div>
-                    <span className="text-right text-xs font-semibold">
+                    <span className="text-end text-xs font-semibold">
                       {s.status === "completed" ? <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 className="h-4 w-4" />Finished</span>
                         : s.status === "running" ? <span className="inline-flex items-center gap-1 text-violet-700"><Clock3 className="h-4 w-4" />{left !== null && left > 0 ? `~${left} min left` : "Finishing — staff will confirm"}</span>
                         : s.status === "failed" ? <span className="text-red-700">Stopped — please see staff</span>

@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Circle, CircleAlert, Copy, PackageCheck, ScanLine, Send, Trash2, XCircle } from "lucide-react";
@@ -153,8 +154,8 @@ function TransferInner() {
             <Card>
               <form onSubmit={submitScan} className="flex gap-2">
                 <label className="relative flex-1">
-                  <ScanLine className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  <Input ref={inputRef} value={code} onChange={(e) => setCode(e.target.value)} placeholder={step === "dispatch" ? "Scan a bag label, then each garment tag" : "Scan each garment tag as it is unpacked"} className="h-14 pl-12 font-mono text-lg" aria-label="Scan barcode" autoComplete="off" />
+                  <ScanLine className="pointer-events-none absolute start-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                  <Input ref={inputRef} value={code} onChange={(e) => setCode(e.target.value)} placeholder={step === "dispatch" ? "Scan a bag label, then each garment tag" : "Scan each garment tag as it is unpacked"} className="h-14 ps-12 font-mono text-lg" aria-label="Scan barcode" autoComplete="off" />
                 </label>
                 {/* Stays enabled while reads are checked: browsers ignore the Enter key when a form's button is disabled. */}
                 <Button type="submit" size="lg" className="h-14">Enter</Button>
@@ -204,7 +205,7 @@ function TransferInner() {
           <Card title={step === "dispatch" ? "Loading check" : "Receiving check"}>
             <div className="flex items-end justify-between">
               <div><p className="text-3xl font-semibold tabular-nums text-slate-900">{verified}<span className="text-lg text-slate-400"> / {garments.length}</span></p><p className="text-xs text-slate-500">garments verified by scan</p></div>
-              <div className="text-right"><p className="text-xl font-semibold tabular-nums">{b.bags.length}</p><p className="text-xs text-slate-500">bags</p></div>
+              <div className="text-end"><p className="text-xl font-semibold tabular-nums">{b.bags.length}</p><p className="text-xs text-slate-500">bags</p></div>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className={cx("h-full rounded-full transition-all", pct === 100 ? "bg-emerald-500" : "bg-amber-500")} style={{ width: `${pct}%` }} /></div>
             {step === "receipt" && missing.length > 0 && (
@@ -220,7 +221,7 @@ function TransferInner() {
                 {b.scans.map((s: any) => (
                   <li key={s.id} className="flex items-center justify-between gap-2 px-4 py-2">
                     <span className="font-mono">{s.code}</span>
-                    <span className="flex items-center gap-2"><Badge color={s.result === "verified" ? "green" : s.result === "duplicate" ? "amber" : "red"}>{s.result.replace("_", " ")}</Badge><span className="text-slate-400">{new Date(s.scannedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span></span>
+                    <span className="flex items-center gap-2"><Badge color={s.result === "verified" ? "green" : s.result === "duplicate" ? "amber" : "red"}>{s.result.replace("_", " ")}</Badge><span className="text-slate-400">{new Date(s.scannedAt).toLocaleTimeString(appLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span></span>
                   </li>
                 ))}
               </ul>

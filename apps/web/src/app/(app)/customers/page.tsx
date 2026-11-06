@@ -45,7 +45,7 @@ function CustomersInner() {
         <Button variant="secondary" type="submit">
           Search
         </Button>
-        <label className="ml-2 flex items-center gap-2 text-sm text-slate-600">
+        <label className="ms-2 flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={inactive} onChange={(e) => setInactive(e.target.checked)} /> Include inactive
         </label>
       </form>
@@ -69,8 +69,8 @@ function CustomersInner() {
                   <Badge color={c.customerType === "vip" ? "violet" : c.customerType === "corporate" ? "blue" : "slate"}>{TYPES[c.customerType] ?? c.customerType}</Badge>
                 </Td>
                 <Td>{dateOnly(c.lastOrderAt)}</Td>
-                <Td className="text-right tabular-nums">{c.totalOrders}</Td>
-                {data?.financialVisible && <Td className={c.outstanding > 0 ? "text-right font-medium tabular-nums text-amber-700" : "text-right tabular-nums"}>{money(c.outstanding)}</Td>}
+                <Td className="text-end tabular-nums">{c.totalOrders}</Td>
+                {data?.financialVisible && <Td className={c.outstanding > 0 ? "text-end font-medium tabular-nums text-amber-700" : "text-end tabular-nums"}>{money(c.outstanding)}</Td>}
               </tr>
             ))}
           </Table>

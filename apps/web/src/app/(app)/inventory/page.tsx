@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { Boxes, ClipboardCheck, Download, History, PackageCheck, PackageMinus, PackagePlus, Pencil, Plus, Printer, Search, ShoppingCart, Sparkles, Trash2, TriangleAlert, Truck, Wallet } from "lucide-react";
 import {
@@ -13,7 +14,7 @@ type Item = { id: string; itemCode: string; name: string; category: string; unit
 type Supplier = { id: string; name: string; contactPerson: string | null; phone: string | null; email: string | null; gstin: string | null; address: string | null; notes: string | null; isActive: boolean; orderCount: number; purchasedTotal: string; lastOrderAt: string | null };
 
 /** 1500 → "1.5" (quantities are thousandths of a unit). */
-const qty = (milli: number) => Number((milli / 1000).toFixed(3)).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+const qty = (milli: number) => Number((milli / 1000).toFixed(3)).toLocaleString(appLocale(), { maximumFractionDigits: 3 });
 const qtyU = (milli: number, unit: string) => `${qty(milli)} ${unit}`;
 const num = (v: string) => (v.trim() === "" || isNaN(Number(v)) ? NaN : Number(v));
 const PO_TONE: Record<string, Tone> = { draft: "slate", ordered: "blue", partial: "amber", received: "green", cancelled: "red" };
@@ -147,13 +148,13 @@ function StockTab({ items, suppliers, branchId, onNotice, onReorder }: { items: 
       )}
       <Card padded={false}>
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
-          <label className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-8 w-52 pl-8 text-xs" aria-label="Search items" /></label>
+          <label className="relative"><Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-8 w-52 ps-8 text-xs" aria-label="Search items" /></label>
           <Select value={category} onChange={(e) => setCategory(e.target.value)} className="h-8 w-48 py-0 text-xs" aria-label="Category">
             <option value="">All categories</option>{INVENTORY_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
           </Select>
           <label className="flex items-center gap-1.5 text-xs text-slate-600"><input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} className="accent-brand-700" />Low stock only</label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600"><input type="checkbox" checked={showOff} onChange={(e) => setShowOff(e.target.checked)} className="accent-brand-700" />Show switched-off items</label>
-          <div className="ml-auto flex gap-2">
+          <div className="ms-auto flex gap-2">
             <Button size="sm" variant="secondary" onClick={exportCsv} disabled={!rows.length}><Download className="h-4 w-4" />Export</Button>
             <Button size="sm" variant="secondary" onClick={addStarter} loading={adding}><Sparkles className="h-4 w-4" />Add common items</Button>
             <Button size="sm" onClick={() => setEditing("new")}><Plus className="h-4 w-4" />Add item</Button>
@@ -170,26 +171,26 @@ function StockTab({ items, suppliers, branchId, onNotice, onReorder }: { items: 
         ) : !rows.length ? <Empty title="No items match">Change the search or filters.</Empty> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-sm">
-              <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <tr><th className="px-4 py-2.5">Item</th><th className="px-4 py-2.5 text-right">On the shelf</th><th className="px-4 py-2.5 text-right">Reorder at</th><th className="px-4 py-2.5 text-right">On order</th><th className="px-4 py-2.5 text-right">Value</th><th className="px-4 py-2.5 text-right">Record</th></tr>
+              <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <tr><th className="px-4 py-2.5">Item</th><th className="px-4 py-2.5 text-end">On the shelf</th><th className="px-4 py-2.5 text-end">Reorder at</th><th className="px-4 py-2.5 text-end">On order</th><th className="px-4 py-2.5 text-end">Value</th><th className="px-4 py-2.5 text-end">Record</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.map((i) => (
                   <tr key={i.id} className={cx("align-middle", !i.isActive && "bg-slate-50/70 text-slate-400")}>
                     <td className="px-4 py-2.5">
-                      <button type="button" onClick={() => setEditing(i)} className="group text-left">
+                      <button type="button" onClick={() => setEditing(i)} className="group text-start">
                         <span className="font-medium text-slate-900 group-hover:text-brand-700 group-hover:underline">{i.name}</span>
                         <span className="block text-[11px] text-slate-500">{i.itemCode} · {i.category}{i.supplierName ? ` · from ${i.supplierName}` : ""}{!i.isActive ? " · switched off" : ""}</span>
                       </button>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-end">
                       <span className={cx("text-base font-semibold tabular-nums", i.low ? "text-red-600" : "text-slate-900")}>{qty(i.onHandMilli)}</span> <span className="text-xs text-slate-500">{i.unit}</span>
-                      {i.low && <Badge color="red" className="ml-2">Reorder</Badge>}
+                      {i.low && <Badge color="red" className="ms-2">Reorder</Badge>}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-slate-600">{i.reorderLevelMilli ? qtyU(i.reorderLevelMilli, i.unit) : "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-slate-600">{i.onOrderMilli ? qtyU(i.onOrderMilli, i.unit) : "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{i.lastUnitCost ? money(i.stockValue) : <span className="text-xs text-slate-400">no price</span>}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-end tabular-nums text-slate-600">{i.reorderLevelMilli ? qtyU(i.reorderLevelMilli, i.unit) : "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-end tabular-nums text-slate-600">{i.onOrderMilli ? qtyU(i.onOrderMilli, i.unit) : "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-end tabular-nums">{i.lastUnitCost ? money(i.stockValue) : <span className="text-xs text-slate-400">no price</span>}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-end">
                       {i.isActive && (
                         <div className="inline-flex gap-1">
                           <Button size="sm" variant="secondary" onClick={() => setMoving({ item: i, kind: "use" })} title="Record what was used"><PackageMinus className="h-4 w-4" />Use</Button>
@@ -220,7 +221,7 @@ function MoreMenu({ onPick }: { onPick: (k: "wastage" | "opening" | "return" | "
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white py-1 text-left text-sm shadow-lg">
+          <div className="absolute end-0 z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white py-1 text-start text-sm shadow-lg">
             {([["opening", PackagePlus, "Add stock (no purchase order)"], ["wastage", Trash2, "Record wastage / damage"], ["return", Truck, "Return to supplier"], ["history", History, "Stock history"]] as const).map(([k, Icon, label]) => (
               <button key={k} type="button" onClick={() => { setOpen(false); onPick(k); }} className="flex w-full items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"><Icon className="h-4 w-4 text-slate-400" />{label}</button>
             ))}
@@ -344,13 +345,13 @@ function HistoryModal({ item, branchId, onClose }: { item: Item; branchId: strin
       {!list.data ? <Spinner /> : !list.data.length ? <Empty title="No stock movements yet" /> : (
         <div className="max-h-[60vh] overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="py-2">When</th><th className="py-2">What</th><th className="py-2 text-right">Change</th></tr></thead>
+            <thead className="sticky top-0 bg-white text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="py-2">When</th><th className="py-2">What</th><th className="py-2 text-end">Change</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {list.data.map((m) => (
                 <tr key={m.id} className="align-top">
-                  <td className="whitespace-nowrap py-2 pr-3 text-xs text-slate-500">{dateTime(m.createdAt)}<span className="block">{m.by}</span></td>
-                  <td className="py-2 pr-3">{STOCK_MOVEMENT_LABELS[m.kind as keyof typeof STOCK_MOVEMENT_LABELS] ?? m.kind}{m.poNumber && <span className="text-xs text-slate-500"> · {m.poNumber}</span>}{m.note && <span className="block text-xs text-slate-500">{m.note}</span>}</td>
-                  <td className={cx("whitespace-nowrap py-2 text-right font-semibold tabular-nums", m.quantityMilli < 0 ? "text-red-600" : "text-emerald-700")}>{m.quantityMilli > 0 ? "+" : ""}{qtyU(m.quantityMilli, item.unit)}</td>
+                  <td className="whitespace-nowrap py-2 pe-3 text-xs text-slate-500">{dateTime(m.createdAt)}<span className="block">{m.by}</span></td>
+                  <td className="py-2 pe-3">{STOCK_MOVEMENT_LABELS[m.kind as keyof typeof STOCK_MOVEMENT_LABELS] ?? m.kind}{m.poNumber && <span className="text-xs text-slate-500"> · {m.poNumber}</span>}{m.note && <span className="block text-xs text-slate-500">{m.note}</span>}</td>
+                  <td className={cx("whitespace-nowrap py-2 text-end font-semibold tabular-nums", m.quantityMilli < 0 ? "text-red-600" : "text-emerald-700")}>{m.quantityMilli > 0 ? "+" : ""}{qtyU(m.quantityMilli, item.unit)}</td>
                 </tr>
               ))}
             </tbody>
@@ -382,7 +383,7 @@ function OrdersTab({ branchId, reloadKey, onOpen, onNew }: { branchId: string; r
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Order</th><th className="px-4 py-2.5">Supplier</th><th className="px-4 py-2.5">Expected</th><th className="px-4 py-2.5">Status</th><th className="px-4 py-2.5 text-right">Total</th></tr></thead>
+            <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Order</th><th className="px-4 py-2.5">Supplier</th><th className="px-4 py-2.5">Expected</th><th className="px-4 py-2.5">Status</th><th className="px-4 py-2.5 text-end">Total</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {list.data.map((p) => (
                 <tr key={p.id} className="cursor-pointer hover:bg-slate-50" onClick={() => onOpen(p.id)}>
@@ -390,7 +391,7 @@ function OrdersTab({ branchId, reloadKey, onOpen, onNew }: { branchId: string; r
                   <td className="px-4 py-3 text-slate-800">{p.supplierName}</td>
                   <td className={cx("whitespace-nowrap px-4 py-3", p.overdue && "font-medium text-red-600")}>{p.expectedOn ? dateOnly(p.expectedOn) : "—"}{p.overdue && " · late"}</td>
                   <td className="px-4 py-3"><Badge color={PO_TONE[p.status]}>{PO_STATUS_LABELS[p.status as keyof typeof PO_STATUS_LABELS] ?? p.status}</Badge></td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">{money(p.total)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-end font-semibold tabular-nums">{money(p.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -463,7 +464,7 @@ function PoEditor({ branchId, draft, items, suppliers, onAddSupplier, onClose, o
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[640px] text-sm">
-          <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Item</th><th className="w-28 px-3 py-2">Quantity</th><th className="w-28 px-3 py-2">Rate (₹)</th><th className="w-28 px-3 py-2">GST</th><th className="w-28 px-3 py-2 text-right">Amount</th><th className="w-10" /></tr></thead>
+          <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Item</th><th className="w-28 px-3 py-2">Quantity</th><th className="w-28 px-3 py-2">Rate (₹)</th><th className="w-28 px-3 py-2">GST</th><th className="w-28 px-3 py-2 text-end">Amount</th><th className="w-10" /></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {lines.map((l, i) => {
               const it = byId.get(l.itemId);
@@ -479,7 +480,7 @@ function PoEditor({ branchId, draft, items, suppliers, onAddSupplier, onClose, o
                   <td className="px-3 py-2"><div className="flex items-center gap-1"><Input inputMode="decimal" value={l.quantity} onChange={(e) => set(i, { quantity: e.target.value.replace(/[^0-9.]/g, "") })} aria-label="Quantity" /><span className="text-xs text-slate-500">{it?.unit}</span></div></td>
                   <td className="px-3 py-2"><Input inputMode="decimal" value={l.rate} onChange={(e) => set(i, { rate: e.target.value.replace(/[^0-9.]/g, "") })} placeholder="0.00" aria-label="Rate" /></td>
                   <td className="px-3 py-2"><Select value={l.gst} onChange={(e) => set(i, { gst: Number(e.target.value) })} aria-label="GST">{GST_RATES.map((g) => <option key={g} value={g}>{g}%</option>)}</Select></td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{money(calc[i].sub + calc[i].tax)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{money(calc[i].sub + calc[i].tax)}</td>
                   <td className="px-1 py-2"><button type="button" onClick={() => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [{ itemId: "", quantity: "", rate: "", gst: 18 }])} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove line"><Trash2 className="h-4 w-4" /></button></td>
                 </tr>
               );
@@ -561,7 +562,7 @@ function PoDetail({ id, onClose, onChanged, onEditDraft }: { id: string; onClose
           {p.cancelReason && <Alert tone="amber">{p.status === "cancelled" ? "Cancelled" : "Closed early"}: {p.cancelReason}</Alert>}
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[600px] text-sm">
-              <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Ordered</th><th className="px-3 py-2 text-right">Received</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Amount</th></tr></thead>
+              <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-end">Ordered</th><th className="px-3 py-2 text-end">Received</th><th className="px-3 py-2 text-end">Rate</th><th className="px-3 py-2 text-end">Amount</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {p.lines.map((l: any) => {
                   const sub = Math.round((l.quantityMilli * l.unitCost) / 1000);
@@ -569,15 +570,15 @@ function PoDetail({ id, onClose, onChanged, onEditDraft }: { id: string; onClose
                   return (
                     <tr key={l.id}>
                       <td className="px-3 py-2 font-medium text-slate-800">{l.itemName}<span className="block text-[11px] font-normal text-slate-500">{l.itemCode} · GST {l.taxBps / 100}%</span></td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{qtyU(l.quantityMilli, l.unit)}</td>
-                      <td className={cx("whitespace-nowrap px-3 py-2 text-right tabular-nums", done ? "text-emerald-700" : l.receivedMilli ? "text-amber-700" : "text-slate-400")}>{qtyU(l.receivedMilli, l.unit)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{money(l.unitCost)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{money(sub + Math.round((sub * l.taxBps) / 10_000))}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{qtyU(l.quantityMilli, l.unit)}</td>
+                      <td className={cx("whitespace-nowrap px-3 py-2 text-end tabular-nums", done ? "text-emerald-700" : l.receivedMilli ? "text-amber-700" : "text-slate-400")}>{qtyU(l.receivedMilli, l.unit)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{money(l.unitCost)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{money(sub + Math.round((sub * l.taxBps) / 10_000))}</td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot className="bg-slate-50 text-sm"><tr><td colSpan={4} className="px-3 py-2 text-right text-slate-600">Items {money(p.subtotal)} + GST {money(p.taxTotal)}</td><td className="px-3 py-2 text-right font-semibold tabular-nums">{money(p.total)}</td></tr></tfoot>
+              <tfoot className="bg-slate-50 text-sm"><tr><td colSpan={4} className="px-3 py-2 text-end text-slate-600">Items {money(p.subtotal)} + GST {money(p.taxTotal)}</td><td className="px-3 py-2 text-end font-semibold tabular-nums">{money(p.total)}</td></tr></tfoot>
             </table>
           </div>
           {p.notes && <p className="text-sm text-slate-600"><span className="text-slate-400">Note:</span> {p.notes}</p>}
@@ -585,7 +586,7 @@ function PoDetail({ id, onClose, onChanged, onEditDraft }: { id: string; onClose
             <div>
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Deliveries received</p>
               <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">
-                {p.receipts.map((r: any) => <li key={r.id} className="flex flex-wrap justify-between gap-2 px-3 py-2"><span>{qtyU(r.quantityMilli, r.unit)} {r.itemName}{r.expenseId && <Badge color="violet" className="ml-2">bill in expenses</Badge>}{r.note && <span className="block text-xs text-slate-500">{r.note}</span>}</span><span className="text-xs text-slate-500">{dateTime(r.createdAt)} · {r.by}</span></li>)}
+                {p.receipts.map((r: any) => <li key={r.id} className="flex flex-wrap justify-between gap-2 px-3 py-2"><span>{qtyU(r.quantityMilli, r.unit)} {r.itemName}{r.expenseId && <Badge color="violet" className="ms-2">bill in expenses</Badge>}{r.note && <span className="block text-xs text-slate-500">{r.note}</span>}</span><span className="text-xs text-slate-500">{dateTime(r.createdAt)} · {r.by}</span></li>)}
               </ul>
             </div>
           )}
@@ -635,7 +636,7 @@ function ReceiveModal({ po, canBill, onClose, onDone }: { po: any; canBill: bool
       <p className="text-sm text-slate-600">Check the delivery against the order. Change the quantity if only part arrived; the rest stays on order.</p>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[560px] text-sm">
-          <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Still due</th><th className="w-36 px-3 py-2">Received now</th><th className="w-32 px-3 py-2">Rate (₹)</th></tr></thead>
+          <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-end">Still due</th><th className="w-36 px-3 py-2">Received now</th><th className="w-32 px-3 py-2">Rate (₹)</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {pending.map((l: any) => {
               const due = l.quantityMilli - l.receivedMilli;
@@ -643,7 +644,7 @@ function ReceiveModal({ po, canBill, onClose, onDone }: { po: any; canBill: bool
               return (
                 <tr key={l.id}>
                   <td className="px-3 py-2 font-medium">{l.itemName}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-600">{qtyU(due, l.unit)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums text-slate-600">{qtyU(due, l.unit)}</td>
                   <td className="px-3 py-2"><div className="flex items-center gap-1"><Input inputMode="decimal" value={q[l.id] ?? ""} onChange={(e) => setQ({ ...q, [l.id]: e.target.value.replace(/[^0-9.]/g, "") })} className={cx(bad && "border-red-400")} aria-label={`Received ${l.itemName}`} /><span className="text-xs text-slate-500">{l.unit}</span></div></td>
                   <td className="px-3 py-2"><Input inputMode="decimal" value={rate[l.id] ?? ""} onChange={(e) => setRate({ ...rate, [l.id]: e.target.value.replace(/[^0-9.]/g, "") })} aria-label={`Rate ${l.itemName}`} /></td>
                 </tr>
@@ -710,14 +711,14 @@ function SuppliersTab({ suppliers, onNotice }: { suppliers: ReturnType<typeof us
       {!suppliers.data ? <Spinner /> : !list.length ? <Empty title="No suppliers yet">Add the shops and distributors you buy chemicals and packing from.</Empty> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Supplier</th><th className="px-4 py-2.5">Contact</th><th className="px-4 py-2.5 text-right">Orders</th><th className="px-4 py-2.5 text-right">Bought</th><th className="px-4 py-2.5">Last order</th></tr></thead>
+            <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Supplier</th><th className="px-4 py-2.5">Contact</th><th className="px-4 py-2.5 text-end">Orders</th><th className="px-4 py-2.5 text-end">Bought</th><th className="px-4 py-2.5">Last order</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {list.map((s) => (
                 <tr key={s.id} className={cx("cursor-pointer hover:bg-slate-50", !s.isActive && "text-slate-400")} onClick={() => setEditing(s)}>
-                  <td className="px-4 py-3"><span className="font-medium text-slate-900">{s.name}</span>{!s.isActive && <Badge className="ml-2">Switched off</Badge>}{s.gstin && <span className="block font-mono text-[11px] text-slate-500">GSTIN {s.gstin}</span>}</td>
+                  <td className="px-4 py-3"><span className="font-medium text-slate-900">{s.name}</span>{!s.isActive && <Badge className="ms-2">Switched off</Badge>}{s.gstin && <span className="block font-mono text-[11px] text-slate-500">GSTIN {s.gstin}</span>}</td>
                   <td className="px-4 py-3 text-slate-600">{[s.contactPerson, s.phone].filter(Boolean).join(" · ") || "—"}{s.email && <span className="block text-xs text-slate-500">{s.email}</span>}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{s.orderCount}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{money(s.purchasedTotal)}</td>
+                  <td className="px-4 py-3 text-end tabular-nums">{s.orderCount}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-end tabular-nums">{money(s.purchasedTotal)}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600">{s.lastOrderAt ? dateOnly(s.lastOrderAt) : "—"}</td>
                 </tr>
               ))}
@@ -784,16 +785,16 @@ function UsageTab({ branchId }: { branchId: string }) {
       {!list.data ? <Spinner /> : !rows.length ? <Empty title="No stock movements in this period" /> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Item</th><th className="px-4 py-2.5 text-right">Bought</th><th className="px-4 py-2.5 text-right">Used</th><th className="px-4 py-2.5 text-right">Wasted</th><th className="px-4 py-2.5 text-right">Stock-check difference</th><th className="px-4 py-2.5 text-right">Cost used</th></tr></thead>
+            <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Item</th><th className="px-4 py-2.5 text-end">Bought</th><th className="px-4 py-2.5 text-end">Used</th><th className="px-4 py-2.5 text-end">Wasted</th><th className="px-4 py-2.5 text-end">Stock-check difference</th><th className="px-4 py-2.5 text-end">Cost used</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-2.5 font-medium text-slate-800">{r.name}<span className="block text-[11px] font-normal text-slate-500">{r.category}</span></td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{r.purchased ? <>{qtyU(r.purchased, r.unit)}<span className="block text-[11px] text-slate-500">{money(r.purchasedValue)}</span></> : "—"}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{r.used ? qtyU(r.used, r.unit) : "—"}</td>
-                  <td className={cx("whitespace-nowrap px-4 py-2.5 text-right tabular-nums", r.wasted > 0 && "text-red-600")}>{r.wasted ? qtyU(r.wasted, r.unit) : "—"}</td>
-                  <td className={cx("whitespace-nowrap px-4 py-2.5 text-right tabular-nums", r.countDifference < 0 && "text-red-600")}>{r.countDifference ? `${r.countDifference > 0 ? "+" : ""}${qtyU(r.countDifference, r.unit)}` : "—"}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{r.usedValue ? money(r.usedValue) : "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-end tabular-nums">{r.purchased ? <>{qtyU(r.purchased, r.unit)}<span className="block text-[11px] text-slate-500">{money(r.purchasedValue)}</span></> : "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-end tabular-nums">{r.used ? qtyU(r.used, r.unit) : "—"}</td>
+                  <td className={cx("whitespace-nowrap px-4 py-2.5 text-end tabular-nums", r.wasted > 0 && "text-red-600")}>{r.wasted ? qtyU(r.wasted, r.unit) : "—"}</td>
+                  <td className={cx("whitespace-nowrap px-4 py-2.5 text-end tabular-nums", r.countDifference < 0 && "text-red-600")}>{r.countDifference ? `${r.countDifference > 0 ? "+" : ""}${qtyU(r.countDifference, r.unit)}` : "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-end tabular-nums">{r.usedValue ? money(r.usedValue) : "—"}</td>
                 </tr>
               ))}
             </tbody>

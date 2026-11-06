@@ -1,7 +1,7 @@
 "use client";
 import type { CSSProperties, ReactNode } from "react";
 import { billPaperSize, type BillPaper, type BillSectionKey, type BillTemplate, type BillingProfile } from "@drycare/shared";
-import { amountInWords, dateOnly, dateTime, money } from "@/lib/format";
+import { amountInWords, currentRegion, dateOnly, dateTime, money } from "@/lib/format";
 
 export type BillOrg = { name: string; gstin?: string | null; hasLogo?: boolean; settings?: { billing?: Partial<BillingProfile>; invoiceFooter?: string } };
 const FONTS = { sans: '"DM Sans", Arial, sans-serif', serif: 'Georgia, "Times New Roman", serif', mono: '"Courier New", Consolas, monospace' };
@@ -25,7 +25,8 @@ export function BillDocument({ template: t, order: o, org, logoSrc, qrSrc }: { t
   const half = Math.floor(o.taxTotal / 2);
   const collected = o.garments.every((g: any) => g.currentStatus === "delivered" || g.currentStatus === "cancelled");
   const title = cancelled ? "CANCELLED" : t.title || billing.invoice?.title || "TAX INVOICE";
-  const showQr = t.showUpiQr && billing.upi?.vpa && balance > 0 && !cancelled && qrSrc;
+  const region = currentRegion();
+  const showQr = region.hasUpi && t.showUpiQr && billing.upi?.vpa && balance > 0 && !cancelled && qrSrc;
   const showBank = t.showBank && billing.bank?.accountNumber;
   const accent = t.accent;
   const muted = "#64748b";
@@ -41,8 +42,8 @@ export function BillDocument({ template: t, order: o, org, logoSrc, qrSrc }: { t
       {narrow && o.branch?.name && <p>{o.branch.name}</p>}
       {address && <p>{address}</p>}
       {(phone || billing.email || billing.website) && <p>{[phone && `${narrow ? "Ph" : "Phone"}: ${phone}`, !narrow && billing.email, !narrow && billing.website].filter(Boolean).join(" · ")}</p>}
-      {(org.gstin || billing.pan) && <p>{[org.gstin && `GSTIN: ${org.gstin}`, !narrow && billing.pan && `PAN: ${billing.pan}`].filter(Boolean).join(" · ")}</p>}
-      {narrow && billing.sacCode && <p>SAC: {billing.sacCode}</p>}
+      {(org.gstin || billing.pan) && <p>{[org.gstin && `${region.taxIdLabel}: ${org.gstin}`, !narrow && region.splitsGst && billing.pan && `PAN: ${billing.pan}`].filter(Boolean).join(" · ")}</p>}
+      {narrow && region.serviceCodeLabel && billing.sacCode && <p>{region.serviceCodeLabel}: {billing.sacCode}</p>}
     </>
   );
   const row = (l: ReactNode, r: ReactNode, strong?: boolean) => <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: strong ? 700 : 400 }}><span>{l}</span><span style={{ whiteSpace: "nowrap" }}>{r}</span></div>;
@@ -60,7 +61,7 @@ export function BillDocument({ template: t, order: o, org, logoSrc, qrSrc }: { t
     ) : (
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
         <p style={{ fontSize: px(t, 19), fontWeight: 700, letterSpacing: ".02em", color: accent }}>{title}</p>
-        <div style={{ textAlign: "right" }}><p>Bill no: <b>{o.invoice?.invoiceNumber}</b></p><p>Date: {dateOnly(o.receivedAt)} · Order: {o.orderNumber}</p></div>
+        <div style={{ textAlign: "end" }}><p>Bill no: <b>{o.invoice?.invoiceNumber}</b></p><p>Date: {dateOnly(o.receivedAt)} · Order: {o.orderNumber}</p></div>
       </div>
     ),
     customer: () => narrow ? <p>Customer: {o.customer.name}{o.customer.phone ? ` (${o.customer.phone})` : ""}</p> : (
@@ -69,35 +70,35 @@ export function BillDocument({ template: t, order: o, org, logoSrc, qrSrc }: { t
     service: () => narrow ? (
       <div><p style={{ fontWeight: 700 }}>Ready by: {dateTime(o.promisedAt)}{o.express ? " · EXPRESS" : ""}</p><p>Pieces: {pieces}{o.bags?.length ? ` · Bag ${o.bags.map((b: any) => b.scanCode ?? b.bagCode).join(", ")}` : ""}</p></div>
     ) : (
-      <div style={{ textAlign: "right" }}>{label("Service details")}<p>Received {dateTime(o.receivedAt)}</p><p style={{ fontWeight: 600 }}>Ready by {dateTime(o.promisedAt)}{o.express ? " · EXPRESS" : ""}</p><p>{pieces} piece{pieces === 1 ? "" : "s"}{o.bags?.length ? ` · Bag ${o.bags.map((b: any) => b.bagCode).join(", ")}` : ""}</p>{a.state && <p>Place of supply: {a.state}</p>}</div>
+      <div style={{ textAlign: "end" }}>{label("Service details")}<p>Received {dateTime(o.receivedAt)}</p><p style={{ fontWeight: 600 }}>Ready by {dateTime(o.promisedAt)}{o.express ? " · EXPRESS" : ""}</p><p>{pieces} piece{pieces === 1 ? "" : "s"}{o.bags?.length ? ` · Bag ${o.bags.map((b: any) => b.bagCode).join(", ")}` : ""}</p>{a.state && <p>Place of supply: {a.state}</p>}</div>
     ),
     items: () => {
-      const th: CSSProperties = narrow ? { textAlign: "right", fontWeight: 700 } : { padding: "6px 8px", textAlign: "right", color: "#fff", background: accent, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
-      const td: CSSProperties = narrow ? { textAlign: "right", verticalAlign: "top" } : { padding: "6px 8px", textAlign: "right", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" };
+      const th: CSSProperties = narrow ? { textAlign: "end", fontWeight: 700 } : { padding: "6px 8px", textAlign: "end", color: "#fff", background: accent, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
+      const td: CSSProperties = narrow ? { textAlign: "end", verticalAlign: "top" } : { padding: "6px 8px", textAlign: "end", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" };
       const c = t.columns;
       return (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: px(t, narrow ? 11 : 12) }}>
           <thead><tr>
-            {!narrow && <th style={{ ...th, textAlign: "left" }}>#</th>}
-            <th style={{ ...th, textAlign: "left" }}>{narrow ? "Item" : "Description"}</th>
-            {!narrow && c.sac && <th style={{ ...th, textAlign: "left" }}>SAC</th>}
+            {!narrow && <th style={{ ...th, textAlign: "start" }}>#</th>}
+            <th style={{ ...th, textAlign: "start" }}>{narrow ? "Item" : "Description"}</th>
+            {!narrow && c.sac && region.serviceCodeLabel && <th style={{ ...th, textAlign: "start" }}>{region.serviceCodeLabel}</th>}
             <th style={th}>Qty</th>
             {!narrow && c.rate && <th style={th}>Rate</th>}
             {!narrow && c.taxable && <th style={th}>Taxable</th>}
-            {!narrow && c.gst && <th style={th}>GST</th>}
+            {!narrow && c.gst && <th style={th}>{region.taxName}</th>}
             <th style={th}>{narrow ? "Amt" : "Amount"}</th>
           </tr></thead>
           <tbody>
             {o.items.map((i: any, n: number) => (
               <tr key={i.id}>
-                {!narrow && <td style={{ ...td, textAlign: "left" }}>{n + 1}</td>}
-                <td style={{ ...td, textAlign: "left" }}>
+                {!narrow && <td style={{ ...td, textAlign: "start" }}>{n + 1}</td>}
+                <td style={{ ...td, textAlign: "start" }}>
                   {i.garmentTypeName}{narrow ? <br /> : " — "}<span style={narrow ? { fontSize: px(t, 10) } : undefined}>{i.serviceName}{narrow && c.rate ? ` @${(i.unitPrice / 100).toFixed(2)}` : ""}</span>
                   {i.stainCharge > 0 && <span style={{ display: "block", fontSize: px(t, 10) }}>Includes stain treatment {money(i.stainCharge)}{i.quantity > 1 ? " each" : ""}</span>}
                   {c.colour && i.colour && <span style={{ color: narrow ? undefined : muted }}> · {i.colour}</span>}
                   {c.condition && i.conditionFlags?.length > 0 && <span style={{ fontSize: px(t, 10) }}> · {i.conditionFlags.join(", ").replace(/_/g, " ")}</span>}
                 </td>
-                {!narrow && c.sac && <td style={{ ...td, textAlign: "left" }}>{billing.sacCode ?? "—"}</td>}
+                {!narrow && c.sac && region.serviceCodeLabel && <td style={{ ...td, textAlign: "start" }}>{billing.sacCode ?? "—"}</td>}
                 <td style={td}>{i.quantity}</td>
                 {!narrow && c.rate && <td style={td}>{money(i.unitPrice)}</td>}
                 {!narrow && c.taxable && <td style={td}>{money(i.lineTotal - i.taxAmount)}</td>}
@@ -110,12 +111,12 @@ export function BillDocument({ template: t, order: o, org, logoSrc, qrSrc }: { t
       );
     },
     totals: () => (
-      <div style={narrow ? undefined : { marginLeft: "auto", width: "min(75mm, 100%)" }}>
+      <div style={narrow ? undefined : { marginInlineStart: "auto", width: "min(75mm, 100%)" }}>
         {row("Subtotal", money(o.subtotal))}
         {o.surchargeTotal > 0 && row("Express charge", money(o.surchargeTotal))}
         {o.discountTotal > 0 && row("Discount", `− ${money(o.discountTotal)}`)}
-        {row("CGST", money(half))}
-        {row("SGST", money(o.taxTotal - half))}
+        {region.splitsGst ? <>{row("CGST", money(half))}
+        {row("SGST", money(o.taxTotal - half))}</> : o.taxTotal > 0 && row(region.pricesIncludeTax ? `Includes ${region.taxName}` : region.taxName, money(o.taxTotal))}
         {row("Bill total", money(o.grandTotal), true)}
         {credits.map((c: any) => <div key={c.id}>{row(`Credit note ${c.creditNoteNumber}`, `− ${money(c.totalAmount)}`)}</div>)}
         {credits.length > 0 && row("Amount payable", money(payable), true)}
@@ -124,7 +125,7 @@ export function BillDocument({ template: t, order: o, org, logoSrc, qrSrc }: { t
         <p style={{ fontSize: px(t, 10), textAlign: narrow ? "left" : "right", color: narrow ? undefined : muted }}>{balance > 0 ? "Payment due" : "Paid in full"} · {collected ? "Collected" : "Not yet collected"}</p>
       </div>
     ),
-    words: () => <p><b>Amount in words:</b> {amountInWords(payable)}</p>,
+    words: () => (region.currency === "INR" ? <p><b>Amount in words:</b> {amountInWords(payable)}</p> : null),
     payments: () => (o.payments?.length ? <div>{narrow ? null : label("Payments received")}{o.payments.map((p: any) => <p key={p.id} style={{ fontSize: px(t, 10) }}>{dateTime(p.received_at)} {String(p.payment_method).toUpperCase()} {money(p.allocated_amount)}{p.status !== "succeeded" ? ` (${p.status === "pending" ? "awaiting verification" : p.status})` : ""}</p>)}</div> : null),
     payTo: () => (showQr || showBank ? (
       <div style={{ display: narrow ? "block" : "flex", gap: 14, border: narrow ? undefined : "1px solid #cbd5e1", padding: narrow ? 0 : 10, textAlign: narrow ? "center" : "left" }}>
@@ -134,14 +135,14 @@ export function BillDocument({ template: t, order: o, org, logoSrc, qrSrc }: { t
         )}
         <div style={{ fontSize: px(t, 11) }}>
           {showQr && <><p style={{ fontWeight: 700 }}>Scan to pay {money(balance)}</p><p>UPI: {billing.upi?.vpa}</p></>}
-          {showBank && <div style={{ marginTop: showQr ? 6 : 0 }}><p style={{ fontWeight: 700 }}>Bank transfer</p><p>{billing.bank?.accountName}</p><p>{billing.bank?.bankName}{billing.bank?.branch ? `, ${billing.bank.branch}` : ""}</p><p>A/c {billing.bank?.accountNumber} · IFSC {billing.bank?.ifsc}</p></div>}
+          {showBank && <div style={{ marginTop: showQr ? 6 : 0 }}><p style={{ fontWeight: 700 }}>Bank transfer</p><p>{billing.bank?.accountName}</p><p>{billing.bank?.bankName}{billing.bank?.branch ? `, ${billing.bank.branch}` : ""}</p><p>A/c {billing.bank?.accountNumber}{billing.bank?.ifsc ? ` · ${region.country === "IN" ? "IFSC" : "SWIFT / bank code"} ${billing.bank.ifsc}` : ""}</p></div>}
         </div>
       </div>
     ) : null),
     terms: () => (billing.invoice?.terms ? <div style={{ fontSize: px(t, 10) }}><p style={{ fontWeight: 700 }}>Terms &amp; conditions</p><p style={{ whiteSpace: "pre-line" }}>{billing.invoice.terms}</p></div> : narrow ? <p style={{ fontSize: px(t, 10) }}>Pre-existing stains or damage noted at intake are the customer&apos;s responsibility. Please bring this receipt at collection.</p> : null),
     message: () => <p style={{ textAlign: "center" }}>{org.settings?.invoiceFooter || "Thank you!"}</p>,
     signature: () => (
-      <div style={{ marginLeft: "auto", width: "60mm", maxWidth: "100%", textAlign: "right", marginTop: 8 }}>
+      <div style={{ marginInlineStart: "auto", width: "60mm", maxWidth: "100%", textAlign: "end", marginTop: 8 }}>
         <p>For <b>{org.name}</b></p><div style={{ height: 44 }} /><p style={{ borderTop: "1px solid #94a3b8", paddingTop: 4 }}>{billing.invoice?.signatory || "Authorised signatory"}</p>
       </div>
     ),

@@ -1,10 +1,12 @@
 "use client";
 /** A4 GST tax invoice for a Drycare subscription (Mindware → shop). Printed from the super admin console and the shop's billing screen. */
-import { amountInWords, money } from "@/lib/format";
+import { formatMoney } from "@drycare/shared";
+import { amountInWords } from "@/lib/format";
 import { cx } from "@/components/ui";
 
 export type SubscriptionInvoiceData = {
   id: string;
+  currency?: string;
   number: string;
   status: "issued" | "void";
   issuedAt: string;
@@ -34,6 +36,10 @@ const PAID_VIA: Record<string, string> = { manual_upi: "UPI", manual_bank_transf
 export function SubscriptionInvoice({ invoice: inv }: { invoice: SubscriptionInvoiceData }) {
   const s = inv.seller;
   const b = inv.buyer;
+  const currency = inv.currency ?? "INR";
+  // Shops abroad are billed in their own currency, with no Indian GST.
+  const domestic = currency === "INR";
+  const money = (minor: number) => formatMoney(minor, currency, domestic ? "en-IN" : "en");
   const rate = inv.gstRateBps / 100;
   const intra = inv.igstPaise === 0 && inv.cgstPaise + inv.sgstPaise > 0;
   const addr = [b.address.line1, b.address.line2, [b.address.city, b.address.pincode].filter(Boolean).join(" "), b.state].filter(Boolean).join(", ");
@@ -52,14 +58,14 @@ export function SubscriptionInvoice({ invoice: inv }: { invoice: SubscriptionInv
           <p className="text-[9pt] text-slate-600">{[s.phone, s.email, s.website].filter(Boolean).join(" · ")}</p>
           <p className="mt-1 text-[9pt]">{s.gstin && <><b>GSTIN</b> {s.gstin} · </>}{s.pan && <><b>PAN</b> {s.pan}</>}{s.cin && <> · <b>CIN</b> {s.cin}</>}</p>
         </div>
-        <div className="text-right">
-          <p className="text-[15pt] font-bold uppercase tracking-wide">Tax invoice</p>
-          <table className="ml-auto mt-2 text-[9pt]">
+        <div className="text-end">
+          <p className="text-[15pt] font-bold uppercase tracking-wide">{domestic ? "Tax invoice" : "Invoice"}</p>
+          <table className="ms-auto mt-2 text-[9pt]">
             <tbody>
-              <tr><td className="pr-3 text-slate-500">Invoice no.</td><td className="font-mono font-semibold">{inv.number}</td></tr>
-              <tr><td className="pr-3 text-slate-500">Invoice date</td><td>{date(inv.issuedAt)}</td></tr>
-              <tr><td className="pr-3 text-slate-500">Place of supply</td><td>{b.state ?? "—"}{b.stateCode ? ` (${b.stateCode})` : ""}</td></tr>
-              <tr><td className="pr-3 text-slate-500">Reverse charge</td><td>No</td></tr>
+              <tr><td className="pe-3 text-slate-500">Invoice no.</td><td className="font-mono font-semibold">{inv.number}</td></tr>
+              <tr><td className="pe-3 text-slate-500">Invoice date</td><td>{date(inv.issuedAt)}</td></tr>
+              <tr><td className="pe-3 text-slate-500">Place of supply</td><td>{b.state ?? "—"}{b.stateCode ? ` (${b.stateCode})` : ""}</td></tr>
+              <tr><td className="pe-3 text-slate-500">Reverse charge</td><td>No</td></tr>
             </tbody>
           </table>
         </div>
@@ -71,7 +77,7 @@ export function SubscriptionInvoice({ invoice: inv }: { invoice: SubscriptionInv
           <p className="mt-1 font-semibold">{b.name}</p>
           {b.tradeName && b.tradeName !== b.name && <p className="text-[9pt]">{b.tradeName}</p>}
           {addr && <p className="text-[9pt] text-slate-600">{addr}</p>}
-          <p className="text-[9pt]">{b.gstin ? <><b>GSTIN</b> {b.gstin}</> : "Unregistered (no GSTIN)"}</p>
+          <p className="text-[9pt]">{b.gstin ? <><b>{domestic ? "GSTIN" : "Tax ID"}</b> {b.gstin}</> : domestic ? "Unregistered (no GSTIN)" : null}</p>
           {(b.email || b.phone) && <p className="text-[9pt] text-slate-600">{[b.phone, b.email].filter(Boolean).join(" · ")}</p>}
         </div>
         <div>
@@ -88,15 +94,15 @@ export function SubscriptionInvoice({ invoice: inv }: { invoice: SubscriptionInv
 
       <table className="mt-5 w-full border-collapse text-[9pt]">
         <thead>
-          <tr className="border-y border-slate-900 bg-slate-50 text-left">
-            <th className="px-2 py-1.5">#</th><th className="px-2 py-1.5">Description</th><th className="px-2 py-1.5">SAC</th><th className="px-2 py-1.5 text-right">Qty</th><th className="px-2 py-1.5 text-right">Taxable value</th>
+          <tr className="border-y border-slate-900 bg-slate-50 text-start">
+            <th className="px-2 py-1.5">#</th><th className="px-2 py-1.5">Description</th><th className="px-2 py-1.5">SAC</th><th className="px-2 py-1.5 text-end">Qty</th><th className="px-2 py-1.5 text-end">Taxable value</th>
           </tr>
         </thead>
         <tbody>
           {inv.lines.map((l, i) => (
             <tr key={i} className="border-b border-slate-200">
               <td className="px-2 py-2 align-top">{i + 1}</td><td className="px-2 py-2">{l.description}</td><td className="px-2 py-2 font-mono">{l.sacCode}</td>
-              <td className="px-2 py-2 text-right">{l.quantity}</td><td className="px-2 py-2 text-right tabular-nums">{money(l.taxablePaise)}</td>
+              <td className="px-2 py-2 text-end">{l.quantity}</td><td className="px-2 py-2 text-end tabular-nums">{money(l.taxablePaise)}</td>
             </tr>
           ))}
         </tbody>
@@ -105,31 +111,31 @@ export function SubscriptionInvoice({ invoice: inv }: { invoice: SubscriptionInv
       <section className="mt-3 flex justify-end">
         <table className="w-[80mm] text-[9pt]">
           <tbody>
-            <tr><td className="py-0.5 text-slate-600">Taxable value</td><td className="text-right tabular-nums">{money(inv.subtotalPaise)}</td></tr>
-            {intra ? (
+            <tr><td className="py-0.5 text-slate-600">{domestic ? "Taxable value" : "Subtotal"}</td><td className="text-end tabular-nums">{money(inv.subtotalPaise)}</td></tr>
+            {!domestic ? null : intra ? (
               <>
-                <tr><td className="py-0.5 text-slate-600">CGST @ {rate / 2}%</td><td className="text-right tabular-nums">{money(inv.cgstPaise)}</td></tr>
-                <tr><td className="py-0.5 text-slate-600">SGST @ {rate / 2}%</td><td className="text-right tabular-nums">{money(inv.sgstPaise)}</td></tr>
+                <tr><td className="py-0.5 text-slate-600">CGST @ {rate / 2}%</td><td className="text-end tabular-nums">{money(inv.cgstPaise)}</td></tr>
+                <tr><td className="py-0.5 text-slate-600">SGST @ {rate / 2}%</td><td className="text-end tabular-nums">{money(inv.sgstPaise)}</td></tr>
               </>
             ) : (
-              <tr><td className="py-0.5 text-slate-600">IGST @ {rate}%</td><td className="text-right tabular-nums">{money(inv.igstPaise)}</td></tr>
+              <tr><td className="py-0.5 text-slate-600">IGST @ {rate}%</td><td className="text-end tabular-nums">{money(inv.igstPaise)}</td></tr>
             )}
-            <tr className="border-t-2 border-slate-900 text-[11pt] font-bold"><td className="pt-1.5">Total</td><td className="pt-1.5 text-right tabular-nums">{money(inv.totalPaise)}</td></tr>
-            <tr><td colSpan={2} className="pt-1 text-right text-[8.5pt] font-semibold text-emerald-700">{inv.status === "void" ? "" : "Paid in full"}</td></tr>
+            <tr className="border-t-2 border-slate-900 text-[11pt] font-bold"><td className="pt-1.5">Total</td><td className="pt-1.5 text-end tabular-nums">{money(inv.totalPaise)}</td></tr>
+            <tr><td colSpan={2} className="pt-1 text-end text-[8.5pt] font-semibold text-emerald-700">{inv.status === "void" ? "" : "Paid in full"}</td></tr>
           </tbody>
         </table>
       </section>
-      <p className="mt-2 text-[9pt]"><b>Amount in words:</b> {amountInWords(inv.totalPaise)}</p>
+      <p className="mt-2 text-[9pt]">{domestic ? <><b>Amount in words:</b> {amountInWords(inv.totalPaise)}</> : "Export of services. No Indian GST charged."}</p>
       {inv.status === "void" && inv.voidReason && <p className="mt-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-[9pt] text-red-800"><b>Void:</b> {inv.voidReason}</p>}
 
       <footer className="mt-8 grid grid-cols-2 gap-6 border-t border-slate-200 pt-4 text-[8.5pt]">
         <div className="space-y-1 text-slate-600">
           {s.invoice.terms && <p className="whitespace-pre-line">{s.invoice.terms}</p>}
           {s.bank.accountNumber && <p><b className="text-slate-800">Bank:</b> {s.bank.accountName} · {s.bank.bankName} · A/c {s.bank.accountNumber} · IFSC {s.bank.ifsc}</p>}
-          {s.upiId && <p><b className="text-slate-800">UPI:</b> {s.upiId}</p>}
+          {domestic && s.upiId && <p><b className="text-slate-800">UPI:</b> {s.upiId}</p>}
           <p>This is a computer-generated invoice.</p>
         </div>
-        <div className="flex flex-col items-end justify-end text-right">
+        <div className="flex flex-col items-end justify-end text-end">
           <p>For {s.legalName || s.tradeName}</p>
           <p className={cx("mt-10 border-t border-slate-400 pt-1", !s.invoice.signatory && "text-slate-500")}>{s.invoice.signatory || "Authorised signatory"}</p>
         </div>

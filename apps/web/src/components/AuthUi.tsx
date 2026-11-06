@@ -6,7 +6,7 @@ import { ChevronRight, Eye, EyeOff, LockKeyhole, type LucideIcon } from "lucide-
 import { cx } from "@/components/ui";
 
 export const primaryButton = "flex h-14 w-full items-center justify-center gap-2 rounded-full bg-brand-500 text-base font-semibold text-slate-900 transition hover:bg-brand-400 disabled:opacity-60";
-export const inputBox = "block h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-3 text-[15px] text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10";
+export const inputBox = "block h-12 w-full rounded-xl border border-slate-200 bg-white ps-11 pe-3 text-[15px] text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10";
 
 export function BrandName({ className }: { className?: string }) {
   return <span className={cx("font-bold tracking-tight", className)} style={{ fontFamily: '"Urbanist", sans-serif' }}>Drycare</span>;
@@ -15,7 +15,7 @@ export function BrandName({ className }: { className?: string }) {
 export function IconInput({ icon: Icon, ...rest }: { icon: LucideIcon } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="relative">
-      <Icon className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
+      <Icon className="pointer-events-none absolute start-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
       <input {...rest} className={inputBox} />
     </div>
   );
@@ -25,9 +25,9 @@ export function SecretInput(props: Omit<React.InputHTMLAttributes<HTMLInputEleme
   const [show, setShow] = useState(false);
   return (
     <div className="relative">
-      <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
-      <input {...props} type={show ? "text" : "password"} className={cx(inputBox, "pr-12")} />
-      <button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 hover:text-slate-700">
+      <LockKeyhole className="pointer-events-none absolute start-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
+      <input {...props} type={show ? "text" : "password"} className={cx(inputBox, "pe-12")} />
+      <button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)} className="absolute inset-y-0 end-0 flex w-12 items-center justify-center text-slate-400 hover:text-slate-700">
         {show ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
       </button>
     </div>

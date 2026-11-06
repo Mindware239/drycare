@@ -1,6 +1,7 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Building2, ChartColumn, Download, FileSpreadsheet, IndianRupee, Lock, Printer, Search, Shirt, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BarChart3, Building2, ChartColumn, Download, FileSpreadsheet, Banknote, Lock, Printer, Search, Shirt, UserRound, Users, type LucideIcon } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { dateOnly, dateTime, money, todayISO } from "@/lib/format";
@@ -10,13 +11,13 @@ type Col = { key: string; label: string; type: "text" | "money" | "int" | "date"
 type Entry = { key: string; locked: boolean; group: string; title: string; description: string; columns: Col[]; usesDates: boolean };
 type Result = { key: string; title: string; description: string; columns: Col[]; rows: Record<string, unknown>[]; totals: Record<string, number> | null; range: { from: string; to: string } };
 
-const GROUP_ICONS: Record<string, LucideIcon> = { Sales: ChartColumn, Money: IndianRupee, Customers: Users, Operations: Shirt, Staff: UserRound };
+const GROUP_ICONS: Record<string, LucideIcon> = { Sales: ChartColumn, Money: Banknote, Customers: Users, Operations: Shirt, Staff: UserRound };
 const PRESETS = [{ label: "Today", days: 0 }, { label: "7 days", days: 6 }, { label: "30 days", days: 29 }, { label: "This month", days: -1 }, { label: "90 days", days: 89 }];
 
 function cell(v: unknown, type: Col["type"]) {
   if (v === null || v === undefined || v === "") return "—";
   if (type === "money") return money(Number(v));
-  if (type === "int") return Number(v).toLocaleString("en-IN");
+  if (type === "int") return Number(v).toLocaleString(appLocale());
   if (type === "date") return dateOnly(String(v));
   if (type === "datetime") return dateTime(String(v));
   if (type === "pct") return `${(Number(v) * 100).toFixed(1)}%`;
@@ -84,7 +85,7 @@ export default function ReportsPage() {
                   <p className="flex items-center gap-2 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400"><Icon className="h-3.5 w-3.5" />{group}</p>
                   {items.map((r) => (
                     <button key={r.key} type="button" onClick={() => { setActive(r.key); setFilter(""); }}
-                      className={cx("block w-full rounded-lg px-3 py-2 text-left text-sm transition", active === r.key ? "bg-brand-50 font-semibold text-brand-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}><span className="flex items-center justify-between gap-2">{r.title}{r.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="Not in your plan" />}</span></button>
+                      className={cx("block w-full rounded-lg px-3 py-2 text-start text-sm transition", active === r.key ? "bg-brand-50 font-semibold text-brand-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}><span className="flex items-center justify-between gap-2">{r.title}{r.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="Not in your plan" />}</span></button>
                   ))}
                 </div>
               );
@@ -109,7 +110,7 @@ export default function ReportsPage() {
                 </label>
               )}
               {session.branches.length > 1 && (
-                <div className="ml-auto flex rounded-xl bg-slate-100 p-1 text-xs font-medium">
+                <div className="ms-auto flex rounded-xl bg-slate-100 p-1 text-xs font-medium">
                   <button type="button" onClick={() => setScope("all")} className={cx("rounded-lg px-3 py-1.5", scope === "all" ? "bg-white shadow-sm" : "text-slate-500")}>All branches</button>
                   <button type="button" onClick={() => setScope("branch")} className={cx("inline-flex items-center gap-1 rounded-lg px-3 py-1.5", scope === "branch" ? "bg-white shadow-sm" : "text-slate-500")}><Building2 className="h-3.5 w-3.5" />Current branch</button>
                 </div>
@@ -124,8 +125,8 @@ export default function ReportsPage() {
                 </div>
                 <div className="flex flex-wrap gap-2 print:hidden">
                   <label className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter rows" className="w-44 py-1.5 pl-8 text-sm" aria-label="Filter rows" />
+                    <Search className="pointer-events-none absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter rows" className="w-44 py-1.5 ps-8 text-sm" aria-label="Filter rows" />
                   </label>
                   <Button size="sm" variant="secondary" disabled={!report.data?.rows.length} onClick={() => report.data && exportCsv(report.data)}><Download className="h-4 w-4" />Excel (CSV)</Button>
                   <Button size="sm" variant="secondary" disabled={!report.data} onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
@@ -135,19 +136,19 @@ export default function ReportsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[640px] text-sm">
                     <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>{report.data.columns.map((c) => <th key={c.key} className={cx("whitespace-nowrap px-4 py-3", c.type === "money" || c.type === "int" || c.type === "pct" ? "text-right" : "text-left")}>{c.label}</th>)}</tr>
+                      <tr>{report.data.columns.map((c) => <th key={c.key} className={cx("whitespace-nowrap px-4 py-3", c.type === "money" || c.type === "int" || c.type === "pct" ? "text-end" : "text-start")}>{c.label}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {rows.map((r, i) => (
                         <tr key={i} className="hover:bg-slate-50/70">
-                          {report.data!.columns.map((c, j) => <td key={c.key} className={cx("px-4 py-2.5", c.type === "money" || c.type === "int" || c.type === "pct" ? "text-right tabular-nums" : "", j === 0 ? "font-medium text-slate-800" : "text-slate-600")}>{cell(r[c.key], c.type)}</td>)}
+                          {report.data!.columns.map((c, j) => <td key={c.key} className={cx("px-4 py-2.5", c.type === "money" || c.type === "int" || c.type === "pct" ? "text-end tabular-nums" : "", j === 0 ? "font-medium text-slate-800" : "text-slate-600")}>{cell(r[c.key], c.type)}</td>)}
                         </tr>
                       ))}
                       {!rows.length && <tr><td colSpan={report.data.columns.length} className="px-4 py-12 text-center text-sm text-slate-500">{filter ? "No rows match the filter." : "Nothing to report for this period."}</td></tr>}
                     </tbody>
                     {report.data.totals && rows.length > 0 && !filter && (
                       <tfoot className="border-t-2 border-slate-200 bg-slate-50/70 font-semibold text-slate-900">
-                        <tr>{report.data.columns.map((c, i) => <td key={c.key} className={cx("px-4 py-3", c.type === "money" || c.type === "int" ? "text-right tabular-nums" : "")}>{i === 0 ? "Total" : c.key in report.data!.totals! ? cell(report.data!.totals![c.key], c.type) : ""}</td>)}</tr>
+                        <tr>{report.data.columns.map((c, i) => <td key={c.key} className={cx("px-4 py-3", c.type === "money" || c.type === "int" ? "text-end tabular-nums" : "")}>{i === 0 ? "Total" : c.key in report.data!.totals! ? cell(report.data!.totals![c.key], c.type) : ""}</td>)}</tr>
                       </tfoot>
                     )}
                   </table>

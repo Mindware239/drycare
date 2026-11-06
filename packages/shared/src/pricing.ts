@@ -9,8 +9,10 @@ export interface PriceLineInput {
   discountBps?: number;
   /** Additional flat discount on this line. */
   discountFlat?: Minor;
-  /** Tax rate in basis points (e.g. 1800 = 18% GST). Tax is exclusive. */
+  /** Tax rate in basis points (e.g. 1800 = 18%). */
   taxBps?: number;
+  /** The price already includes the tax, as is normal in Europe and the Gulf. The customer pays the price as shown. */
+  taxIncluded?: boolean;
   minimumCharge?: Minor;
 }
 
@@ -32,6 +34,15 @@ export function priceLine(input: PriceLineInput): PriceLine {
   const gross = base + surcharge;
   const pctDiscount = applyBps(gross, input.discountBps ?? 0);
   const discount = Math.min(gross, pctDiscount + (input.discountFlat ?? 0));
+  if (input.taxIncluded && input.taxBps) {
+    // Bills add up the same way in both modes: every figure before tax, so taxable + tax = total.
+    const net = (amount: Minor) => Math.round((amount * 10000) / (10000 + input.taxBps!));
+    const total = gross - discount;
+    const taxable = net(total);
+    const netSurcharge = net(surcharge);
+    const netDiscount = net(discount);
+    return { base: taxable + netDiscount - netSurcharge, surcharge: netSurcharge, discount: netDiscount, taxable, tax: total - taxable, total };
+  }
   const taxable = gross - discount;
   const tax = applyBps(taxable, input.taxBps ?? 0);
   return { base, surcharge, discount, taxable, tax, total: taxable + tax };

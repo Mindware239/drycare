@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Check, Crown, Pencil, Plus, Search } from "lucide-react";
 import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { dateOnly, money, rupeesToPaise } from "@/lib/format";
+import { currentRegion, dateOnly, money, rupeesToPaise } from "@/lib/format";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Spinner, Table, Td, Textarea, cx } from "@/components/ui";
 
 type MembershipPlan = { id: string; name: string; description: string | null; price: number; taxBps: number; durationDays: number; discountBps: number; freeExpress: boolean; perks: string[]; active: boolean };
@@ -63,8 +63,8 @@ function Members() {
     <Card padded={false}>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
         <label className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Search by customer name or phone" className="pl-9" aria-label="Search members" />
+          <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Search by customer name or phone" className="ps-9" aria-label="Search members" />
         </label>
         <Select value={state} onChange={(e) => setState(e.target.value as typeof state)} className="w-auto" aria-label="Show">
           {STATES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -131,7 +131,7 @@ function PlanForm({ plan, onClose, onSaved }: { plan: MembershipPlan | null; onC
   const [name, setName] = useState(plan?.name ?? "");
   const [description, setDescription] = useState(plan?.description ?? "");
   const [price, setPrice] = useState(plan ? String(plan.price / 100) : "");
-  const [tax, setTax] = useState(String(plan?.taxBps ?? 1800));
+  const [tax, setTax] = useState(String(plan?.taxBps ?? currentRegion().defaultTaxBps));
   const [duration, setDuration] = useState(String(plan?.durationDays ?? 365));
   const [discount, setDiscount] = useState(plan ? String(plan.discountBps / 100) : "");
   const [active, setActive] = useState(plan?.active ?? true);
@@ -172,7 +172,7 @@ function PlanForm({ plan, onClose, onSaved }: { plan: MembershipPlan | null; onC
         </div>
         <Field label="GST included in the price" hint="The invoice takes the GST out of the price, so the customer pays exactly the price above. Check the rate with your accountant.">
           <Select value={tax} onChange={(e) => setTax(e.target.value)}>
-            {[[0, "No GST"], [500, "5%"], [1200, "12%"], [1800, "18%"], [2800, "28%"]].map(([bps, label]) => <option key={bps} value={bps}>{label}</option>)}
+            {[...new Set([0, ...(currentRegion().splitsGst ? [500, 1200, 1800, 2800] : [currentRegion().defaultTaxBps]), Number(tax)])].sort((a, b) => a - b).map((bps) => [bps, bps ? `${bps / 100}%` : "No GST"] as const).map(([bps, label]) => <option key={bps} value={bps}>{label}</option>)}
           </Select>
         </Field>
         <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" className="mt-1" checked={freeExpress} onChange={(e) => setFreeExpress(e.target.checked)} /><span><span className="font-medium text-slate-900">Free express service</span><span className="block text-xs text-slate-500">Members pay no express surcharge. Applied automatically at the counter.</span></span></label>

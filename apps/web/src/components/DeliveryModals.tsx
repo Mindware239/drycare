@@ -99,7 +99,7 @@ export function DispatchModal({ stop, onClose, onDone }: { stop: any; onClose: (
                   {i.garment_type_name}
                   {i.colour && ` · ${i.colour}`}
                 </span>
-                <span className="ml-auto">{scanned.includes(i.tag_code) ? <Badge color="green">In bag</Badge> : <Badge>Waiting</Badge>}</span>
+                <span className="ms-auto">{scanned.includes(i.tag_code) ? <Badge color="green">In bag</Badge> : <Badge>Waiting</Badge>}</span>
               </li>
             ))}
           </ul>

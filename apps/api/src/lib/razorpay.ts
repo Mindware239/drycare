@@ -18,6 +18,11 @@ async function call<T>(creds: Creds, method: "GET" | "POST", path: string, body?
   return { ok: res.ok, status: res.status, json: (await res.json().catch(() => ({}))) as T & { error?: { description?: string } } };
 }
 
+/** Razorpay counts these currencies in thousandths; Drycare holds every amount in hundredths. */
+const THOUSANDTHS = new Set(["KWD", "BHD", "OMR", "JOD"]);
+export const toProviderAmount = (hundredths: number, currency: string) => (THOUSANDTHS.has(currency) ? hundredths * 10 : hundredths);
+export const fromProviderAmount = (amount: number, currency: string) => (THOUSANDTHS.has(currency) ? Math.round(amount / 10) : amount);
+
 export async function testRazorpay(creds: Creds) {
   try {
     const r = await call(creds, "GET", "/orders?count=1");

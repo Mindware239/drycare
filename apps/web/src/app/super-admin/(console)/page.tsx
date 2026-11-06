@@ -103,7 +103,7 @@ function SignupChart({ rows }: { rows: { day: string; count: number }[] }) {
   const fmt = (day: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(`${day}T00:00:00`));
   return (
     <div>
-      <p className="text-3xl font-semibold tabular-nums text-slate-900">{total}<span className="ml-2 text-sm font-normal text-slate-500">registrations</span></p>
+      <p className="text-3xl font-semibold tabular-nums text-slate-900">{total}<span className="ms-2 text-sm font-normal text-slate-500">registrations</span></p>
       <div className="mt-5 flex h-40 items-end gap-[3px]" role="img" aria-label={`Daily registrations over 30 days, ${total} in total, peak ${max} in a day`}>
         {rows.map((r) => (
           <div key={r.day} className="group relative flex h-full flex-1 items-end">

@@ -4,7 +4,7 @@ import { Check, CheckCircle2, History, Layers3, Pencil, Plus, Search, Shirt, Spa
 import { PROCESS_STAGES, STAGE_LABELS, type GarmentStage } from "@drycare/shared";
 import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { dateTime, money, rupeesToPaise } from "@/lib/format";
+import { currentRegion, dateTime, money, rupeesToPaise } from "@/lib/format";
 import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, Select, Spinner, cx } from "@/components/ui";
 import { GARMENT_ART_OPTIONS, GarmentThumb, garmentArtPng, garmentArtUrl, matchGarmentArt } from "@/components/GarmentArt";
 
@@ -120,8 +120,8 @@ export default function CataloguePage() {
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Find a garment</span>
             <span className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or category…" className="pl-9" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or category…" className="ps-9" />
             </span>
           </label>
           <Field label="Garment category">
@@ -133,8 +133,8 @@ export default function CataloguePage() {
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Find a service</span>
             <span className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input value={serviceSearch} onChange={(e) => setServiceSearch(e.target.value)} placeholder="Search service name or code…" className="pl-9" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input value={serviceSearch} onChange={(e) => setServiceSearch(e.target.value)} placeholder="Search service name or code…" className="ps-9" />
             </span>
           </label>
           <Field label="Service category">
@@ -172,15 +172,15 @@ export default function CataloguePage() {
         <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-10">
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="sticky left-0 z-20 min-w-56 border-r border-slate-200 bg-slate-50 px-4 py-3">Garment type</th>
+              <tr className="border-b border-slate-200 bg-slate-50 text-start text-xs uppercase tracking-wide text-slate-500">
+                <th className="sticky start-0 z-20 min-w-56 border-e border-slate-200 bg-slate-50 px-4 py-3">Garment type</th>
                 {activeSvcs.map((s) => (
-                  <th key={s.id} className="min-w-36 px-4 py-3 text-right">
+                  <th key={s.id} className="min-w-36 px-4 py-3 text-end">
                     <span className="inline-flex items-center gap-1.5">
                       {s.name}
                       {canManage && <button className="rounded p-1 transition hover:text-brand-700" onClick={() => setModal({ editService: s })} title="Edit service details" aria-label={`Edit ${s.name}`}><Pencil className="h-3 w-3 opacity-50" /></button>}
                     </span>
-                    {!s.active && <Badge className="ml-1">Off</Badge>}
+                    {!s.active && <Badge className="ms-1">Off</Badge>}
                   </th>
                 ))}
               </tr>
@@ -188,7 +188,7 @@ export default function CataloguePage() {
             <tbody className="divide-y divide-slate-100">
               {visibleGarments.map((g) => (
                 <tr key={g.id} className="group transition hover:bg-slate-50/70">
-                  <td className="sticky left-0 z-[1] border-r border-slate-100 bg-white px-4 py-3 group-hover:bg-slate-50">
+                  <td className="sticky start-0 z-[1] border-e border-slate-100 bg-white px-4 py-3 group-hover:bg-slate-50">
                     <div className="flex min-w-48 items-center gap-3">
                       <span className={cx("flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50", !g.active && "opacity-50 grayscale")}><GarmentThumb garment={g} className="p-0.5" /></span>
                       <span className="min-w-0">
@@ -200,7 +200,7 @@ export default function CataloguePage() {
                     </div>
                   </td>
                   {activeSvcs.map((s) => (
-                    <td key={s.id} className="px-4 py-2 text-right">
+                    <td key={s.id} className="px-4 py-2 text-end">
                       <div className="flex items-center justify-end gap-1">
                         <PriceCell price={priceFor(g.id, s.id)} disabled={!listId || !canManage} onSave={(v, tax, effectiveFrom) => setPrice(g, s, v, tax, effectiveFrom)} />
                         <button disabled={!listId} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={() => setModal({ history: { garmentTypeId: g.id, serviceId: s.id } })} title={`View price history for ${g.name} / ${s.name}`} aria-label={`View price history for ${g.name} / ${s.name}`}><History className="h-3.5 w-3.5" /></button>
@@ -230,7 +230,7 @@ export default function CataloguePage() {
                 {activeSvcs.map((s) => (
                   <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-slate-700">{s.name}{!s.active && <span className="ml-1 text-[10px] font-normal text-slate-400">(off)</span>}</span>
+                      <span className="block truncate text-sm font-medium text-slate-700">{s.name}{!s.active && <span className="ms-1 text-[10px] font-normal text-slate-400">(off)</span>}</span>
                       <span className="mt-0.5 block text-[11px] text-slate-400">GST included per price</span>
                     </span>
                     <div className="flex items-center gap-1">
@@ -247,7 +247,7 @@ export default function CataloguePage() {
       )}
       <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs leading-5 text-blue-900">
         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
-        <p>GST defaults to 18% for laundry and dry-cleaning services. Confirm the SAC code and applicable rate with your accountant. Price changes apply to new orders only.</p>
+        <p>{`GST defaults to ${currentRegion().defaultTaxBps / 100}% for laundry and dry-cleaning services. Confirm the applicable rate with your accountant. Price changes apply to new orders only.`}</p>
       </div>
 
       {modal === "garment" && (
@@ -452,7 +452,7 @@ function PriceHistoryModal({ listId, pair, onClose }: { listId: string; pair: { 
       {history.data?.length === 0 && <p className="py-8 text-center text-sm text-slate-500">No price history recorded for this item.</p>}
       {!!history.data?.length && (
         <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
+          <table className="min-w-full text-start text-sm">
             <thead><tr className="border-b border-slate-200 text-xs uppercase text-slate-500"><th className="px-3 py-2">Price</th><th className="px-3 py-2">GST</th><th className="px-3 py-2">Effective from</th><th className="px-3 py-2">Effective to</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {history.data.map((row: any) => (
@@ -469,7 +469,8 @@ function PriceHistoryModal({ listId, pair, onClose }: { listId: string; pair: { 
 function PriceCell({ price, onSave, mobile = false, disabled = false }: { price: any; onSave: (v: string, taxBps: number, effectiveFrom?: string) => void; mobile?: boolean; disabled?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [v, setV] = useState("");
-  const [tax, setTax] = useState("18");
+  const defaultTax = String(currentRegion().defaultTaxBps / 100);
+  const [tax, setTax] = useState(defaultTax);
   const [effectiveFrom, setEffectiveFrom] = useState("");
   if (!editing)
     return (
@@ -477,11 +478,11 @@ function PriceCell({ price, onSave, mobile = false, disabled = false }: { price:
       <button
         type="button"
         disabled={disabled}
-        className={cx("rounded-lg px-2.5 py-1.5 text-right transition", disabled ? "cursor-not-allowed text-slate-300" : "hover:bg-brand-50")}
+        className={cx("rounded-lg px-2.5 py-1.5 text-end transition", disabled ? "cursor-not-allowed text-slate-300" : "hover:bg-brand-50")}
         title={disabled ? "Create a price list to set prices" : "Click to edit price and GST"}
         onClick={() => {
           setV(price ? (price.unitPrice / 100).toFixed(2) : "");
-          setTax(price ? String(price.taxBps / 100) : "18");
+          setTax(price ? String(price.taxBps / 100) : defaultTax);
           setEditing(true);
         }}
       >
@@ -496,11 +497,11 @@ function PriceCell({ price, onSave, mobile = false, disabled = false }: { price:
           className={cx("rounded-lg px-2.5 py-1.5 tabular-nums transition", disabled ? "cursor-not-allowed text-slate-300" : "hover:bg-brand-50")}
           onClick={() => {
             setV(price ? (price.unitPrice / 100).toFixed(2) : "");
-            setTax(price ? String(price.taxBps / 100) : "18");
+            setTax(price ? String(price.taxBps / 100) : defaultTax);
             setEditing(true);
           }}
         >
-          {price ? <><span className="font-medium text-slate-800">{money(price.unitPrice)}</span><span className="ml-1.5 text-[10px] text-slate-400">{price.taxBps / 100}%</span></> : <span className={disabled ? "text-slate-300" : "text-brand-700"}>+ Set price</span>}
+          {price ? <><span className="font-medium text-slate-800">{money(price.unitPrice)}</span><span className="ms-1.5 text-[10px] text-slate-400">{price.taxBps / 100}%</span></> : <span className={disabled ? "text-slate-300" : "text-brand-700"}>+ Set price</span>}
         </button>
       )
     );
@@ -514,8 +515,8 @@ function PriceCell({ price, onSave, mobile = false, disabled = false }: { price:
         setEditing(false);
       }}
     >
-      <Input autoFocus value={v} onChange={(e) => setV(e.target.value)} className="min-w-0 px-2 py-1.5 text-right" aria-label="Price in rupees" placeholder="Price ₹" inputMode="decimal" />
-      <Input value={tax} onChange={(e) => setTax(e.target.value)} className="w-14 px-1 py-1.5 text-right" aria-label="GST percentage" title="GST percentage" inputMode="decimal" />
+      <Input autoFocus value={v} onChange={(e) => setV(e.target.value)} className="min-w-0 px-2 py-1.5 text-end" aria-label="Price in rupees" placeholder="Price ₹" inputMode="decimal" />
+      <Input value={tax} onChange={(e) => setTax(e.target.value)} className="w-14 px-1 py-1.5 text-end" aria-label="GST percentage" title="GST percentage" inputMode="decimal" />
       <Input type="datetime-local" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="col-span-2 min-w-0 px-2 py-1.5" aria-label="Price effective from" title="Leave blank to apply immediately" />
       <Button size="sm" type="submit" className="h-8"><Check className="h-3.5 w-3.5" /><span className="sr-only">Save price</span></Button>
       <Button size="sm" variant="secondary" type="button" className="h-8 px-2" onClick={() => setEditing(false)}><X className="h-3.5 w-3.5" /><span className="sr-only">Cancel editing</span></Button>
@@ -529,8 +530,8 @@ function PriceCell({ price, onSave, mobile = false, disabled = false }: { price:
           setEditing(false);
         }}
       >
-        <Input autoFocus value={v} onChange={(e) => setV(e.target.value)} className="w-20 px-2 py-1 text-right" aria-label="Price in rupees" inputMode="decimal" />
-        <Input value={tax} onChange={(e) => setTax(e.target.value)} className="w-12 px-1 py-1 text-right" aria-label="GST percentage" title="GST percentage" inputMode="decimal" />
+        <Input autoFocus value={v} onChange={(e) => setV(e.target.value)} className="w-20 px-2 py-1 text-end" aria-label="Price in rupees" inputMode="decimal" />
+        <Input value={tax} onChange={(e) => setTax(e.target.value)} className="w-12 px-1 py-1 text-end" aria-label="GST percentage" title="GST percentage" inputMode="decimal" />
         <Input type="datetime-local" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="w-44 px-2 py-1" aria-label="Price effective from" title="Leave blank to apply immediately" />
         <Button size="sm" type="submit" aria-label="Save price">
           <Check className="h-3.5 w-3.5" />
@@ -639,7 +640,7 @@ function ServiceForm({ service, categories, onClose, onSaved }: { service?: any;
       <Field label="Work steps in the shop" hint="Choose what happens to each garment. Staff move garments through these steps on the production board.">
         <div className="grid gap-2 sm:grid-cols-2">
           {PROCESS_PRESETS.map((p) => (
-            <button key={p.key} type="button" onClick={() => setStages(p.stages)} className={cx("rounded-xl border p-3 text-left transition", preset?.key === p.key ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-slate-200 hover:border-brand-300")}>
+            <button key={p.key} type="button" onClick={() => setStages(p.stages)} className={cx("rounded-xl border p-3 text-start transition", preset?.key === p.key ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-slate-200 hover:border-brand-300")}>
               <span className="block text-sm font-semibold text-slate-900">{p.label}</span>
               <span className="mt-0.5 block text-xs text-slate-500">{p.detail}</span>
             </button>
@@ -721,7 +722,7 @@ function AddGarmentForm({ categories, services, listId, onClose, onSaved }: { ca
       }
       const priced = services.filter((sv) => Number(priceInputs[sv.id]) > 0);
       for (const sv of priced) {
-        await api(`/price-lists/${listId}/prices`, { body: { garmentTypeId: garment.id, serviceId: sv.id, unitPrice: rupeesToPaise(priceInputs[sv.id]), taxBps: 1800 } });
+        await api(`/price-lists/${listId}/prices`, { body: { garmentTypeId: garment.id, serviceId: sv.id, unitPrice: rupeesToPaise(priceInputs[sv.id]) } });
       }
       onSaved();
     } catch (e) {

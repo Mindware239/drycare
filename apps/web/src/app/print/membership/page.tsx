@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { PAYMENT_METHOD_LABELS, type BillingProfile, type PaymentMethod } from "@drycare/shared";
 import { useApi } from "@/lib/api";
-import { amountInWords, dateOnly, money } from "@/lib/format";
+import { amountInWords, currentRegion, dateOnly, money } from "@/lib/format";
 import { Alert, Button, Spinner } from "@/components/ui";
 
 type Invoice = {
@@ -42,7 +42,7 @@ function MembershipInvoiceInner() {
           <h1 className="text-lg font-bold text-slate-900">{org.name}</h1>
           {address && <p className="text-xs">{address}</p>}
           {phone && <p className="text-xs">Phone: {phone}</p>}
-          {org.gstin && <p className="text-xs font-medium">GSTIN: {org.gstin}</p>}
+          {org.gstin && <p className="text-xs font-medium">{currentRegion().taxIdLabel}: {org.gstin}</p>}
           <p className="mt-2 text-sm font-bold tracking-wide">{taxed ? "TAX INVOICE" : "RECEIPT"}</p>
         </header>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 border-b border-slate-300 py-3 text-xs">
@@ -60,13 +60,13 @@ function MembershipInvoiceInner() {
           {taxed && (
             <>
               <Line label="Taxable value" value={money(taxable)} />
-              <Line label={`CGST @ ${m.taxBps / 200}%`} value={money(cgst)} />
-              <Line label={`SGST @ ${m.taxBps / 200}%`} value={money(sgst)} />
+              {currentRegion().splitsGst ? <><Line label={`CGST @ ${m.taxBps / 200}%`} value={money(cgst)} />
+              <Line label={`SGST @ ${m.taxBps / 200}%`} value={money(sgst)} /></> : <Line label={`${currentRegion().taxName} @ ${m.taxBps / 100}%`} value={money(cgst + sgst)} />}
             </>
           )}
           <div className="flex justify-between border-t border-slate-300 pt-2 text-base font-bold"><dt>Total paid</dt><dd className="tabular-nums">{money(m.pricePaid)}</dd></div>
         </dl>
-        <p className="text-xs text-slate-600">{amountInWords(m.pricePaid)}</p>
+        {currentRegion().currency === "INR" && <p className="text-xs text-slate-600">{amountInWords(m.pricePaid)}</p>}
         {m.payment && <p className="mt-1 text-xs text-slate-600">Paid by {PAYMENT_METHOD_LABELS[m.payment.paymentMethod] ?? m.payment.paymentMethod}{m.payment.providerReference ? ` · ${m.payment.providerReference}` : ""}</p>}
       </article>
     </div>

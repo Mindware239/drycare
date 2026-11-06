@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { useState } from "react";
 import { Laptop } from "lucide-react";
 import { api, ApiError, useApi } from "@/lib/api";
@@ -40,7 +41,7 @@ export function LinkedPcCard() {
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-slate-900">{d.name} <Badge color={d.status === "active" ? "green" : "slate"}>{d.status === "active" ? "Connected" : "Disconnected"}</Badge></p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {d.branchName}{d.appVersion ? ` · Drycare ${d.appVersion}` : ""} · last upload {d.lastPushAt ? dateTime(d.lastPushAt) : "not yet"} · {d.eventsApplied.toLocaleString("en-IN")} changes received{d.problems ? ` · ${d.problems} refused or in conflict` : ""}
+                  {d.branchName}{d.appVersion ? ` · Drycare ${d.appVersion}` : ""} · last upload {d.lastPushAt ? dateTime(d.lastPushAt) : "not yet"} · {d.eventsApplied.toLocaleString(appLocale())} changes received{d.problems ? ` · ${d.problems} refused or in conflict` : ""}
                 </p>
                 {d.revokedAt && <p className="mt-0.5 text-xs text-slate-500">Disconnected {dateTime(d.revokedAt)}{d.revokeReason ? ` — ${d.revokeReason}` : ""}</p>}
               </div>

@@ -13,8 +13,9 @@ export function fromMinor(minor: Minor): number {
   return minor / 100;
 }
 
-export function formatMoney(minor: Minor, currency = "INR", locale = "en-IN"): string {
-  return new Intl.NumberFormat(locale, { style: "currency", currency, minimumFractionDigits: 2 }).format(minor / 100);
+export function formatMoney(minor: Minor, currency = "INR", locale = currency === "INR" ? "en-IN" : "en"): string {
+  // Amounts are held in hundredths of the main unit for every currency; the currency decides how many digits show.
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(minor / 100);
 }
 
 /** Basis points: 1800 bps = 18%. Rounds half away from zero to the nearest minor unit. */

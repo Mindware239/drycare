@@ -1,12 +1,13 @@
 "use client";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { FeatureKey, FeatureMap, Permission } from "@drycare/shared";
+import type { FeatureKey, FeatureLock, FeatureMap, Permission, Region } from "@drycare/shared";
 
 export interface Session {
   features?: FeatureMap;
+  featureLocks?: Partial<Record<FeatureKey, FeatureLock>>;
   user: { id: string; name: string; email: string };
   isPlatformAdmin: boolean;
-  organization: { id: string; name: string; status: string; currency: string; gstin?: string; settings?: Record<string, unknown> };
+  organization: { id: string; name: string; status: string; currency: string; region: Region; gstin?: string; settings?: Record<string, unknown> };
   role: { key: string; name: string };
   permissions: string[];
   branches: { id: string; name: string; code: string; status: string }[];

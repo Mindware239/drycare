@@ -1,3 +1,4 @@
+import { zone } from "../lib/region";
 /**
  * Tag tracking: every tag and bag label a shop has issued, and the complete record behind any one of them:
  * which customer and order it belongs to, what was charged, and everything that has happened to it.
@@ -50,8 +51,8 @@ export async function trackingRoutes(app: FastifyInstance) {
       ${q.rfid === "with" ? sql`and rt.epc is not null` : q.rfid === "without" ? sql`and rt.epc is null` : sql``}
       ${q.search ? sql`and (rt.epc ilike ${term} or g.scan_code ilike ${term} or g.tag_code ilike ${term} or o.order_number ilike ${term} or c.name ilike ${term} or oi.garment_type_name ilike ${term}
         ${digits.length >= 3 ? sql`or c.phone_normalized like ${`%${digits}%`}` : sql``})` : sql``}
-      ${q.from ? sql`and g.created_at >= (${q.from}::date)::timestamp at time zone 'Asia/Kolkata'` : sql``}
-      ${q.to ? sql`and g.created_at < ((${q.to}::date) + 1)::timestamp at time zone 'Asia/Kolkata'` : sql``}`;
+      ${q.from ? sql`and g.created_at >= (${q.from}::date)::timestamp at time zone ${zone(auth.timezone)}` : sql``}
+      ${q.to ? sql`and g.created_at < ((${q.to}::date) + 1)::timestamp at time zone ${zone(auth.timezone)}` : sql``}`;
     const statusFilter = q.status === "all" ? sql``
       : q.status === "in_process" ? sql`and g.current_status not in ('ready', 'delivered', 'cancelled', 'exception')`
       : sql`and g.current_status = ${q.status}`;

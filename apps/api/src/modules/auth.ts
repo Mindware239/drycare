@@ -1,3 +1,4 @@
+import { resolveRegion } from "@drycare/shared";
 import type { FastifyInstance } from "fastify";
 import { hash, verify } from "@node-rs/argon2";
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
@@ -18,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emailConfigured, sendEmail } from "../lib/mailer";
 import { accessState } from "../lib/subscriptionAccess";
-import { orgFeatures } from "../lib/entitlements";
+import { featureLocks, orgFeatures } from "../lib/entitlements";
 
 const newPassword = z.string().min(10, "Password must be at least 10 characters").max(200);
 
@@ -375,10 +376,11 @@ export async function authRoutes(app: FastifyInstance) {
     return {
       user: { id: auth.userId, name: auth.userName, email: auth.email },
       isPlatformAdmin: auth.isPlatformAdmin,
-      organization: { id: auth.orgId, name: auth.orgName, status: auth.orgStatus, currency: org?.defaultCurrency, gstin: org?.gstin, settings: org?.settings, hasLogo: Boolean(org?.logoData && org?.logoMimeType) },
+      organization: { id: auth.orgId, name: auth.orgName, status: auth.orgStatus, currency: org?.defaultCurrency, region: resolveRegion(org), gstin: org?.gstin, settings: org?.settings, hasLogo: Boolean(org?.logoData && org?.logoMimeType) },
       role: { key: auth.roleKey, name: auth.roleName },
       permissions: [...auth.permissions],
       features: await orgFeatures(auth.orgId),
+      featureLocks: await featureLocks(auth.orgId),
       branches: branches
         .filter((b) => auth.branchIds.length === 0 || auth.branchIds.includes(b.id))
         .map((b) => ({ id: b.id, name: b.name, code: b.branchCode, status: b.status })),

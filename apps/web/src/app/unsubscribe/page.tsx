@@ -44,7 +44,7 @@ export default function UnsubscribePage() {
           {state === "done" ? <CheckCircle2 className="h-6 w-6" /> : <MailX className="h-6 w-6" />}
         </div>
         <h1 className="mt-4 text-xl font-semibold text-slate-950">{state === "done" ? "You’re unsubscribed" : "Email preferences"}</h1>
-        {state === "error" ? <div className="mt-4 text-left"><Alert>{error}</Alert></div> : state === "done" ? (
+        {state === "error" ? <div className="mt-4 text-start"><Alert>{error}</Alert></div> : state === "done" ? (
           <p className="mt-2 text-sm text-slate-600">You will no longer receive promotional emails from this store. Important order updates are not affected.</p>
         ) : (
           <>

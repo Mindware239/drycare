@@ -123,7 +123,7 @@ export function Panel({ title, description, actions, children, padded = true, cl
 export function DataTable({ head, children, empty, minWidth = 860 }: { head: ReactNode[]; children: ReactNode; empty?: ReactNode; minWidth?: number }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm" style={{ minWidth }}>
+      <table className="w-full text-start text-sm" style={{ minWidth }}>
         <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           <tr>{head.map((h, i) => <th key={i} className="whitespace-nowrap px-5 py-3">{h}</th>)}</tr>
         </thead>
@@ -172,7 +172,7 @@ export function SegmentedTabs<T extends string>({ value, options, onChange }: { 
       {options.map((o) => (
         <button key={o.value} type="button" role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
           className={cx("rounded-lg px-3 py-1.5 text-xs font-semibold transition", value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800")}>
-          {o.label}{o.count !== undefined && <span className="ml-1.5 text-slate-400">{o.count}</span>}
+          {o.label}{o.count !== undefined && <span className="ms-1.5 text-slate-400">{o.count}</span>}
         </button>
       ))}
     </div>

@@ -1,4 +1,5 @@
 /** GST tax invoices for DryCare subscriptions (Mindware → shop). Issued once per paid subscription payment. */
+import { localPlanPrice, resolveRegion, RUPEE_RATES } from "@drycare/shared";
 import { eq, sql } from "drizzle-orm";
 import { schema, type DbOrTx } from "../db/client";
 import { getSellerBilling, sellerBillingSchema } from "./platformSettings";
@@ -21,6 +22,27 @@ export function stateCode(gstin?: string | null, state?: string | null) {
 /** What the shop must pay for a plan: the plan price, plus GST when the price excludes it. */
 export function planGross(plan: { pricePaise: number; gstInclusive: boolean }, gstRateBps: number) {
   return plan.gstInclusive ? plan.pricePaise : plan.pricePaise + Math.round((plan.pricePaise * gstRateBps) / 10_000);
+}
+
+type OfferPlan = { pricePaise: number; gstInclusive: boolean; currency: string };
+
+/**
+ * What a shop pays for a plan. Indian shops pay the rupee price plus GST. Shops abroad pay a clean price in their own
+ * currency with no Indian GST, since this is an export of services.
+ */
+export function planOffer(plan: OfferPlan, org: Parameters<typeof resolveRegion>[0], gstRateBps: number) {
+  const region = resolveRegion(org);
+  if (region.country === "IN" || plan.currency !== "INR") {
+    return { india: true, currency: plan.currency, pricePaise: plan.pricePaise, gstInclusive: plan.gstInclusive, gstRateBps, payablePaise: planGross(plan, gstRateBps) };
+  }
+  const pricePaise = localPlanPrice(plan.pricePaise, region.currency);
+  return { india: false, currency: region.currency, pricePaise, gstInclusive: false, gstRateBps: 0, payablePaise: pricePaise };
+}
+
+/** An amount column in rupees, for totals across currencies. Foreign money is an estimate at the reference rates. */
+export function rupeesOf(amount: string, currency: string) {
+  const cases = Object.entries(RUPEE_RATES).filter(([code]) => code !== "INR").map(([code, rate]) => `when '${code}' then ${amount} / ${rate}`).join(" ");
+  return sql.raw(`(case ${currency} ${cases} else ${amount} end)`);
 }
 
 /** Splits an amount that includes GST into taxable value and tax (intra-state: CGST + SGST, otherwise IGST). */
@@ -57,7 +79,7 @@ export async function issueCommercialInvoice(tx: DbOrTx, paymentId: string) {
   const sellerCode = stateCode(seller.gstin, seller.state);
   const buyerCode = stateCode(org.gstin, buyerState);
   const intraState = Boolean(sellerCode && buyerCode && sellerCode === buyerCode);
-  const rate = seller.invoice.gstRateBps;
+  const rate = payment.currency === "INR" ? seller.invoice.gstRateBps : 0;
   const split = splitGst(payment.amountPaise, rate, intraState);
   const meta = payment.providerPayload as { periodStart?: string; periodEnd?: string; description?: string };
   const periodStart = meta.periodStart ? new Date(meta.periodStart) : subscription?.startsAt ?? null;

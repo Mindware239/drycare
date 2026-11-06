@@ -1,5 +1,6 @@
 "use client";
 
+import { appLocale } from "@/lib/format";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { AuthNotice, AuthShell } from "@/components/marketing/AuthShell";
@@ -71,7 +72,7 @@ export default function ActivatePage() {
   }
 
   const expiryLabel = status?.expiresAt
-    ? new Intl.DateTimeFormat("en-IN", { dateStyle: "long", timeZone: "UTC" }).format(new Date(status.expiresAt))
+    ? new Intl.DateTimeFormat(appLocale(), { dateStyle: "long", timeZone: "UTC" }).format(new Date(status.expiresAt))
     : null;
 
   const title = status?.error === "expired" ? "Renew your Drycare license" : status?.error === "demo_ended" ? "Your 7-day demo has ended" : status?.demo ? "Upgrade to the full version" : "Activate this PC";

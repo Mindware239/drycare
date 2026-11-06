@@ -246,8 +246,8 @@ function SecretField({ label, hint, value, onChange, show, onToggle, onRemove, o
     <Field label={`${label}${optional ? " (optional)" : ""}`} hint={hint ? `Saved (${hint}). Leave empty to keep it, or type a new one to replace it.` : "Not saved yet."}>
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)} placeholder={hint ?? "Paste from Razorpay"} className="pr-10 font-mono" autoComplete="new-password" />
-          <button type="button" onClick={onToggle} aria-label={show ? "Hide" : "Show"} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-700">{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+          <Input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)} placeholder={hint ?? "Paste from Razorpay"} className="pe-10 font-mono" autoComplete="new-password" />
+          <button type="button" onClick={onToggle} aria-label={show ? "Hide" : "Show"} className="absolute inset-y-0 end-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-700">{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
         </div>
         {hint && <Button type="button" variant="ghost" size="sm" onClick={onRemove}>Remove</Button>}
       </div>
@@ -260,7 +260,7 @@ function Toggle({ checked, onChange, title, text }: { checked: boolean; onChange
     <label className={cx("flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition", checked ? "border-brand-200 bg-brand-50/50" : "border-slate-200 hover:border-slate-300")}>
       <span className={cx("relative mt-0.5 inline-flex h-5 w-9 shrink-0 rounded-full transition", checked ? "bg-brand-600" : "bg-slate-300")}>
         <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <span className={cx("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all", checked ? "left-[18px]" : "left-0.5")} />
+        <span className={cx("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all", checked ? "start-[18px]" : "start-0.5")} />
       </span>
       <span><span className="block text-sm font-semibold text-slate-900">{title}</span><span className="mt-0.5 block text-xs leading-5 text-slate-500">{text}</span></span>
     </label>
@@ -317,5 +317,5 @@ function StatusPill({ ok, okText, badText }: { ok: boolean; okText: string; badT
     : <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><CircleAlert className="h-3.5 w-3.5" />{badText}</span>;
 }
 function Row({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2.5 last:border-0 last:pb-0"><dt className="text-slate-500">{label}</dt><dd className="text-right font-medium text-slate-800">{children}</dd></div>;
+  return <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2.5 last:border-0 last:pb-0"><dt className="text-slate-500">{label}</dt><dd className="text-end font-medium text-slate-800">{children}</dd></div>;
 }

@@ -1,3 +1,5 @@
+import { todayInZone } from "@drycare/shared";
+import { localDateText, zone } from "../lib/region";
 import type { FastifyInstance } from "fastify";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -20,8 +22,8 @@ import { assertDrawerCash, openShiftFor } from "./payments";
  *  - Rework rate: failed inspections ÷ all inspections in range.
  */
 export const METRIC_DEFINITIONS = {
-  grossBilled: "Total of non-cancelled invoices (incl. GST) issued in the period",
-  netSales: "Gross billed minus GST: taxable value of non-cancelled invoices issued in the period",
+  grossBilled: "Total of non-cancelled invoices (incl. tax) issued in the period",
+  netSales: "Gross billed minus tax: taxable value of non-cancelled invoices issued in the period",
   collections: "Payments received in the period minus refunds issued in the period",
   outstanding: "Unpaid balance across all open invoices right now",
   expenses: "Expenses recorded with a date in the period",
@@ -55,7 +57,7 @@ export async function reportRoutes(app: FastifyInstance) {
     const pay = branchSql(auth, "p.branch_id", q.branchId);
     const gar = branchSql(auth, "g.current_branch_id", q.branchId);
     const exp = branchSql(auth, "e.branch_id", q.branchId);
-    const tz = "Asia/Kolkata";
+    const tz = auth.timezone;
     const inRange = (col: string) => sql`(${sql.raw(col)} at time zone ${tz})::date between ${from}::date and ${to}::date`;
 
     const [sales] = await db.execute<Record<string, string>>(sql`
@@ -191,7 +193,7 @@ export async function reportRoutes(app: FastifyInstance) {
     const ord = branchSql(auth, "o.branch_id", branchId);
     const gar = branchSql(auth, "g.current_branch_id", branchId);
     const inv = branchSql(auth, "i.branch_id", branchId);
-    const tz = "Asia/Kolkata";
+    const tz = auth.timezone;
     const today = sql`(now() at time zone ${tz})::date`;
     const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId), columns: { settings: true } });
     const phone = seesPhone ? sql`c.phone` : sql`null`;
@@ -285,12 +287,12 @@ export async function reportRoutes(app: FastifyInstance) {
     const auth = requirePermission(req, "reports.financial");
     const q = dateRangeQuery.extend({ groupBy: z.enum(["service", "garment", "branch", "day"]).default("service") }).parse(req.query);
     const { from, to } = range(q);
-    const key = { service: "oi.service_name", garment: "oi.garment_type_name", branch: "b.name", day: "(i.issued_at at time zone 'Asia/Kolkata')::date::text" }[q.groupBy];
+    const key = { service: "oi.service_name", garment: "oi.garment_type_name", branch: "b.name", day: `${localDateText("i.issued_at", auth.timezone)}::text` }[q.groupBy];
     return db.execute(sql`
       select ${sql.raw(key)} as label, sum(oi.quantity)::int as quantity, sum(oi.line_total) as total, sum(oi.tax_amount) as tax, sum(oi.discount_amount) as discount, count(distinct o.id)::int as orders
       from order_items oi join orders o on o.id = oi.order_id join invoices i on i.order_id = o.id join branches b on b.id = o.branch_id
       where o.organization_id = ${auth.orgId} and i.status <> 'cancelled'
-        and (i.issued_at at time zone 'Asia/Kolkata')::date between ${from}::date and ${to}::date ${branchSql(auth, "o.branch_id", q.branchId)}
+        and (i.issued_at at time zone ${zone(auth.timezone)})::date between ${from}::date and ${to}::date ${branchSql(auth, "o.branch_id", q.branchId)}
       group by 1 order by total desc`);
   });
 
@@ -342,7 +344,7 @@ export async function reportRoutes(app: FastifyInstance) {
     assertBranchAccess(auth, body.branchId);
     const b = await db.query.branches.findFirst({ where: and(eq(schema.branches.id, body.branchId), eq(schema.branches.organizationId, auth.orgId)) });
     if (!b) throw notFound("Branch");
-    if (body.spentOn > new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)) throw badRequest("Expense date cannot be in the future");
+    if (body.spentOn > todayInZone(auth.timezone)) throw badRequest("Expense date cannot be in the future");
     if (paidFromDrawer && body.method !== "cash") throw badRequest("Only cash expenses can be paid from the cash drawer");
     const row = await db.transaction(async (tx) => {
       let shiftId: string | null = null;

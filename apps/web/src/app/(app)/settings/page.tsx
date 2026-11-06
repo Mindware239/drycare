@@ -1,4 +1,6 @@
 "use client";
+import { COUNTRIES, LANGUAGES, countryPack, resolveRegion } from "@drycare/shared";
+import { followShopLanguage } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import { dateTime } from "@/lib/format";
 import { api, ApiError, useApi } from "@/lib/api";
@@ -25,6 +27,12 @@ export default function SettingsPage() {
         name: org.data.name,
         legalName: org.data.legalName ?? "",
         gstin: org.data.gstin ?? "",
+        country: resolveRegion(org.data).country,
+        language: resolveRegion(org.data).language,
+        taxName: resolveRegion(org.data).taxName,
+        taxIdLabel: resolveRegion(org.data).taxIdLabel,
+        taxRate: String(resolveRegion(org.data).defaultTaxBps / 100),
+        taxIncluded: resolveRegion(org.data).pricesIncludeTax,
         maxDiscount: String((org.data.settings.maxDiscountBpsWithoutApproval ?? 1000) / 100),
         express: String((org.data.settings.expressSurchargeBps ?? 5000) / 100),
         turnaround: String(org.data.settings.defaultTurnaroundHours ?? 48),
@@ -32,11 +40,12 @@ export default function SettingsPage() {
       });
   }, [org.data, f]);
 
-  const run = async (fn: () => Promise<unknown>, ok: string) => {
+  const run = async (fn: () => Promise<unknown>, ok: string, after?: () => void) => {
     setMsg(null);
     try {
       await fn();
       setMsg({ t: "green", m: ok });
+      after?.();
     } catch (e) {
       setMsg({ t: "red", m: (e as ApiError).message });
     }
@@ -119,6 +128,37 @@ export default function SettingsPage() {
       </div>
       {can("org.manage") && <DesktopCards />}
       {can("org.manage") && (
+        <>
+        <Card title="Country, language and tax">
+          <p className="mb-3 text-sm text-slate-600">These set your bills, currency, dates and tax wording. The tax rate is a starting point: please confirm yours with your accountant. New prices use this rate, and prices you already saved keep theirs.</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Country">
+              <Select value={f.country} onChange={(e) => {
+                const p = countryPack(e.target.value);
+                setF({ ...f, country: p.code, taxName: p.taxName, taxIdLabel: p.taxIdLabel, taxRate: String(p.defaultTaxBps / 100), taxIncluded: p.pricesIncludeTax });
+              }}>
+                {[...COUNTRIES].sort((a, b) => a.name.localeCompare(b.name)).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Language">
+              <Select value={f.language} onChange={(e) => setF({ ...f, language: e.target.value })} data-i18n-skip="">
+                {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Currency" hint="Follows the country. It can't change once the shop has bills.">
+              <Input value={countryPack(f.country).currency} readOnly />
+            </Field>
+            <Field label="Name of the tax"><Input value={f.taxName} maxLength={30} onChange={(e) => setF({ ...f, taxName: e.target.value })} /></Field>
+            <Field label="Name of the tax number"><Input value={f.taxIdLabel} maxLength={30} onChange={(e) => setF({ ...f, taxIdLabel: e.target.value })} /></Field>
+            <Field label="Tax rate for new prices (%)"><Input inputMode="decimal" value={f.taxRate} onChange={(e) => setF({ ...f, taxRate: e.target.value })} /></Field>
+            <Field label="Your prices" className="sm:col-span-3">
+              <Select value={f.taxIncluded ? "yes" : "no"} onChange={(e) => setF({ ...f, taxIncluded: e.target.value === "yes" })}>
+                <option value="yes">Already include tax: the customer pays the price shown</option>
+                <option value="no">Do not include tax: tax is added on the bill</option>
+              </Select>
+            </Field>
+          </div>
+        </Card>
         <Card title="Business details & rules">
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Business name">
@@ -127,8 +167,8 @@ export default function SettingsPage() {
             <Field label="Legal name">
               <Input value={f.legalName} onChange={(e) => setF({ ...f, legalName: e.target.value })} />
             </Field>
-            <Field label="GSTIN" hint="15 characters, e.g. 07ABCDE1234F1Z5">
-              <Input value={f.gstin} maxLength={15} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase().replace(/\s/g, "") })} className="font-mono" />
+            <Field label={f.taxIdLabel} hint={countryPack(f.country).taxIdExample ? `e.g. ${countryPack(f.country).taxIdExample}` : undefined}>
+              <Input value={f.gstin} maxLength={30} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase().replace(/\s/g, "") })} className="font-mono" />
             </Field>
             <Field label="Max counter discount %" hint="Above this needs manager approval">
               <Input value={f.maxDiscount} onChange={(e) => setF({ ...f, maxDiscount: e.target.value })} />
@@ -177,16 +217,24 @@ export default function SettingsPage() {
                         expressSurchargeBps: Math.round(Number(f.express) * 100),
                         defaultTurnaroundHours: Number(f.turnaround),
                         customerDuplicateMatch: f.duplicateMatch,
+                        country: f.country,
+                        language: f.language,
+                        taxName: f.taxName,
+                        taxIdLabel: f.taxIdLabel,
+                        defaultTaxBps: Math.round(Number(f.taxRate) * 100),
+                        pricesIncludeTax: f.taxIncluded,
                       },
                     },
                   }),
                 "Settings saved.",
+                () => followShopLanguage(f.language),
               )
             }
           >
             Save settings
           </Button>
         </Card>
+        </>
       )}
 
       {can("org.manage") && org.data && <BillTemplates org={org.data} saved={org.data.settings.billTemplates} onSaved={org.reload} />}
@@ -281,7 +329,7 @@ function DesktopCards() {
           <p className="text-sm text-slate-600">
             Other PCs, tablets and phones on the same Wi-Fi can open Drycare in a browser at{" "}
             {info.data.lanUrls.map((u: string) => (
-              <code key={u} className="mr-2 rounded bg-slate-100 px-1">
+              <code key={u} className="me-2 rounded bg-slate-100 px-1">
                 {u}
               </code>
             ))}

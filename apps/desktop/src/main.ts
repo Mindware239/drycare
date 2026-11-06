@@ -6,6 +6,7 @@
  * and the shop works without internet.
  */
 import { app, BrowserWindow, dialog, Menu, safeStorage, shell } from "electron";
+import { setupUpdates } from "./updates";
 import EmbeddedPostgres from "embedded-postgres";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
@@ -301,6 +302,8 @@ function buildMenu() {
     {
       label: "Help",
       submenu: [
+        { label: "Check for updates…", click: () => checkForUpdates() },
+        { type: "separator" },
         {
           label: "About Drycare",
           click: () =>
@@ -387,6 +390,8 @@ function relaunch() {
 
 // ---------------------------------------------------------------- lifecycle
 
+let checkForUpdates: () => void = () => {};
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -396,15 +401,20 @@ if (!app.requestSingleInstanceLock()) {
       win.focus();
     }
   });
-  app.whenReady().then(() =>
-    startApp().catch(async (e) => {
+  app.whenReady().then(() => {
+    checkForUpdates = setupUpdates({
+      window: () => win ?? null,
+      log,
+      backup: () => (serverMod ? serverMod.backupNow(config.backupDir, app.getVersion()) : Promise.reject(new Error("Drycare has not finished starting."))),
+    });
+    return startApp().catch(async (e) => {
       log("Startup failed", e);
       splash?.destroy();
       dialog.showErrorBox("Drycare could not start", `${(e as Error).message}\n\nDetails are in ${logFile}`);
       await stopDatabase().catch(() => {});
       app.exit(1);
-    }),
-  );
+    });
+  });
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", (e) => {
     if (quitting) return;

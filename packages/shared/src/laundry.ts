@@ -36,6 +36,8 @@ export interface LaundryQuoteInput {
   items?: { name: string; unitPrice: number; quantity: number }[];
   discount?: { type: "percent"; bps: number } | { type: "fixed"; amount: number };
   taxBps: number;
+  /** The price already includes the tax. */
+  taxIncluded?: boolean;
 }
 
 export interface LaundryQuoteLine { description: string; quantity: number; unitPrice: number; amount: number }
@@ -101,6 +103,11 @@ export function quoteLaundry(rule: LaundryRule, input: LaundryQuoteInput): Laund
     discount = input.discount.type === "percent" ? Math.round((subtotal * input.discount.bps) / 10_000) : input.discount.amount;
     if (!Number.isInteger(discount) || discount < 0) throw new LaundryPricingError("Invalid discount");
     if (discount > subtotal) throw new LaundryPricingError("Discount cannot exceed the amount");
+  }
+  if (input.taxIncluded && input.taxBps) {
+    const total = subtotal - discount;
+    const taxable = Math.round((total * 10_000) / (10_000 + input.taxBps));
+    return { lines, billableGrams, units, subtotal, discount, taxable, tax: total - taxable, total };
   }
   const taxable = subtotal - discount;
   const tax = Math.round((taxable * input.taxBps) / 10_000);

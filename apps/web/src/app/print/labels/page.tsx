@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -12,7 +13,7 @@ import { Alert, Badge, Button, Select, Spinner, cx } from "@/components/ui";
 import { BarcodeAdjust } from "@/components/BarcodeAdjust";
 import { BasicTagSetup } from "@/components/BasicTagSetup";
 import { LabelDesigner, type PrinterDetails } from "@/components/LabelDesigner";
-import { PrinterConnect } from "@/components/PrinterConnect";
+import { PrinterConnect, type DeviceInfo } from "@/components/PrinterConnect";
 import { PrinterQueueStatus, usePrinterQueue } from "@/components/PrinterQueue";
 import { ScannerTest, sampleData, scannerSamples } from "@/components/ScannerTest";
 
@@ -78,6 +79,7 @@ function LabelsPageInner() {
   const o = useMemo(() => (test ? sampleOrder(sampleBranch ?? "TEST", settings.scanDigits) : order.data), [test, sampleBranch, settings.scanDigits, order.data]);
   const direct = printerInfo.data?.available ?? false;
   // Only printers the software owner accepts can be chosen. The server refuses any other.
+  const devices = useApi<DeviceInfo>("/labels/shop-printers");
   const printers = useMemo(() => (printerInfo.data?.printers ?? []).filter((p) => p.approved !== false), [printerInfo.data]);
   const blockedPrinter = printerInfo.data?.printers.find((p) => p.approved === false && p.name === settings.printerName)?.name;
 
@@ -196,6 +198,7 @@ function LabelsPageInner() {
 
   /** One way out for every print: straight to the printer on a PC, otherwise the print dialog. */
   async function output(list: PrintItem[], copies: number, requestId: string = crypto.randomUUID()) {
+    if (devices.data?.missing.printer) throw new Error("Connect your Mindware printer before printing. Enter its serial number and bill number in Tag designer.");
     if (direct) {
       if (!printerName) throw new Error("Choose a tag printer in Tag designer first.");
       await sendDirect(await renderAll(list), copies, requestId);
@@ -322,7 +325,7 @@ function LabelsPageInner() {
         {mixedSizes && <Alert tone="amber">Your bag label is {settings.bagDesign.widthMm} × {settings.bagDesign.heightMm} mm and your garment tag is {settings.garmentDesign.widthMm} × {settings.garmentDesign.heightMm} mm. One roll cannot print both: set them to the same size, or print them separately.</Alert>}
         {blockedPrinter && <Alert tone="amber">{printerInfo.data?.needsConnecting ? `${blockedPrinter} is not connected yet. Enter its serial number and bill number below.` : `${blockedPrinter} is not on the approved printer list, so it cannot be used. Choose an approved printer or contact Drycare support.`}</Alert>}
         {direct && printerInfo.data?.restricted && !printerInfo.data.needsConnecting && printers.length === 0 && <Alert tone="amber">None of the printers on this PC are approved. Approved models: {hardware.data?.printers.join(", ")}.</Alert>}
-        {(test || (direct && printerInfo.data?.needsConnecting && printers.length === 0)) && <PrinterConnect windowsPrinters={printerInfo.data?.printers ?? []} directAvailable={direct} required={!!printerInfo.data?.needsConnecting} onChanged={() => printerInfo.reload()} />}
+        {(test || devices.data?.missing.printer || (direct && printerInfo.data?.needsConnecting && printers.length === 0)) && <PrinterConnect windowsPrinters={printerInfo.data?.printers ?? []} directAvailable={direct} required={!!printerInfo.data?.needsConnecting || !!devices.data?.missing.printer} onChanged={() => { void devices.reload(); void printerInfo.reload(); }} />}
         {error && <Alert>{error}</Alert>}
         {notice && <Alert tone="green">{notice}</Alert>}
         {confirmLarge && (
@@ -346,7 +349,7 @@ function LabelsPageInner() {
         {!test && o.printJobs?.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             Print history:
-            {o.printJobs.slice(0, 5).map((j: any) => <Badge key={j.id} color={j.status === "printed" ? "green" : j.status === "failed" ? "red" : "amber"}>{j.status} · {j.labelCount} · {new Date(j.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</Badge>)}
+            {o.printJobs.slice(0, 5).map((j: any) => <Badge key={j.id} color={j.status === "printed" ? "green" : j.status === "failed" ? "red" : "amber"}>{j.status} · {j.labelCount} · {new Date(j.createdAt).toLocaleTimeString(appLocale(), { hour: "2-digit", minute: "2-digit" })}</Badge>)}
           </div>
         )}
         {!test && panel === "" && canDesign && (
@@ -395,6 +398,8 @@ function LabelsPageInner() {
           />
         )}
         {panel === "scanner" && (
+          <div className="space-y-4">
+          <PrinterConnect kind="scanner" required={!!devices.data?.missing.scanner} onChanged={() => void devices.reload()} />
           <ScannerTest
             disabled={busy}
             approvedScanners={hardware.data?.scanners}
@@ -402,6 +407,7 @@ function LabelsPageInner() {
             onPrint={() => printSamples(scannerSamples(settings.scanDigits).map((s) => ({ key: `sample-${s.id}`, design: s.design, data: sampleData(s) })))}
             onUse={(s) => applySample(s.id)}
           />
+          </div>
         )}
       </div>
 

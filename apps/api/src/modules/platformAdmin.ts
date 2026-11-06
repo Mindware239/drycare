@@ -7,7 +7,8 @@ import { audit } from "../lib/audit";
 import { conflict, notFound } from "../lib/errors";
 import { env } from "../env";
 import { getSellerBilling } from "../lib/platformSettings";
-import { planGross } from "../lib/commercialInvoice";
+import { formatMoney } from "@drycare/shared";
+import { planGross, planOffer, rupeesOf } from "../lib/commercialInvoice";
 import { applySubscriptionPayment } from "../lib/subscriptionPayments";
 import { orgView } from "../lib/orgView";
 import { emailConfigured } from "../lib/mailer";
@@ -42,7 +43,7 @@ export async function platformAdminRoutes(app: FastifyInstance) {
         count(*) filter (where status = 'trial')::int as trials,
         count(*) filter (where status = 'active')::int as active,
         count(*) filter (where status = 'suspended')::int as suspended,
-        (select coalesce(sum(amount_paise), 0) from commercial_payments where status = 'paid') as "paidPaymentsPaise",
+        (select coalesce(sum(${rupeesOf("amount_paise", "currency")}), 0) from commercial_payments where status = 'paid') as "paidPaymentsPaise",
         (select count(*)::int from commercial_payments where status = 'paid') as "paymentCount"
       from organizations
       where settings_json->>'platformInternal' is distinct from 'true'
@@ -229,8 +230,8 @@ export async function platformAdminRoutes(app: FastifyInstance) {
     });
     if (!plan) throw notFound("Published plan");
     const seller = await getSellerBilling(db);
-    const due = planGross(plan, seller.invoice.gstRateBps);
-    if (body.amountPaise < due) throw conflict(`The verified amount cannot be lower than the plan price including GST (₹${(due / 100).toFixed(2)}).`, "PAYMENT_AMOUNT_TOO_LOW");
+    const offer = planOffer(plan, organization, seller.invoice.gstRateBps);
+    if (body.amountPaise < offer.payablePaise) throw conflict(`The verified amount cannot be lower than what this shop owes for the plan (${formatMoney(offer.payablePaise, offer.currency)}).`, "PAYMENT_AMOUNT_TOO_LOW");
     // A bank UTR / UPI reference identifies one incoming transfer; it can never pay for two things.
     const reference = body.reference.replace(/\s+/g, "").toUpperCase();
     const [duplicate] = await db.execute<{ organizationName: string; createdAt: string }>(sql`
@@ -253,6 +254,7 @@ export async function platformAdminRoutes(app: FastifyInstance) {
         provider: `manual_${body.method}`,
         reference: body.reference,
         amountPaise: body.amountPaise,
+        currency: offer.currency,
         payload: { verificationMode: "manual", verifiedBy: auth.userId, reason: body.reason, claimId: body.claimId },
       });
       await audit(tx, req, {

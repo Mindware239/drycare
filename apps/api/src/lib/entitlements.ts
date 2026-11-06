@@ -5,15 +5,24 @@
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
-import { allFeatures, resolveFeatures, type FeatureKey, type FeatureMap, FEATURES } from "@drycare/shared";
+import { activeOverride, allFeatures, FEATURE_KEYS, resolveFeatures, type FeatureKey, type FeatureLock, type FeatureMap, FEATURES } from "@drycare/shared";
 import { db, schema, type DbOrTx } from "../db/client";
 import { isDesktop } from "../env";
 import { AppError } from "./errors";
 import { licenseGrants } from "./license";
 
-export type SoldPrinter = { serial: string; bill: string; model: string };
-export type HardwarePolicy = { printers: string[]; scanners: string[]; rfidReaders: string[]; driverUrl: string | null; soldPrinters?: SoldPrinter[] };
+export type SoldPrinter = { serial: string; bill: string; model: string; kind?: "printer" | "scanner" };
+export type HardwarePolicy = { printers: string[]; scanners: string[]; rfidReaders: string[]; driverUrl: string | null; soldPrinters?: SoldPrinter[]; /** Paying shops must connect a registered printer and scanner. On unless switched off. */ requireDevices?: boolean };
 export const HARDWARE_POLICY_KEY = "hardware_policy";
+export const FEATURE_REGISTRY_KEY = "feature_registry";
+export type FeatureRegistry = { globallyOff: string[]; upgradeMessages: Record<string, string> };
+
+/** The software owner's settings over all customers: features switched off everywhere, and their upgrade wording. */
+export async function featureRegistry(tx: DbOrTx = db): Promise<FeatureRegistry> {
+  const row = await tx.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, FEATURE_REGISTRY_KEY) });
+  const value = (row?.value ?? {}) as Partial<FeatureRegistry>;
+  return { globallyOff: value.globallyOff ?? [], upgradeMessages: value.upgradeMessages ?? {} };
+}
 
 /** Whether this shop has a paid period of the RFID module running now. */
 export async function rfidModuleActive(orgId: string, tx: DbOrTx = db) {
@@ -28,7 +37,8 @@ export async function orgFeatures(orgId: string, tx: DbOrTx = db): Promise<Featu
   const org = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, orgId), columns: { settings: true } });
   if (!org || org.settings.platformInternal || org.settings.syncSource === "device") return features;
   // Sold separately, so a plan, a trial or an exception never includes it.
-  return { ...features, rfid: await rfidModuleActive(orgId, tx) };
+  const { globallyOff } = await featureRegistry(tx);
+  return { ...features, rfid: !globallyOff.includes("rfid") && (await rfidModuleActive(orgId, tx)) };
 }
 
 async function planFeatures(orgId: string, tx: DbOrTx): Promise<FeatureMap> {
@@ -36,25 +46,55 @@ async function planFeatures(orgId: string, tx: DbOrTx): Promise<FeatureMap> {
     const fromKey = licenseGrants()?.features;
     return fromKey ? resolveFeatures(fromKey) : allFeatures();
   }
-  const org = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, orgId), columns: { status: true, settings: true, featureOverrides: true } });
+  const org = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, orgId), columns: { status: true, settings: true, featureOverrides: true, featureOverrideExpiry: true } });
   if (!org || org.settings.platformInternal) return allFeatures();
   // The cloud copy of a shop PC is view-only and must be able to show everything the PC uploads.
   if (org.settings.syncSource === "device") return allFeatures();
+  const rules = { expiry: org.featureOverrideExpiry, globallyOff: (await featureRegistry(tx)).globallyOff };
   // A trial shows everything, so a shop can judge the higher plans before choosing one.
-  if (org.status === "trial") return resolveFeatures(null, org.featureOverrides);
+  if (org.status === "trial") return resolveFeatures(null, org.featureOverrides, rules);
   const sub = await tx.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true } });
-  if (!sub) return resolveFeatures(null, org.featureOverrides);
+  if (!sub) return resolveFeatures(null, org.featureOverrides, rules);
   const plan = await tx.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.id, sub.planId), columns: { entitlements: true } });
-  return resolveFeatures(plan?.entitlements ?? null, org.featureOverrides);
+  return resolveFeatures(plan?.entitlements ?? null, org.featureOverrides, rules);
 }
 
 export const hasFeature = async (orgId: string, feature: FeatureKey, tx: DbOrTx = db) => (await orgFeatures(orgId, tx))[feature];
 
-export const featureRefused = (feature: FeatureKey) =>
-  new AppError(403, "FEATURE_NOT_IN_PLAN", `${FEATURES[feature].label} is not included in your plan. Upgrade on Plan & billing or contact Drycare support.`, [{ feature }]);
+export const featureRefused = (feature: FeatureKey, lock?: FeatureLock) => {
+  const label = FEATURES[feature].label;
+  if (lock?.reason === "admin") return new AppError(403, "FEATURE_DISABLED", `${label} has been turned off for your business. Contact Drycare support.`, [{ feature }]);
+  if (lock?.reason === "global") return new AppError(403, "FEATURE_UNAVAILABLE", `${label} is not available at the moment.`, [{ feature }]);
+  if (lock?.reason === "license") return new AppError(403, "FEATURE_NOT_IN_PLAN", `${label} is not included in your license. Contact Drycare support.`, [{ feature }]);
+  return new AppError(403, "FEATURE_NOT_IN_PLAN", `${label} is not included in your plan. Upgrade on Plan & billing or contact Drycare support.`, [{ feature }]);
+};
 
 export async function requireFeature(orgId: string, feature: FeatureKey, tx: DbOrTx = db) {
-  if (!(await hasFeature(orgId, feature, tx))) throw featureRefused(feature);
+  if (await hasFeature(orgId, feature, tx)) return;
+  throw featureRefused(feature, (await featureLocks(orgId, tx))[feature]);
+}
+
+/** Why each switched-off feature is off for this shop, and which plans would give it. */
+export async function featureLocks(orgId: string, tx: DbOrTx = db): Promise<Partial<Record<FeatureKey, FeatureLock>>> {
+  const features = await orgFeatures(orgId, tx);
+  const off = FEATURE_KEYS.filter((key) => !features[key]);
+  if (!off.length) return {};
+  if (isDesktop) return Object.fromEntries(off.map((key) => [key, { reason: "license", plans: [], currentPlan: null, message: null }]));
+  const [org, registry, plans, sub] = await Promise.all([
+    tx.query.organizations.findFirst({ where: eq(schema.organizations.id, orgId), columns: { featureOverrides: true, featureOverrideExpiry: true } }),
+    featureRegistry(tx),
+    tx.query.commercialPlans.findMany({ where: eq(schema.commercialPlans.published, true), orderBy: [schema.commercialPlans.sortOrder, schema.commercialPlans.pricePaise], columns: { id: true, name: true, entitlements: true } }),
+    tx.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true } }),
+  ]);
+  // A retired plan is no longer offered, but a shop still on it should see its name.
+  const currentPlan = sub ? (await tx.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.id, sub.planId), columns: { name: true } }))?.name ?? null : null;
+  return Object.fromEntries(off.map((key): [FeatureKey, FeatureLock] => {
+    const message = registry.upgradeMessages[key] ?? null;
+    if (registry.globallyOff.includes(key)) return [key, { reason: "global", plans: [], currentPlan, message: null }];
+    if (key === "rfid") return [key, { reason: "addon", plans: [], currentPlan, message }];
+    if (activeOverride(key, org?.featureOverrides, { expiry: org?.featureOverrideExpiry }) === false) return [key, { reason: "admin", plans: [], currentPlan, message: null }];
+    return [key, { reason: "plan", plans: plans.filter((p) => resolveFeatures(p.entitlements)[key]).map((p) => p.name), currentPlan, message }];
+  }));
 }
 
 /** Whole screens that belong to one feature. The tag designer is checked where tags are saved and printed. */
@@ -67,13 +107,25 @@ const FEATURE_ROUTES: [RegExp, FeatureKey][] = [
   [/^\/api\/v1\/(membership-plans|customer-memberships)(\/|$)/, "customerMemberships"],
   [/^\/api\/v1\/customers\/[^/]+\/memberships(\/|$)/, "customerMemberships"],
   [/^\/api\/v1\/rfid(\/|$)/, "rfid"],
+  [/^\/api\/v1\/reports(\/|$)/, "reports"],
+  [/^\/api\/v1\/expenses(\/|$)/, "expenses"],
+  [/^\/api\/v1\/claims(\/|$)/, "claims"],
+  [/^\/api\/v1\/garment-exceptions(\/|$)/, "garmentExceptions"],
+  [/^\/api\/v1\/transfers(\/|$)/, "transfers"],
+  [/^\/api\/v1\/production\/(queues|overdue)(\/|$)/, "productionBoard"],
+  [/^\/api\/v1\/tags\/trace(\/|$)/, "tagTracking"],
+  [/^\/api\/v1\/system\/integrations(\/|$)/, "integrations"],
+  [/^\/api\/v1\/audit-logs(\/|$)/, "auditLog"],
+  [/^\/api\/v1\/staff\/(attendance|leaves)(\/|$)/, "staffManagement"],
 ];
+/** The staff list is also read by other screens to name people, so only changes to it are stopped. */
+const STAFF_CHANGE = /^\/api\/v1\/staff(\/|$)/;
 
 export async function assertFeatureAllowed(req: FastifyRequest) {
   const path = req.url.split("?")[0];
-  const match = FEATURE_ROUTES.find(([route]) => route.test(path));
-  if (!match || !req.auth?.orgId || req.auth.isPlatformAdmin) return;
-  await requireFeature(req.auth.orgId, match[1]);
+  const feature = FEATURE_ROUTES.find(([route]) => route.test(path))?.[1] ?? (req.method !== "GET" && STAFF_CHANGE.test(path) ? "staffManagement" : undefined);
+  if (!feature || !req.auth?.orgId || req.auth.isPlatformAdmin) return;
+  await requireFeature(req.auth.orgId, feature);
 }
 
 /** Without SMS / WhatsApp on the plan, a customer who has an email address still hears about their order. */
@@ -113,5 +165,5 @@ export async function hardwarePolicy(tx: DbOrTx = db): Promise<HardwarePolicy> {
   }
   const row = await tx.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, HARDWARE_POLICY_KEY) });
   const value = (row?.value ?? {}) as Partial<HardwarePolicy>;
-  return { printers: value.printers ?? [], scanners: value.scanners ?? [], rfidReaders: value.rfidReaders ?? [], driverUrl: value.driverUrl ?? null };
+  return { printers: value.printers ?? [], scanners: value.scanners ?? [], rfidReaders: value.rfidReaders ?? [], driverUrl: value.driverUrl ?? null, requireDevices: value.requireDevices ?? true };
 }

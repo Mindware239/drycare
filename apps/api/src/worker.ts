@@ -5,7 +5,7 @@
  */
 import { remindExpiringMemberships } from "./lib/memberships";
 import { and, eq, lte, sql } from "drizzle-orm";
-import { formatMoney } from "@drycare/shared";
+import { formatMoney, resolveRegion } from "@drycare/shared";
 import { db, schema } from "./db/client";
 import { env } from "./env";
 import { customerChannel } from "./lib/entitlements";
@@ -51,13 +51,16 @@ async function buildMessage(eventType: string, payload: Record<string, unknown>,
     })
     : undefined;
   const shop = org?.name ?? "DryCare";
-  const fmtDay = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" });
-  const fmtDate = (d: Date) => d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+  const region = resolveRegion(org);
+  const textLocale = region.country === "IN" ? "en-IN" : "en-GB";
+  const fmtMoney = (minor: number) => formatMoney(minor, region.currency);
+  const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(textLocale, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+  const fmtDate = (d: Date) => d.toLocaleString(textLocale, { timeZone: region.timezone, dateStyle: "medium", timeStyle: "short" });
   let body: string | undefined;
   switch (eventType) {
     case "order.booked": {
       const [{ n }] = await db.execute<{ n: number }>(sql`select count(*)::int as n from garments where order_id = ${order!.id}`);
-      body = `${shop}: Order ${order!.orderNumber} booked — ${n} item(s), total ${formatMoney(order!.grandTotal)}. Expected ready by ${fmtDate(order!.promisedAt)}.`;
+      body = `${shop}: Order ${order!.orderNumber} booked — ${n} item(s), total ${fmtMoney(order!.grandTotal)}. Expected ready by ${fmtDate(order!.promisedAt)}.`;
       break;
     }
     case "membership.sold": {
@@ -97,7 +100,7 @@ async function buildMessage(eventType: string, payload: Record<string, unknown>,
       body = `${shop}: We couldn't complete your ${eventType.startsWith("pickup") ? "pickup" : `delivery of ${order!.orderNumber}`} today. We'll call you to reschedule.`;
       break;
     case "payment.received":
-      body = `${shop}: Payment of ${formatMoney(payload.amount as number)} received via ${String(payload.method).toUpperCase()}. Thank you.`;
+      body = `${shop}: Payment of ${fmtMoney(payload.amount as number)} received via ${String(payload.method).toUpperCase()}. Thank you.`;
       break;
     case "customer.approval_otp":
       body = `${shop}: Your customer approval code for order ${order?.orderNumber ?? ""} is ${String(payload.otp)}. It expires in 10 minutes. Share it only with the DryCare staff member handling your order.`;
@@ -214,7 +217,7 @@ async function sendQueued() {
           store_phone: "",
           campaign_name: campaign.name,
           coupon_code: campaign.couponCode ?? "",
-          coupon_expiry_date: campaign.couponExpiresAt?.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" }) ?? "",
+          coupon_expiry_date: campaign.couponExpiresAt?.toLocaleDateString("en-GB", { dateStyle: "medium" }) ?? "",
         };
         const render = (text: string) => text.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_match, variable: string) => replacements[variable] ?? "");
         body = render(job.body);

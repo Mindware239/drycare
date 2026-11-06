@@ -32,7 +32,7 @@ export default function RevenuePage() {
           <Field label="From"><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
           <Field label="To"><Input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} /></Field>
           <Button type="submit" loading={loading && Boolean(data)}>Apply</Button>
-          <div className="flex gap-2 sm:ml-auto">
+          <div className="flex gap-2 sm:ms-auto">
             {[["30 days", 29], ["Quarter", 89], ["Year", 364]].map(([label, days]) => (
               <Button key={label} type="button" variant="secondary" size="sm" onClick={() => { const f = iso(new Date(Date.now() - Number(days) * 86_400_000)); const t = iso(new Date()); setFrom(f); setTo(t); setApplied({ from: f, to: t }); }}>{label}</Button>
             ))}

@@ -1,3 +1,5 @@
+import { formatMoney, startingPrice } from "@drycare/shared";
+import { orgRegion, zone } from "../lib/region";
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import bwipjs from "bwip-js";
@@ -76,7 +78,7 @@ async function buildQuote(tx: Tx | typeof db, auth: AuthContext, body: QuoteBody
   }
   const laundryRule: LaundryRule = { method: rule.method as LaundryPricingMethod, unitPrice: rule.unitPrice, minWeightGrams: rule.minWeightGrams, weightIncrementGrams: rule.weightIncrementGrams, minMinutes: rule.minMinutes, minimumCharge: rule.minimumCharge, packageLabel: rule.packageLabel };
   try {
-    const q = quoteLaundry(laundryRule, { weightGrams: body.weightGrams, units: body.units, items, discount: body.discount, taxBps: service.taxBps });
+    const q = quoteLaundry(laundryRule, { weightGrams: body.weightGrams, units: body.units, items, discount: body.discount, taxBps: service.taxBps, taxIncluded: (await orgRegion(auth.orgId, tx)).pricesIncludeTax });
     if (body.discount?.type === "fixed" && !can(auth, "discounts.approve")) {
       const org = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId), columns: { settings: true } });
       const limit = org?.settings.maxDiscountBpsWithoutApproval ?? 1000;
@@ -194,16 +196,17 @@ const machineBody = z.object({
 export async function installLaundryDefaults(tx: Tx, orgId: string) {
   const existing = await tx.select({ code: schema.laundryServices.code }).from(schema.laundryServices).where(eq(schema.laundryServices.organizationId, orgId));
   let added = 0;
+  const region = await orgRegion(orgId, tx);
   for (const [i, def] of DEFAULT_LAUNDRY_SERVICES.entries()) {
     if (existing.some((e) => e.code === def.code)) continue;
-    const [svc] = await tx.insert(schema.laundryServices).values({ organizationId: orgId, code: def.code, name: def.name, machineTypes: def.machineTypes, sortOrder: i }).returning();
+    const [svc] = await tx.insert(schema.laundryServices).values({ organizationId: orgId, code: def.code, name: def.name, machineTypes: def.machineTypes, sortOrder: i, taxBps: region.defaultTaxBps }).returning();
     for (const [method, r] of Object.entries(def.rules)) {
       await tx.insert(schema.laundryPricingRules).values({
-        organizationId: orgId, serviceId: svc.id, method, unitPrice: r.unitPrice, minWeightGrams: r.minWeightGrams ?? 0,
-        weightIncrementGrams: r.weightIncrementGrams ?? 100, minMinutes: r.minMinutes ?? 0, minimumCharge: r.minimumCharge ?? 0, packageLabel: r.packageLabel ?? null,
+        organizationId: orgId, serviceId: svc.id, method, unitPrice: startingPrice(r.unitPrice, region.currency), minWeightGrams: r.minWeightGrams ?? 0,
+        weightIncrementGrams: r.weightIncrementGrams ?? 100, minMinutes: r.minMinutes ?? 0, minimumCharge: startingPrice(r.minimumCharge ?? 0, region.currency), packageLabel: r.packageLabel ?? null,
       });
     }
-    if (def.items?.length) await tx.insert(schema.laundryItemRates).values(def.items.map(([name, price], n) => ({ organizationId: orgId, serviceId: svc.id, name, unitPrice: price, sortOrder: n })));
+    if (def.items?.length) await tx.insert(schema.laundryItemRates).values(def.items.map(([name, price], n) => ({ organizationId: orgId, serviceId: svc.id, name, unitPrice: startingPrice(price, region.currency), sortOrder: n })));
     added++;
   }
   return { added };
@@ -277,9 +280,9 @@ export async function laundryRoutes(app: FastifyInstance) {
       code: z.string().trim().toUpperCase().regex(/^[A-Z0-9_]{2,10}$/),
       name: z.string().trim().min(2).max(60),
       machineTypes: z.array(z.enum(LAUNDRY_MACHINE_TYPES)).min(1).max(3),
-      taxBps: z.number().int().min(0).max(2800).default(1800),
+      taxBps: z.number().int().min(0).max(5000).optional(),
     }).parse(req.body);
-    const [row] = await db.insert(schema.laundryServices).values({ organizationId: auth.orgId, ...body }).returning();
+    const [row] = await db.insert(schema.laundryServices).values({ organizationId: auth.orgId, ...body, taxBps: body.taxBps ?? (await orgRegion(auth.orgId)).defaultTaxBps }).returning();
     await audit(db, req, { action: "laundry.service_created", resourceType: "laundry_service", resourceId: row.id, after: row });
     reply.code(201);
     return row;
@@ -315,7 +318,7 @@ export async function laundryRoutes(app: FastifyInstance) {
       packageLabel: z.string().trim().max(80).nullable().optional(),
     }).parse(req.body);
     if (body.branchId) assertBranchAccess(auth, body.branchId);
-    if (body.enabled && method !== "item" && body.unitPrice <= 0) throw badRequest("Set a price above ₹0 before enabling this pricing method");
+    if (body.enabled && method !== "item" && body.unitPrice <= 0) throw badRequest("Set a price above zero before enabling this pricing method");
     const service = await db.query.laundryServices.findFirst({ where: and(eq(schema.laundryServices.id, id), eq(schema.laundryServices.organizationId, auth.orgId)) });
     if (!service) throw notFound("Service");
     return db.transaction(async (tx) => {
@@ -528,8 +531,8 @@ export async function laundryRoutes(app: FastifyInstance) {
       from laundry_orders o join customers c on c.id = o.customer_id join branches b on b.id = o.branch_id
       where o.organization_id = ${auth.orgId} ${branchFilter}
         ${q.status ? sql`and o.status = ${q.status}` : sql``}
-        ${q.from ? sql`and (o.created_at at time zone 'Asia/Kolkata')::date >= ${q.from}::date` : sql``}
-        ${q.to ? sql`and (o.created_at at time zone 'Asia/Kolkata')::date <= ${q.to}::date` : sql``}
+        ${q.from ? sql`and (o.created_at at time zone ${zone(auth.timezone)})::date >= ${q.from}::date` : sql``}
+        ${q.to ? sql`and (o.created_at at time zone ${zone(auth.timezone)})::date <= ${q.to}::date` : sql``}
         ${term ? sql`and (o.order_number ilike ${term} or o.guest_name ilike ${term} or o.guest_phone ilike ${term} or c.name ilike ${term} or c.phone ilike ${term})` : sql``}
       order by o.created_at desc limit 300`);
   });
@@ -608,7 +611,7 @@ export async function laundryRoutes(app: FastifyInstance) {
       if (session.status === "running") return { alreadyRunning: true as const, order: await orderDetail(tx, auth.orgId, order.id) };
       if (session.status !== "reserved") throw unprocessable(`This cycle is ${session.status}`, "SESSION_NOT_RESERVED");
       const { paid } = await orderPaid(tx, order.id);
-      if (paid < order.total) throw unprocessable(`Collect the full payment before starting the machine (₹${((order.total - paid) / 100).toFixed(2)} due)`, "PAYMENT_REQUIRED");
+      if (paid < order.total) throw unprocessable(`Collect the full payment before starting the machine (${formatMoney(order.total - paid, auth.currency)} due)`, "PAYMENT_REQUIRED");
       const [machine] = await tx.select().from(schema.laundryMachines).where(eq(schema.laundryMachines.id, session.machineId)).for("update");
       if (!machine || machine.status !== "reserved") throw conflict(machine ? `${machine.name} is ${machine.status.replaceAll("_", " ")}` : "This machine no longer exists", "MACHINE_UNAVAILABLE");
       const result = await adapterFor(machine).start(machine, { sessionId: session.id, programName: session.programName ?? "Standard", durationMinutes: session.durationMinutes });
@@ -722,7 +725,7 @@ export async function laundryRoutes(app: FastifyInstance) {
       if (sessions.some((s) => ["running", "completed"].includes(s.status))) throw unprocessable("A machine has already been used for this order. Finish it and refund separately if needed.", "CYCLE_USED");
       const { paid } = await orderPaid(tx, id);
       if (paid > 0) {
-        if (!body.refundMethod) throw unprocessable(`₹${(paid / 100).toFixed(2)} was paid. Choose how to refund it.`, "REFUND_REQUIRED");
+        if (!body.refundMethod) throw unprocessable(`${formatMoney(paid, auth.currency)} was paid. Choose how to refund it.`, "REFUND_REQUIRED");
         if (!can(auth, "payments.refund")) throw forbidden("A manager must approve the refund");
         const shift = await openShiftFor(tx, auth, order.branchId);
         let remaining = paid;
@@ -755,7 +758,7 @@ export async function laundryRoutes(app: FastifyInstance) {
     const q = z.object({ branchId: uuid.optional(), from: z.iso.date(), to: z.iso.date() }).parse(req.query);
     if (q.branchId) assertBranchAccess(auth, q.branchId);
     const branchFilter = q.branchId ? sql`and o.branch_id = ${q.branchId}` : auth.branchIds.length ? sql`and o.branch_id = any(${`{${auth.branchIds.join(",")}}`}::uuid[])` : sql``;
-    const range = sql`(o.created_at at time zone 'Asia/Kolkata')::date between ${q.from}::date and ${q.to}::date`;
+    const range = sql`(o.created_at at time zone ${zone(auth.timezone)})::date between ${q.from}::date and ${q.to}::date`;
     const where = sql`o.organization_id = ${auth.orgId} ${branchFilter} and ${range}`;
     const paidExpr = sql`(coalesce((select sum(pa.allocated_amount) from payment_allocations pa join payments p on p.id = pa.payment_id where pa.laundry_order_id = o.id and p.status = 'succeeded'), 0))`;
     const refundExpr = sql`(coalesce((select sum(r.amount) from refunds r where r.laundry_order_id = o.id and r.status = 'succeeded'), 0))`;
@@ -782,13 +785,13 @@ export async function laundryRoutes(app: FastifyInstance) {
                count(s.id) filter (where s.status = 'failed')::int as failures,
                coalesce(sum(distinct_orders.revenue), 0) as revenue
         from laundry_machines m join branches b on b.id = m.branch_id
-        left join laundry_sessions s on s.machine_id = m.id and (s.created_at at time zone 'Asia/Kolkata')::date between ${q.from}::date and ${q.to}::date
+        left join laundry_sessions s on s.machine_id = m.id and (s.created_at at time zone ${zone(auth.timezone)})::date between ${q.from}::date and ${q.to}::date
         left join lateral (select o.total as revenue from laundry_orders o where o.id = s.order_id and s.status = 'completed'
                            and s.id = (select s2.id from laundry_sessions s2 where s2.order_id = o.id and s2.status = 'completed' order by s2.created_at limit 1)) distinct_orders on true
         where m.organization_id = ${auth.orgId} ${q.branchId ? sql`and m.branch_id = ${q.branchId}` : auth.branchIds.length ? sql`and m.branch_id = any(${`{${auth.branchIds.join(",")}}`}::uuid[])` : sql``}
         group by m.id, b.branch_code order by m.machine_type, m.code`),
       db.execute(sql`select b.name as label, count(*)::int as orders, coalesce(sum(o.total), 0) as revenue from laundry_orders o join branches b on b.id = o.branch_id where ${where} and o.status <> 'cancelled' group by 1 order by 3 desc`),
-      db.execute(sql`select to_char((o.created_at at time zone 'Asia/Kolkata')::date, 'YYYY-MM-DD') as day, count(*)::int as orders, coalesce(sum(o.total), 0) as revenue from laundry_orders o where ${where} and o.status <> 'cancelled' group by 1 order by 1`),
+      db.execute(sql`select to_char((o.created_at at time zone ${zone(auth.timezone)})::date, 'YYYY-MM-DD') as day, count(*)::int as orders, coalesce(sum(o.total), 0) as revenue from laundry_orders o where ${where} and o.status <> 'cancelled' group by 1 order by 1`),
     ]);
     const openMaintenance = await db.execute(sql`
       select mt.id, mt.kind, mt.notes, mt.started_at as "startedAt", m.name as machine, m.code

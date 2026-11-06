@@ -1,4 +1,5 @@
 "use client";
+import { currentRegion } from "@/lib/format";
 import { useMemo, useState } from "react";
 import { Banknote, CircleCheck, CircleMinus, CirclePlus, Clock3, CreditCard, Landmark, Lock, Receipt, Smartphone, Wallet } from "lucide-react";
 import { api, ApiError, useApi } from "@/lib/api";
@@ -141,16 +142,16 @@ export default function CashierPage() {
                 {recon.data.map((r) => (
                   <tr key={r.method}>
                     <Td className="font-medium">{METHOD_META[r.method]?.label ?? r.method}</Td>
-                    <Td className="text-right tabular-nums">{money(r.collected)}</Td>
-                    <Td className="text-right tabular-nums">{Number(r.refunded) ? `− ${money(r.refunded)}` : "—"}</Td>
-                    <Td className="text-right font-medium tabular-nums">{money(r.net)}</Td>
+                    <Td className="text-end tabular-nums">{money(r.collected)}</Td>
+                    <Td className="text-end tabular-nums">{Number(r.refunded) ? `− ${money(r.refunded)}` : "—"}</Td>
+                    <Td className="text-end font-medium tabular-nums">{money(r.net)}</Td>
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
                   <Td>Total</Td>
-                  <Td className="text-right tabular-nums">{money(reconTotal.collected)}</Td>
-                  <Td className="text-right tabular-nums">{reconTotal.refunded ? `− ${money(reconTotal.refunded)}` : "—"}</Td>
-                  <Td className="text-right tabular-nums">{money(reconTotal.net)}</Td>
+                  <Td className="text-end tabular-nums">{money(reconTotal.collected)}</Td>
+                  <Td className="text-end tabular-nums">{reconTotal.refunded ? `− ${money(reconTotal.refunded)}` : "—"}</Td>
+                  <Td className="text-end tabular-nums">{money(reconTotal.net)}</Td>
                 </tr>
               </Table>
             </>
@@ -168,8 +169,8 @@ export default function CashierPage() {
                   <Td>{branchCode}</Td>
                   <Td>{dateTime(s.openedAt)}</Td>
                   <Td>{s.closedAt ? duration(s.openedAt, s.closedAt) : <Badge color="green">Open now</Badge>}</Td>
-                  <Td className="text-right tabular-nums">{s.closedAt ? money(s.expectedCash) : "—"}</Td>
-                  <Td className="text-right tabular-nums">{s.closedAt ? money(s.countedCash) : "—"}</Td>
+                  <Td className="text-end tabular-nums">{s.closedAt ? money(s.expectedCash) : "—"}</Td>
+                  <Td className="text-end tabular-nums">{s.closedAt ? money(s.countedCash) : "—"}</Td>
                   <Td>{!s.closedAt ? "—" : s.difference === 0 ? <Badge color="green">Matched</Badge> : s.difference < 0 ? <Badge color="red">Short {money(-s.difference)}</Badge> : <Badge color="amber">Over {money(s.difference)}</Badge>}</Td>
                 </tr>
               ))}
@@ -235,17 +236,19 @@ function CloseShiftModal({ shift, onClose, onClosed }: { shift: any; onClose: ()
       {err && <Alert>{err}</Alert>}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_240px]">
         <div>
+          {currentRegion().country === "IN" && <>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Notes & coins</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {DENOMINATIONS.map((d) => (
               <label key={d} className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5">
                 <span className="w-10 shrink-0 text-sm font-semibold text-slate-700">₹{d}</span>
                 <span className="text-slate-300">×</span>
-                <Input inputMode="numeric" value={counts[d] ?? ""} onChange={(e) => { setManual(""); setCounts({ ...counts, [d]: e.target.value.replace(/\D/g, "").slice(0, 5) }); }} className="h-8 min-w-12 px-2 text-right" aria-label={`Number of ₹${d}`} placeholder="0" />
+                <Input inputMode="numeric" value={counts[d] ?? ""} onChange={(e) => { setManual(""); setCounts({ ...counts, [d]: e.target.value.replace(/\D/g, "").slice(0, 5) }); }} className="h-8 min-w-12 px-2 text-end" aria-label={`Number of ₹${d}`} placeholder="0" />
               </label>
             ))}
           </div>
-          <Field label="Or enter the counted total (₹)" className="mt-3">
+          </>}
+          <Field label={currentRegion().country === "IN" ? "Or enter the counted total (₹)" : "Counted total (₹)"} className="mt-3">
             <Input inputMode="decimal" value={manual} onChange={(e) => setManual(e.target.value.replace(/[^0-9.]/g, ""))} placeholder={fromNotes ? (fromNotes / 100).toFixed(2) : "0.00"} className="w-48" />
           </Field>
         </div>

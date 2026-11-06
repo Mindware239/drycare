@@ -1,8 +1,12 @@
 "use client";
+import { setRegion } from "@/lib/format";
+import { applyShopLanguage } from "@/lib/i18n";
+import { LanguagePicker } from "@/components/I18nRoot";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Lock,
   Bike,
   Boxes,
   ShieldAlert,
@@ -49,6 +53,7 @@ import { api } from "@/lib/api";
 import { SessionProvider, useSession, type Session } from "@/lib/session";
 import { Spinner, cx } from "@/components/ui";
 import { Logo } from "@/components/Brand";
+import { FeatureLocked } from "@/components/FeatureLocked";
 import { PlanBanner } from "@/components/PlanBanner";
 import { SyncStatus } from "@/components/SyncStatus";
 
@@ -69,12 +74,12 @@ const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; g
   { href: "/pos", label: "New order", icon: ShoppingBag, perm: "orders.create", group: "store" },
   { href: "/orders", label: "Orders", icon: ClipboardList, perm: "orders.read", group: "store" },
   { href: "/customers", label: "Customers", icon: Users, perm: "customers.read", group: "store" },
-  { href: "/production", label: "Production board", icon: Factory, perm: "orders.read", group: "garments" },
+  { href: "/production", label: "Production board", icon: Factory, perm: "orders.read", group: "garments", feature: "productionBoard" },
   { href: "/scan", label: "Scan station", icon: ScanLine, perm: "garments.process", group: "garments" },
-  { href: "/tags", label: "Tag tracking", icon: Barcode, perm: "orders.read", group: "garments" },
+  { href: "/tags", label: "Tag tracking", icon: Barcode, perm: "orders.read", group: "garments", feature: "tagTracking" },
   { href: "/rfid", label: "RFID", icon: Radio, perm: "orders.read", group: "garments", feature: "rfid" },
-  { href: "/transfers", label: "Facility transfers", icon: Truck, perm: "orders.read", group: "garments" },
-  { href: "/exceptions", label: "Garment exceptions", icon: TriangleAlert, perm: "orders.read", group: "garments" },
+  { href: "/transfers", label: "Facility transfers", icon: Truck, perm: "orders.read", group: "garments", feature: "transfers" },
+  { href: "/exceptions", label: "Garment exceptions", icon: TriangleAlert, perm: "orders.read", group: "garments", feature: "garmentExceptions" },
   { href: "/laundry", label: "Machines & live status", icon: WashingMachine, perm: "laundry.view", group: "laundry", feature: "laundry" },
   { href: "/laundry/new", label: "New self-service order", icon: CirclePlus, perm: "laundry.operate", group: "laundry", feature: "laundry" },
   { href: "/laundry/orders", label: "Self-service orders", icon: ClipboardList, perm: "laundry.view", group: "laundry", feature: "laundry" },
@@ -83,18 +88,18 @@ const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; g
   { href: "/deliveries", label: "Pickups & deliveries", icon: Truck, perm: "deliveries.manage", group: "logistics", feature: "deliveries" },
   { href: "/driver", label: "My deliveries", icon: Bike, perm: "deliveries.drive", group: "logistics", feature: "deliveries" },
   { href: "/cashier", label: "Cashier & shifts", icon: Wallet, perm: "payments.collect", group: "finance" },
-  { href: "/expenses", label: "Expenses", icon: Receipt, perm: "expenses.manage", group: "finance" },
+  { href: "/expenses", label: "Expenses", icon: Receipt, perm: "expenses.manage", group: "finance", feature: "expenses" },
   { href: "/inventory", label: "Stock & purchasing", icon: Boxes, perm: "inventory.manage", group: "finance", feature: "inventory" },
-  { href: "/reports", label: "Reports", icon: ChartColumn, perm: "reports.view", group: "finance" },
+  { href: "/reports", label: "Reports", icon: ChartColumn, perm: "reports.view", group: "finance", feature: "reports" },
   { href: "/memberships", label: "Memberships", icon: Crown, perm: "customers.read", group: "engagement", feature: "customerMemberships" },
-  { href: "/claims", label: "Claims & complaints", icon: ShieldAlert, perm: "complaints.manage", group: "engagement" },
+  { href: "/claims", label: "Claims & complaints", icon: ShieldAlert, perm: "complaints.manage", group: "engagement", feature: "claims" },
   { href: "/campaigns", label: "Marketing campaigns", icon: Megaphone, perm: "org.manage", group: "engagement", feature: "marketing" },
   { href: "/catalogue", label: "Services & prices", icon: Tags, perm: "catalogue.manage", group: "admin" },
-  { href: "/integrations", label: "Integrations & notifications", icon: Mail, perm: "org.manage", group: "admin" },
-  { href: "/staff", label: "Staff & roles", icon: UserCog, perm: "staff.manage", group: "admin" },
+  { href: "/integrations", label: "Integrations & notifications", icon: Mail, perm: "org.manage", group: "admin", feature: "integrations" },
+  { href: "/staff", label: "Staff & roles", icon: UserCog, perm: "staff.manage", group: "admin", feature: "staffManagement" },
   { href: "/settings", label: "Business settings", icon: Settings, perm: "branches.manage", group: "admin" },
   { href: "/billing", label: "Plan & billing", icon: CreditCard, perm: "org.manage", group: "admin" },
-  { href: "/audit", label: "Audit & messages", icon: ShieldCheck, perm: "audit.view", group: "admin" },
+  { href: "/audit", label: "Audit & messages", icon: ShieldCheck, perm: "audit.view", group: "admin", feature: "auditLog" },
 ];
 
 const INITIAL_GROUPS: Record<NavGroupId, boolean> = {
@@ -113,13 +118,15 @@ function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const lockedFeature = NAV.find((item) => item.feature && !has(item.feature) && (pathname === item.href || pathname.startsWith(`${item.href}/`)))?.feature;
   const searchRef = useRef<HTMLInputElement>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState(INITIAL_GROUPS);
   const items = useMemo(
-    () => NAV.filter((item) => (!item.perm || can(item.perm)) && (!item.feature || has(item.feature)) && (item.href !== "/campaigns" || session.role.key === "owner")),
-    [can, has, session.role.key],
+    () => // A feature the shop could get by upgrading stays in the menu with a lock. One switched off for them does not.
+    NAV.filter((item) => (!item.perm || can(item.perm)) && (!item.feature || has(item.feature) || session.featureLocks?.[item.feature]?.reason === "plan") && (item.href !== "/campaigns" || session.role.key === "owner")),
+    [can, has, session.role.key, session.featureLocks],
   );
   const visibleGroups = useMemo(
     () => NAV_GROUPS.map((group) => ({ ...group, items: items.filter((item) => item.group === group.id) })).filter((group) => group.items.length > 0),
@@ -150,7 +157,7 @@ function Shell({ children }: { children: ReactNode }) {
   }, [activeGroup, pathname]);
   useEffect(() => {
     const here = NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-    if (here && ((here.perm && !can(here.perm)) || (here.feature && !has(here.feature))) && items[0]) router.replace(items[0].href);
+    if (here && here.perm && !can(here.perm) && items[0]) router.replace(items[0].href);
   }, [pathname, can, has, items, router]);
 
   // Ctrl K jumps to search from anywhere. Escape clears it.
@@ -246,6 +253,7 @@ function Shell({ children }: { children: ReactNode }) {
               {(expanded || compactNav) && (
                 <div className={cx("space-y-0.5", compactNav ? "mt-1" : "mt-0.5")}>
                   {group.items.map((item) => {
+                    const lockedItem = !!item.feature && !has(item.feature);
                     // Highlight only the closest match, so /laundry/new does not also light up /laundry.
                     const active = item.href === activeHref;
                     return (
@@ -265,7 +273,8 @@ function Shell({ children }: { children: ReactNode }) {
                       >
                         <item.icon aria-hidden="true" className={cx("h-[17px] w-[17px] shrink-0", active ? "text-brand-600" : theme === "dark" ? "text-slate-400 group-hover:text-slate-200" : "text-slate-500 group-hover:text-slate-700")} strokeWidth={1.9} />
                         {!compactNav && <span className="truncate">{item.label}</span>}
-                        {active && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-r bg-brand-600" />}
+                        {lockedItem && !compactNav && <Lock aria-label="Not in your plan" className="ms-auto h-3.5 w-3.5 shrink-0 text-slate-400" />}
+                        {active && <span aria-hidden="true" className="absolute inset-y-2 start-0 w-0.5 rounded-e bg-brand-600" />}
                       </Link>
                     );
                   })}
@@ -289,7 +298,7 @@ function Shell({ children }: { children: ReactNode }) {
     </nav>
   );
 
-  const contentWidth = sidebarCollapsed ? "lg:pl-[4.25rem]" : "lg:pl-[16.25rem]";
+  const contentWidth = sidebarCollapsed ? "lg:ps-[4.25rem]" : "lg:ps-[16.25rem]";
   const activeBranch = session.branches.find((branch) => branch.id === branchId);
   const activeGroupLabel = NAV_GROUPS.find((group) => group.id === currentItem?.group)?.label;
   const showDashboardCrumb = can("reports.view") && currentItem?.href !== "/dashboard";
@@ -302,12 +311,12 @@ function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className={cx("min-h-screen pt-16 transition-[padding] duration-200 print:pt-0", contentWidth)}>
-      <aside className={cx("no-print fixed bottom-0 left-0 top-16 z-30 hidden border-r transition-[width] duration-200 lg:block", sidebarCollapsed ? "w-[4.25rem]" : "w-[16.25rem]", theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white")}>{nav}</aside>
+      <aside className={cx("no-print fixed bottom-0 start-0 top-16 z-30 hidden border-e transition-[width] duration-200 lg:block", sidebarCollapsed ? "w-[4.25rem]" : "w-[16.25rem]", theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white")}>{nav}</aside>
       {mobileNavOpen && (
         <div className="no-print fixed inset-0 z-50 lg:hidden">
           <button type="button" className="absolute inset-0 bg-slate-950/45" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation menu" />
-          <aside className={cx("absolute inset-y-0 left-0 w-72 border-r", theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white")}>
-            <button type="button" onClick={() => setMobileNavOpen(false)} className={cx("absolute right-3 top-5 z-10 rounded-md p-1", theme === "dark" ? "text-slate-400" : "text-slate-600")} aria-label="Close menu"><X className="h-5 w-5" /></button>
+          <aside className={cx("absolute inset-y-0 start-0 w-72 border-e", theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white")}>
+            <button type="button" onClick={() => setMobileNavOpen(false)} className={cx("absolute end-3 top-5 z-10 rounded-md p-1", theme === "dark" ? "text-slate-400" : "text-slate-600")} aria-label="Close menu"><X className="h-5 w-5" /></button>
             {nav}
           </aside>
         </div>
@@ -316,20 +325,20 @@ function Shell({ children }: { children: ReactNode }) {
         <button type="button" className="rounded-md p-2 lg:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
         <Link href="/dashboard" className="flex shrink-0 items-center gap-2" aria-label="Drycare home"><Logo dark className="h-7 w-auto" /><span className="hidden font-[Urbanist] text-lg font-bold tracking-tight text-white sm:inline">Drycare</span></Link>
         {(can("orders.read") || can("customers.read")) && (
-          <form onSubmit={search} role="search" className="relative min-w-0 max-w-xl flex-1 lg:ml-2">
-            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <form onSubmit={search} role="search" className="relative min-w-0 max-w-xl flex-1 lg:ms-2">
+            <Search aria-hidden="true" className="pointer-events-none absolute start-3 top-2.5 h-4 w-4 text-slate-400" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               ref={searchRef} placeholder="Search customer, phone, order, tag or RFID"
-              className={cx("h-10 w-full rounded-full border py-2 pl-9 pr-16 text-sm focus:border-[#3cbf5a] focus:outline-none focus:ring-4 focus:ring-[#3cbf5a]/25", "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500")}
+              className={cx("h-10 w-full rounded-full border py-2 ps-9 pe-16 text-sm focus:border-[#3cbf5a] focus:outline-none focus:ring-4 focus:ring-[#3cbf5a]/25", "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500")}
               aria-label="Global search"
               aria-keyshortcuts="Control+K"
             />
-            <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-2.5 hidden rounded border border-slate-600 px-1.5 text-[11px] font-semibold text-slate-300 sm:block">Ctrl K</kbd>
+            <kbd aria-hidden="true" className="pointer-events-none absolute end-3 top-2.5 hidden rounded border border-slate-600 px-1.5 text-[11px] font-semibold text-slate-300 sm:block">Ctrl K</kbd>
           </form>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="ms-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {session.branches.length > 1 ? (
             <label className="flex items-center gap-2">
               <span className="hidden text-xs font-medium text-slate-500 xl:inline">Branch</span>
@@ -339,6 +348,7 @@ function Shell({ children }: { children: ReactNode }) {
             </label>
           ) : activeBranch && <span className={cx("hidden max-w-52 truncate text-sm sm:inline", "text-slate-300")}>{activeBranch.name}</span>}
           {session.organization.status === "trial" && <span className="hidden rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 md:inline">Trial</span>}
+          <span className="hidden md:block"><LanguagePicker tone="dark" /></span>
           <SyncStatus dark canManage={can("org.manage")} />
           {can("audit.view") && (
             <Link href="/audit" aria-label="Open audit log and customer messages" title="Audit & messages" className={cx("hidden h-9 w-9 items-center justify-center rounded-md sm:inline-flex", "text-slate-300 hover:bg-slate-800")}>
@@ -352,10 +362,10 @@ function Shell({ children }: { children: ReactNode }) {
           <details className="relative">
             <summary className={cx("flex h-9 cursor-pointer list-none items-center gap-2 rounded-md px-2 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-500", "hover:bg-slate-800")} aria-label="Open user and session menu">
               <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-800">{session.user.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span>
-              <span className={cx("hidden max-w-36 truncate text-left text-sm font-medium md:block", "text-slate-200")}>{session.user.name}</span>
+              <span className={cx("hidden max-w-36 truncate text-start text-sm font-medium md:block", "text-slate-200")}>{session.user.name}</span>
               <ChevronDown aria-hidden="true" className="hidden h-3.5 w-3.5 text-slate-400 md:block" />
             </summary>
-            <div className={cx("absolute right-0 top-11 z-30 w-60 rounded-lg border p-2", "border-slate-700 bg-slate-900")}>
+            <div className={cx("absolute end-0 top-11 z-30 w-60 rounded-lg border p-2", "border-slate-700 bg-slate-900")}>
               <div className="border-b border-slate-100 px-2 py-2">
                 <p className={cx("truncate text-sm font-medium", "text-slate-100")}>{session.user.name}</p>
                 <p className="truncate text-xs text-slate-500">{session.user.email}</p>
@@ -374,7 +384,7 @@ function Shell({ children }: { children: ReactNode }) {
           {currentItem && nestedLabel && <><span aria-hidden="true">/</span><span className="truncate text-slate-600">{nestedLabel}</span></>}
         </nav>
         <PlanBanner canManage={can("org.manage")} />
-        {children}
+        {lockedFeature ? <FeatureLocked feature={lockedFeature} /> : children}
       </main>
     </div>
   );
@@ -384,7 +394,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => {
     api<Session>("/auth/session")
-      .then(setSession)
+      .then((next) => {
+        setRegion(next.organization.region);
+        applyShopLanguage(next.organization.region.language);
+        setSession(next);
+      })
       .catch(() => (window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`));
   }, []);
   if (!session) return <Spinner label="Opening Drycare…" />;
@@ -406,7 +420,7 @@ function BusinessSwitcher({ dark }: { dark: boolean }) {
     <div className="border-b border-slate-100 py-1">
       <p className="px-2 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Switch business</p>
       {orgs.map((o) => (
-        <button key={o.id} type="button" disabled={o.current} onClick={() => open(o.id)} className={cx("flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-left text-sm", o.current ? "font-semibold text-brand-700" : dark ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100")}>
+        <button key={o.id} type="button" disabled={o.current} onClick={() => open(o.id)} className={cx("flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start text-sm", o.current ? "font-semibold text-brand-700" : dark ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100")}>
           <span className="truncate">{o.name}</span>
           {o.managedByPc && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">Shop PC</span>}
         </button>

@@ -84,8 +84,8 @@ function TrialsInner() {
         ]} />}
         actions={
           <label className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Business, owner, email or phone" className="w-64 pl-9" aria-label="Search trials" />
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Business, owner, email or phone" className="w-64 ps-9" aria-label="Search trials" />
           </label>
         }>
         {list.error && <div className="p-4"><Alert>{list.error}</Alert></div>}

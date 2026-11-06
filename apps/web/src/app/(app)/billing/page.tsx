@@ -7,16 +7,16 @@ import { dateOnly, money } from "@/lib/format";
 import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Spinner, Textarea, cx } from "@/components/ui";
 
 type Plan = {
-  id: string; code: string; name: string; description: string | null; pricePaise: number; payablePaise: number; gstRateBps: number; gstInclusive: boolean;
+  id: string; code: string; name: string; description: string | null; currency: string; pricePaise: number; payablePaise: number; gstRateBps: number; gstInclusive: boolean;
   interval: string; deviceLimit: number; branchLimit: number; entitlements: Record<string, boolean>;
 };
 type Billing = {
   organization: { name: string; status: string; trialEndsAt: string | null };
   subscription: { id: string; status: string; startsAt: string; endsAt: string | null; cancelAt: string | null; provider: string; plan: Plan | null } | null;
   plans: Plan[];
-  pay: { methods: { upi: boolean; bankTransfer: boolean; instructions: string }; upi: { vpa: string; payeeName: string } | null; bank: { accountName: string; accountNumber: string; ifsc: string; bankName: string; branch: string } | null; online: boolean; payee: string };
-  invoices: { id: string; number: string; status: string; issuedAt: string; totalPaise: number; planName: string | null; periodStart: string | null; periodEnd: string | null }[];
-  claims: { id: string; provider: string; reference: string; amountPaise: number; status: string; createdAt: string; rejectedReason: string | null }[];
+  pay: { india: boolean; methods: { upi: boolean; bankTransfer: boolean; instructions: string }; upi: { vpa: string; payeeName: string } | null; bank: { accountName: string; accountNumber: string; ifsc: string; bankName: string; branch: string } | null; online: boolean; payee: string };
+  invoices: { id: string; number: string; status: string; issuedAt: string; currency: string; totalPaise: number; planName: string | null; periodStart: string | null; periodEnd: string | null }[];
+  claims: { id: string; provider: string; reference: string; amountPaise: number; currency: string; status: string; createdAt: string; rejectedReason: string | null }[];
 };
 type Checkout = { keyId: string; orderId: string; amountPaise: number; currency: string; planName: string; businessName: string; customerName: string };
 type RazorpayHandler = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
@@ -68,7 +68,7 @@ export default function BillingPage() {
 
   return (
     <>
-      <PageHeader title="Plan & billing" subtitle="Your Drycare subscription, how to pay, and GST invoices for your accounts." />
+      <PageHeader title="Plan & billing" subtitle={data.pay.india ? "Your Drycare subscription, how to pay, and GST invoices for your accounts." : "Your Drycare subscription, how to pay, and invoices for your accounts."} />
       {notice && <div className="mb-5"><Alert tone={notice.tone} onClose={() => setNotice(null)}>{notice.text}</Alert></div>}
 
       {/* Status */}
@@ -107,15 +107,15 @@ export default function BillingPage() {
               const features = Object.entries(p.entitlements ?? {}).filter(([, v]) => v).map(([k]) => FEATURE_LABELS[k] ?? k);
               return (
                 <button key={p.id} type="button" onClick={() => setPlanId(p.id)}
-                  className={cx("relative flex flex-col rounded-2xl border bg-white p-5 text-left transition", selected ? "border-brand-500 ring-4 ring-brand-500/15" : "border-slate-200 hover:border-slate-300 hover:shadow-sm")}>
-                  {i === Math.min(1, data.plans.length - 1) && data.plans.length > 1 && <span className="absolute -top-2.5 right-4 inline-flex items-center gap-1 rounded-full bg-brand-700 px-2.5 py-0.5 text-[11px] font-semibold text-white"><Sparkles className="h-3 w-3" />Popular</span>}
+                  className={cx("relative flex flex-col rounded-2xl border bg-white p-5 text-start transition", selected ? "border-brand-500 ring-4 ring-brand-500/15" : "border-slate-200 hover:border-slate-300 hover:shadow-sm")}>
+                  {i === Math.min(1, data.plans.length - 1) && data.plans.length > 1 && <span className="absolute -top-2.5 end-4 inline-flex items-center gap-1 rounded-full bg-brand-700 px-2.5 py-0.5 text-[11px] font-semibold text-white"><Sparkles className="h-3 w-3" />Popular</span>}
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-base font-semibold text-slate-900">{p.name}</p>
                     {current ? <Badge color="green">Current plan</Badge> : selected && <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-600 text-white"><Check className="h-4 w-4" /></span>}
                   </div>
                   {p.description && <p className="mt-1 text-sm text-slate-500">{p.description}</p>}
-                  <p className="mt-4"><span className="text-3xl font-bold tracking-tight text-slate-900">{money(p.pricePaise)}</span><span className="text-sm text-slate-500"> / {per(p.interval)}{p.gstInclusive ? " incl. GST" : " + GST"}</span></p>
-                  {!p.gstInclusive && p.gstRateBps > 0 && <p className="text-xs text-slate-500">{money(p.payablePaise)} payable with {p.gstRateBps / 100}% GST</p>}
+                  <p className="mt-4"><span className="text-3xl font-bold tracking-tight text-slate-900">{money(p.pricePaise, p.currency)}</span><span className="text-sm text-slate-500"> / {per(p.interval)}{p.gstRateBps > 0 ? (p.gstInclusive ? " incl. GST" : " + GST") : ""}</span></p>
+                  {!p.gstInclusive && p.gstRateBps > 0 && <p className="text-xs text-slate-500">{money(p.payablePaise, p.currency)} payable with {p.gstRateBps / 100}% GST</p>}
                   <ul className="mt-4 space-y-1.5 text-sm text-slate-700">
                     <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{p.branchLimit} branch{p.branchLimit === 1 ? "" : "es"} · {p.deviceLimit} device{p.deviceLimit === 1 ? "" : "s"}</li>
                     {features.slice(0, 6).map((f) => <li key={f} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{f}</li>)}
@@ -127,7 +127,7 @@ export default function BillingPage() {
 
           {plan && (
             <>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">2 · Pay {money(plan.payablePaise)} for {plan.name}{active && sub?.plan?.id === plan.id ? " (renewal)" : ""}</h2>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">2 · Pay {money(plan.payablePaise, plan.currency)} for {plan.name}{active && sub?.plan?.id === plan.id ? " (renewal)" : ""}</h2>
               {active && sub?.plan && sub.plan.id !== plan.id && <div className="mb-4"><Alert tone="amber">You are on {sub.plan.name} until {dateOnly(sub.endsAt)}. To switch to {plan.name}, contact Drycare support so the change is applied correctly.</Alert></div>}
               <PayOptions billing={data} plan={plan} disabled={Boolean(active && sub?.plan && sub.plan.id !== plan.id)} onDone={(text, tone = "green") => { setNotice({ tone, text }); void reload(); }} />
             </>
@@ -137,21 +137,21 @@ export default function BillingPage() {
 
       <div className="mt-8 grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
         <Card title="Invoices" padded={false}>
-          {!data.invoices.length ? <p className="px-4 py-6 text-sm text-slate-500">GST invoices appear here after each payment is confirmed.</p> : (
+          {!data.invoices.length ? <p className="px-4 py-6 text-sm text-slate-500">{data.pay.india ? "GST invoices appear here after each payment is confirmed." : "Invoices appear here after each payment is confirmed."}</p> : (
             <ul className="divide-y divide-slate-100">
               {data.invoices.map((inv) => (
                 <li key={inv.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
                   <FileText className="h-4 w-4 text-slate-400" />
                   <Link href={`/billing/invoice?id=${inv.id}`} className="font-mono text-sm font-semibold text-brand-700 hover:underline">{inv.number}</Link>
                   <span className="flex-1 text-xs text-slate-500">{inv.planName ?? "Subscription"} · {dateOnly(inv.periodStart)} – {dateOnly(inv.periodEnd)}</span>
-                  <span className="font-semibold tabular-nums">{money(inv.totalPaise)}</span>
+                  <span className="font-semibold tabular-nums">{money(inv.totalPaise, inv.currency)}</span>
                   {inv.status === "void" && <Badge color="red">void</Badge>}
                 </li>
               ))}
             </ul>
           )}
         </Card>
-        <Card title="Payments you reported" padded={false}>
+        {data.pay.india && <Card title="Payments you reported" padded={false}>
           {!data.claims.length ? <p className="px-4 py-6 text-sm text-slate-500">After paying by UPI or bank transfer, report it above so we can confirm it.</p> : (
             <ul className="divide-y divide-slate-100">
               {data.claims.map((c) => (
@@ -159,7 +159,7 @@ export default function BillingPage() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                     <span className="font-mono text-xs">{c.reference}</span>
                     <span className="flex-1 text-xs text-slate-500">{c.provider === "claim_bank_transfer" ? "Bank transfer" : "UPI"} · {dateOnly(c.createdAt)}</span>
-                    <span className="font-semibold tabular-nums">{money(c.amountPaise)}</span>
+                    <span className="font-semibold tabular-nums">{money(c.amountPaise, c.currency)}</span>
                     <Badge color={c.status === "verified" ? "green" : c.status === "rejected" ? "red" : "amber"}>{c.status === "pending" ? "being verified" : c.status}</Badge>
                   </div>
                   {c.rejectedReason && <p className="mt-1 text-xs text-red-700">{c.rejectedReason}</p>}
@@ -167,7 +167,7 @@ export default function BillingPage() {
               ))}
             </ul>
           )}
-        </Card>
+        </Card>}
       </div>
     </>
   );
@@ -195,7 +195,7 @@ function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; pla
         handler: async (r: RazorpayHandler) => {
           try {
             await api("/commercial/checkout/razorpay/verify", { body: { orderId: r.razorpay_order_id, paymentId: r.razorpay_payment_id, signature: r.razorpay_signature } });
-            onDone(`Payment received. Your ${c.planName} plan is active and the GST invoice is below.`);
+            onDone(billing.pay.india ? `Payment received. Your ${c.planName} plan is active and the GST invoice is below.` : `Payment received. Your ${c.planName} plan is active and the invoice is below.`);
           } catch (e) {
             onDone(`${(e as ApiError).message} Payment ID: ${r.razorpay_payment_id}`, "red");
           }
@@ -223,8 +223,8 @@ function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; pla
         <div className="p-5">
           {tab === "online" && (
             <div className="space-y-4">
-              <p className="text-sm text-slate-600">Pay by UPI app, debit / credit card, net banking or wallet through Razorpay. Your plan is activated instantly and the GST invoice is issued automatically.</p>
-              <Button size="lg" onClick={() => void payOnline()} loading={paying} disabled={disabled}><ShieldCheck className="h-4 w-4" />Pay {money(plan.payablePaise)} securely</Button>
+              <p className="text-sm text-slate-600">{billing.pay.india ? "Pay by UPI app, debit / credit card, net banking or wallet through Razorpay. Your plan is activated instantly and the GST invoice is issued automatically." : "Pay by debit or credit card through Razorpay. Your plan is activated instantly and the invoice is issued automatically."}</p>
+              <Button size="lg" onClick={() => void payOnline()} loading={paying} disabled={disabled}><ShieldCheck className="h-4 w-4" />Pay {money(plan.payablePaise, plan.currency)} securely</Button>
               <p className="text-xs text-slate-500">Card and bank details are entered on Razorpay&apos;s secure window; Drycare never sees them.</p>
             </div>
           )}

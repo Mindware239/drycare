@@ -178,9 +178,9 @@ export default function ProductionPage() {
 
           <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm" aria-label="Production board filters">
             <label className="relative min-w-0 flex-1 basis-60">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tag, order, garment, customer, rack…" aria-label="Search garments"
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100" />
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 ps-9 pe-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100" />
             </label>
             <Select value={service} onChange={(e) => setService(e.target.value)} className="h-10 w-auto" aria-label="Service">
               <option value="">All services</option>
@@ -194,7 +194,7 @@ export default function ProductionPage() {
             </Select>
             <FilterChip on={overdueOnly} onChange={setOverdueOnly} tone="red">Overdue <span className="tabular-nums">{overdueCount}</span></FilterChip>
             <FilterChip on={expressOnly} onChange={setExpressOnly} tone="amber">Express</FilterChip>
-            <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-500"><input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="h-3.5 w-3.5 accent-brand-700" />Auto-refresh</label>
+            <label className="ms-auto flex items-center gap-1.5 text-xs text-slate-500"><input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="h-3.5 w-3.5 accent-brand-700" />Auto-refresh</label>
             <span className="text-xs tabular-nums text-slate-500">{rows.length} of {allRows.length}</span>
           </section>
 
@@ -233,11 +233,11 @@ export default function ProductionPage() {
                         return (
                           <div key={g.id} className={cx("group relative rounded-xl border bg-white text-sm shadow-sm transition hover:border-brand-300 hover:shadow-md", isPicked ? "border-brand-500 ring-2 ring-brand-500/20" : isOverdue ? "border-red-200" : "border-slate-200")}>
                             {can("garments.process") && (
-                              <button type="button" onClick={() => toggle(g.id)} aria-label={`Select ${g.tag_code}`} className="absolute left-2 top-2.5 z-10 text-slate-300 hover:text-brand-700">
+                              <button type="button" onClick={() => toggle(g.id)} aria-label={`Select ${g.tag_code}`} className="absolute start-2 top-2.5 z-10 text-slate-300 hover:text-brand-700">
                                 {isPicked ? <CheckSquare className="h-4 w-4 text-brand-700" /> : <Square className="h-4 w-4" />}
                               </button>
                             )}
-                            <Link href={`/scan?tag=${g.tag_code}`} className="block p-3 pl-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                            <Link href={`/scan?tag=${g.tag_code}`} className="block p-3 ps-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                               <div className="flex items-start justify-between gap-2">
                                 <span className="break-all font-mono text-[11px] font-medium text-slate-500">{g.tag_code}</span>
                                 {g.express && <Badge color="amber">Express</Badge>}
@@ -270,7 +270,7 @@ export default function ProductionPage() {
       {picked.length > 0 && (
         <div className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
           <div className="flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-900/15">
-            <span className="flex items-center gap-2 pl-1 text-sm font-semibold text-slate-900"><Shirt className="h-4 w-4 text-brand-700" />{picked.length} selected</span>
+            <span className="flex items-center gap-2 ps-1 text-sm font-semibold text-slate-900"><Shirt className="h-4 w-4 text-brand-700" />{picked.length} selected</span>
             <Button onClick={moveSelected} loading={busy} disabled={!targets.some(Boolean)}>
               {commonNext ? <>Move to {STAGE_LABELS[commonNext]}</> : "Move each to its next step"}<ArrowRight className="h-4 w-4" />
             </Button>
@@ -280,7 +280,7 @@ export default function ProductionPage() {
               <option value="none">Remove assignment</option>
             </Select>
             {targets.includes(null) && <span className="text-xs text-amber-700">Some need QC or a rack at the scan station</span>}
-            <button type="button" onClick={() => setSelected(new Set())} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Clear selection"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setSelected(new Set())} className="ms-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Clear selection"><X className="h-4 w-4" /></button>
           </div>
         </div>
       )}

@@ -201,8 +201,8 @@ function IssueKey({ onIssued }: { onIssued: () => void }) {
         <Field label="Customer business">
           <div className="space-y-2">
             <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search registered businesses (optional)" className="pl-9" aria-label="Search businesses" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search registered businesses (optional)" className="ps-9" aria-label="Search businesses" />
             </label>
             <Select value={orgId} onChange={(e) => { setOrgId(e.target.value); const c = customers.find((x) => x.id === e.target.value); if (c) setCustomerName(c.name); }} aria-label="Registered business">
               <option value="">Not registered online / enter name below</option>
@@ -330,7 +330,7 @@ function Register({ licenses, error, canRenew, onRenewed }: { licenses: License[
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2.5 last:border-0 last:pb-0"><dt className="text-slate-500">{label}</dt><dd className="text-right font-medium text-slate-800">{children}</dd></div>;
+  return <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2.5 last:border-0 last:pb-0"><dt className="text-slate-500">{label}</dt><dd className="text-end font-medium text-slate-800">{children}</dd></div>;
 }
 const Ok = ({ children }: { children: React.ReactNode }) => <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 className="h-4 w-4" />{children}</span>;
 const Warn = ({ children }: { children: React.ReactNode }) => <span className="inline-flex items-center gap-1 text-amber-700"><CircleAlert className="h-4 w-4" />{children}</span>;

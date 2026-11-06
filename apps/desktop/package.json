@@ -1,7 +1,7 @@
 {
   "name": "@drycare/desktop",
   "productName": "DryCare",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "private": true,
   "type": "module",
   "description": "DryCare for PC — standalone dry cleaning store management",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@node-rs/argon2": "2.2.2",
+    "electron-updater": "6.8.11",
     "embedded-postgres": "17.10.0-beta.17"
   },
   "devDependencies": {

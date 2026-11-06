@@ -1,3 +1,4 @@
+import { zone } from "../lib/region";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
@@ -234,9 +235,9 @@ export async function paymentRoutes(app: FastifyInstance) {
     const rows = await db.execute(sql`
       select m.method,
         coalesce((select sum(amount) from payments where organization_id = ${auth.orgId} and status = 'succeeded' and payment_method = m.method
-                  and (received_at at time zone 'Asia/Kolkata')::date between ${q.from}::date and ${q.to}::date ${branch}), 0) as collected,
+                  and (received_at at time zone ${zone(auth.timezone)})::date between ${q.from}::date and ${q.to}::date ${branch}), 0) as collected,
         coalesce((select sum(r.amount) from refunds r join payments p on p.id = r.payment_id where r.organization_id = ${auth.orgId} and r.method = m.method
-                  and (r.created_at at time zone 'Asia/Kolkata')::date between ${q.from}::date and ${q.to}::date ${q.branchId ? sql`and p.branch_id = ${q.branchId}` : sql``}), 0) as refunded
+                  and (r.created_at at time zone ${zone(auth.timezone)})::date between ${q.from}::date and ${q.to}::date ${q.branchId ? sql`and p.branch_id = ${q.branchId}` : sql``}), 0) as refunded
       from (values ('cash'),('upi'),('card'),('bank_transfer'),('wallet'),('other')) as m(method)
     `);
     return rows.map((r) => ({ method: r.method, collected: Number(r.collected), refunded: Number(r.refunded), net: Number(r.collected) - Number(r.refunded) }));

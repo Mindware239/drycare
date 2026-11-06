@@ -17,6 +17,9 @@ export interface AuthContext {
   orgId: string;
   orgName: string;
   orgStatus: string;
+  /** Where the shop is. Dates and reports follow this zone. */
+  timezone: string;
+  currency: string;
   roleKey: string;
   roleName: string;
   permissions: Set<string>;
@@ -71,6 +74,8 @@ export async function loadAuth(req: FastifyRequest): Promise<AuthContext | undef
       orgId: schema.organizations.id,
       orgName: schema.organizations.name,
       orgStatus: schema.organizations.status,
+      timezone: schema.organizations.defaultTimezone,
+      currency: schema.organizations.defaultCurrency,
       membershipStatus: schema.memberships.status,
       branchIds: schema.memberships.branchIds,
       roleKey: schema.roles.key,
@@ -98,6 +103,8 @@ export async function loadAuth(req: FastifyRequest): Promise<AuthContext | undef
     orgId: r.orgId,
     orgName: r.orgName,
     orgStatus: r.orgStatus,
+    timezone: r.timezone,
+    currency: r.currency,
     roleKey: r.roleKey,
     roleName: r.roleName,
     permissions: new Set(r.permissions),

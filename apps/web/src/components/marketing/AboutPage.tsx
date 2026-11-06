@@ -41,7 +41,7 @@ function Expertise({ wide }: { wide: boolean }) {
           {expertise.map((item, i) => {
             const on = i === cur;
             return (
-              <button key={item.title} type="button" role="tab" aria-selected={on} onClick={() => setCur(i)} style={{ font: "inherit", textAlign: "left", display: "grid", gridTemplateColumns: "36px minmax(0,1fr)", gap: 12, alignItems: "start", padding: "12px 14px", borderRadius: 14, color: "#151514", border: `1.5px solid ${on ? "#151514" : "transparent"}`, background: on ? "#fff" : "transparent", transition: "background .25s ease, border-color .25s ease" }}>
+              <button key={item.title} type="button" role="tab" aria-selected={on} onClick={() => setCur(i)} style={{ font: "inherit", textAlign: "start", display: "grid", gridTemplateColumns: "36px minmax(0,1fr)", gap: 12, alignItems: "start", padding: "12px 14px", borderRadius: 14, color: "#151514", border: `1.5px solid ${on ? "#151514" : "transparent"}`, background: on ? "#fff" : "transparent", transition: "background .25s ease, border-color .25s ease" }}>
                 <span style={{ width: 36, height: 36, borderRadius: 10, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 600, background: on ? "#3cbf5a" : "#d8e7fa", color: on ? "#151514" : "#2a4f86", transition: "background .25s ease" }}>{pad2(i + 1)}</span>
                 <span style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 7 }}>
                   <span className="dc-t" style={{ fontSize: 17 }}>{item.title}</span>
@@ -64,7 +64,7 @@ function Expertise({ wide }: { wide: boolean }) {
       <div style={{ background: "#fff", border: "1.5px solid #151514", borderRadius: 20, overflow: "hidden", boxShadow: "0 14px 40px rgba(21,21,20,.08)", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderBottom: "1px solid #eeece6", background: "#f7f7f5" }}>
           <div style={{ display: "flex", gap: 6 }}>{["#f08a24", "#c5d531", "#3cbf5a"].map((c) => <span key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />)}</div>
-          <span style={{ fontSize: 14, fontWeight: 600, marginRight: "auto", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{expertise[cur].title}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, marginInlineEnd: "auto", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{expertise[cur].title}</span>
           <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, background: "#dff3e4", color: "#1f6b34", whiteSpace: "nowrap" }}>Sample preview</span>
         </div>
         <div style={{ display: "grid", padding: "clamp(16px, 2.5vw, 28px)", minHeight: 360 }}>

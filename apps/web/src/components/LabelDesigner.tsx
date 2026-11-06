@@ -1,5 +1,6 @@
 "use client";
 
+import { appLocale } from "@/lib/format";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Barcode, Check, CircleAlert, CircleCheck, Copy, Download, Eye, EyeOff, Lock, Minus, Pencil, Plus, Printer, RefreshCw, RotateCcw, Square, Trash2, Type, Undo2, Redo2, Unlock, Upload, ZoomIn, ZoomOut } from "lucide-react";
 import { LABEL_PRESETS, LABEL_SIZES, MAX_SCAN_DIGITS, MIN_SCAN_DIGITS, el, isLineBarcode, labelDesignSchema, withScanDigits, type LabelDesign, type LabelElement, type LabelSettings, type LabelTemplate } from "@drycare/shared";
@@ -11,7 +12,7 @@ type Kind = "garment" | "bag";
 /** Every length a shop can choose, and how many tags that allows. */
 export const SCAN_DIGIT_OPTIONS: [number, string][] = Array.from({ length: MAX_SCAN_DIGITS - MIN_SCAN_DIGITS + 1 }, (_, i) => {
   const digits = MIN_SCAN_DIGITS + i;
-  return [digits, `${digits} digits${digits === 6 ? " (recommended)" : ""}${digits <= 12 ? `, up to ${(10 ** digits - 1).toLocaleString("en-IN")} tags` : ""}`];
+  return [digits, `${digits} digits${digits === 6 ? " (recommended)" : ""}${digits <= 12 ? `, up to ${(10 ** digits - 1).toLocaleString(appLocale())} tags` : ""}`];
 });
 const FIELDS: Record<Kind, [string, string][]> = {
   garment: [["scanCode", "Barcode number"], ["orderNumber", "Order number"], ["orderSerial", "Order serial number"], ["branchCode", "Store code"], ["count", "Tag count (1/3)"], ["tagCode", "Full tag number"], ["garment", "Garment"], ["service", "Service"], ["colour", "Colour"], ["brand", "Brand"], ["customer", "Customer name"], ["phone", "Customer phone"], ["due", "Due date"], ["orderDate", "Order date"], ["quantity", "Pieces in order"], ["store", "Store name"], ["price", "Price"], ["notes", "Special instructions"]],
@@ -80,7 +81,7 @@ function Ruler({ lengthMm, scale, vertical, from, to }: { lengthMm: number; scal
 /** A small picture of a design, drawn the same way the tag itself prints. */
 function DesignCard({ name, url, active, onClick }: { name: string; url?: string; active: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={active} className={cx("group w-full rounded-xl border p-2 text-left transition-colors", active ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:border-slate-400")}>
+    <button type="button" onClick={onClick} aria-pressed={active} className={cx("group w-full rounded-xl border p-2 text-start transition-colors", active ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:border-slate-400")}>
       <span className="block h-21.5 overflow-hidden rounded-lg bg-slate-100 p-1.5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {url ? <img src={url} alt="" className="h-full w-full object-contain" /> : <span className="text-xs text-slate-400">…</span>}
@@ -401,7 +402,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
         <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Section">
           {([["design", "Design"], ["print", "Printer & print"]] as const).map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cx("rounded-md px-3 py-1 text-sm font-semibold", tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900")}>{name}</button>)}
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="ms-auto flex flex-wrap items-center gap-2">
           {changed && <span className="text-xs font-medium text-amber-700">Unsaved changes</span>}
           <Button size="sm" variant="secondary" onClick={() => onTestPrint(kind)}><Printer className="h-3.5 w-3.5" />Print one test</Button>
           <Button size="sm" onClick={onSave} loading={saving} disabled={!changed}>Save design</Button>
@@ -420,7 +421,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
                 {printerQueue}
                 {current ? (
                   <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                    {[["Status", current.status], ["Driver", current.driver ?? "Not reported"], ["Connected on", current.port ?? "Not reported"], ["Resolution", current.dpi ? `${current.dpi} dpi` : "Not reported"], ["Paper set in Windows", current.driverPaper ? `${current.driverPaper.widthMm} × ${current.driverPaper.heightMm} mm` : "Not reported"], ["Jobs waiting", String(current.waitingJobs)]].map(([name, value]) => <div key={name} className="flex justify-between gap-3 border-b border-slate-100 pb-2"><dt className="text-slate-500">{name}</dt><dd className={cx("text-right font-medium", name === "Status" && current.offline ? "text-red-700" : "text-slate-900")}>{value}</dd></div>)}
+                    {[["Status", current.status], ["Driver", current.driver ?? "Not reported"], ["Connected on", current.port ?? "Not reported"], ["Resolution", current.dpi ? `${current.dpi} dpi` : "Not reported"], ["Paper set in Windows", current.driverPaper ? `${current.driverPaper.widthMm} × ${current.driverPaper.heightMm} mm` : "Not reported"], ["Jobs waiting", String(current.waitingJobs)]].map(([name, value]) => <div key={name} className="flex justify-between gap-3 border-b border-slate-100 pb-2"><dt className="text-slate-500">{name}</dt><dd className={cx("text-end font-medium", name === "Status" && current.offline ? "text-red-700" : "text-slate-900")}>{value}</dd></div>)}
                   </dl>
                 ) : <p className="text-sm text-slate-500">Choose a printer to see its details.</p>}
                 {current?.dpi && current.dpi !== 203 && <Alert tone="amber">This printer is {current.dpi} dpi. Tags are designed for 203 dpi printers, so they will print at a different size.</Alert>}
@@ -447,7 +448,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
       ) : (
         <div className="grid xl:grid-cols-[264px_minmax(0,1fr)_320px]">
           {/* Left: designs, things to add, and everything on the tag. */}
-          <div className="border-slate-200 xl:border-r">
+          <div className="border-slate-200 xl:border-e">
             <div className="flex gap-1 border-b border-slate-200 p-2" role="tablist" aria-label="Tools">
               {([["designs", "Designs"], ["add", "On tag"], ["layers", "Layers"]] as const).map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={leftTab === k} onClick={() => setLeftTab(k)} className={cx("flex-1 rounded-md px-2 py-1.5 text-sm font-semibold", leftTab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100")}>{name}</button>)}
             </div>
@@ -503,8 +504,8 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               <div className="max-h-180 overflow-y-auto p-2">
                 <p className="px-2 pb-2 text-xs text-slate-500">Top of the list prints on top.</p>
                 {[...layers.map((key) => ({ key, name: nameOf(key), show: design.elements[key].show, locked: design.elements[key].locked, type: design.elements[key].type as string })), { key: "barcode", name: "Barcode", show: code.show, locked: code.locked, type: "barcode" }].map((layer) => (
-                  <div key={layer.key} className={cx("flex items-center rounded-lg pl-2", selected === layer.key ? "bg-slate-100" : "hover:bg-slate-50")}>
-                    <button type="button" onClick={() => setSelected(layer.key)} aria-current={selected === layer.key} className={cx("flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-sm", layer.show ? "text-slate-800" : "text-slate-400")}>
+                  <div key={layer.key} className={cx("flex items-center rounded-lg ps-2", selected === layer.key ? "bg-slate-100" : "hover:bg-slate-50")}>
+                    <button type="button" onClick={() => setSelected(layer.key)} aria-current={selected === layer.key} className={cx("flex min-w-0 flex-1 items-center gap-2 py-1.5 text-start text-sm", layer.show ? "text-slate-800" : "text-slate-400")}>
                       <span className="shrink-0 text-slate-400">{layer.type === "barcode" ? <Barcode className="h-3.5 w-3.5" /> : layer.type === "line" ? <Minus className="h-3.5 w-3.5" /> : layer.type === "box" ? <Square className="h-3.5 w-3.5" /> : <Type className="h-3.5 w-3.5" />}</span>
                       <span className="truncate">{layer.name}</span>
                     </button>
@@ -528,7 +529,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               <button type="button" onClick={() => setZoomSteps(0)} className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Fit</button>
               <span className="mx-1 h-5 w-px bg-slate-200" />
               <label className="flex items-center gap-1.5 px-1 text-xs font-medium text-slate-700"><input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />Snap to 0.5 mm</label>
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className="ms-auto flex items-center gap-1.5">
                 <div className="w-36"><Select aria-label="Tag size" value={LABEL_SIZES.some(([w, h]) => `${w}x${h}` === sizeValue) ? sizeValue : ""} onChange={(e) => { if (!e.target.value) return; const [w, h] = e.target.value.split("x").map(Number); setDesign({ ...design, widthMm: w, heightMm: h }); }}><option value="">Custom size</option>{LABEL_SIZES.map(([w, h]) => <option key={`${w}x${h}`} value={`${w}x${h}`}>{w} × {h} mm</option>)}</Select></div>
                 <div className="w-18"><Input aria-label="Tag width in mm" type="number" min={20} max={150} value={design.widthMm} onChange={(e) => setDesign({ ...design, widthMm: clamp(Number(e.target.value) || 20, 20, 150) })} /></div>
                 <span className="text-xs text-slate-500">×</span>
@@ -560,7 +561,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
               {render?.barcodeMm && <span>Barcode <strong className="font-semibold text-slate-900">{render.barcodeMm.width.toFixed(1)} × {render.barcodeMm.height.toFixed(1)} mm</strong></span>}
               {line && <span>Bars {(code.moduleDots / DOTS_PER_MM).toFixed(3)} mm</span>}
               {directAvailable && current && <span>{current.name}: <span className={current.offline ? "font-semibold text-red-700" : ""}>{current.status}</span></span>}
-              <span className={cx("ml-auto flex items-center gap-1 font-semibold", warnings.length ? "text-amber-700" : "text-emerald-700")}>{warnings.length ? <CircleAlert className="h-3.5 w-3.5" /> : <CircleCheck className="h-3.5 w-3.5" />}{warnings.length ? `${warnings.length} to check` : "Ready to print"}</span>
+              <span className={cx("ms-auto flex items-center gap-1 font-semibold", warnings.length ? "text-amber-700" : "text-emerald-700")}>{warnings.length ? <CircleAlert className="h-3.5 w-3.5" /> : <CircleCheck className="h-3.5 w-3.5" />}{warnings.length ? `${warnings.length} to check` : "Ready to print"}</span>
             </div>
             {(usingSample || warnings.length > 0 || showsLongNumber) && (
               <div className="space-y-2 border-t border-slate-200 p-3">
@@ -577,7 +578,7 @@ export function LabelDesigner({ settings, onChange, samples, usingSample, printe
           </div>
 
           {/* Right: whatever is selected. */}
-          <div className="border-slate-200 xl:border-l">
+          <div className="border-slate-200 xl:border-s">
             <div className="border-b border-slate-200 p-3">
               <Select aria-label="Choose an item to edit" value={selected} onChange={(e) => setSelected(e.target.value)}>
                 <option value="barcode">Barcode</option>

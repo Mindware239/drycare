@@ -1,8 +1,10 @@
+import { formatMoney } from "@drycare/shared";
 import type { FastifyInstance } from "fastify";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRANSFER_FLOW, collectionDiscount, type GarmentLocation, type TransferDirection } from "@drycare/shared";
 import { resolveScanCode } from "../lib/scanLookup";
+import { requireScanner } from "./printerRegistry";
 import { db, schema, type Tx } from "../db/client";
 import { assertBranchAccess, can, requirePermission, type AuthContext } from "../lib/context";
 import { audit } from "../lib/audit";
@@ -39,6 +41,12 @@ async function moveGarments(tx: Tx, auth: AuthContext, garmentIds: string[], to:
     notes,
     correlationId,
   })));
+}
+
+/** A code read at a scanning screen, which needs a connected scanner. */
+async function scannedCode(tx: Tx | typeof db, orgId: string, raw: string) {
+  await requireScanner(orgId, tx);
+  return resolveCode(tx, orgId, raw);
 }
 
 /** Resolves a scanned code to a bag or a garment of this organization. */
@@ -234,7 +242,7 @@ export async function logisticsRoutes(app: FastifyInstance) {
       if (batch.status !== "draft" && batch.status !== "dispatched") throw unprocessable("This batch is closed", "BATCH_CLOSED");
       const step = batch.status === "draft" ? "dispatch" : "receipt";
       const flow = TRANSFER_FLOW[batch.direction as TransferDirection];
-      const r = await resolveCode(tx, auth.orgId, code);
+      const r = await scannedCode(tx, auth.orgId, code);
       const log = async (result: string, extra: { bagId?: string; garmentId?: string } = {}) => {
         await tx.insert(schema.scanEvents).values({ organizationId: auth.orgId, batchId, step, scannedCode: r.code, result, scannedBy: auth.userId, ...extra });
       };
@@ -459,12 +467,12 @@ export async function logisticsRoutes(app: FastifyInstance) {
       const totals = (await invoiceTotals(tx, auth.orgId, invoice.id))!;
       const taxableBase = invoice.subtotal + invoice.surchargeTotal - invoice.discountTotal;
       const calc = collectionDiscount({ taxableBase, taxTotal: invoice.taxTotal, alreadyCredited: 0, type: body.type, value: body.value });
-      if ("error" in calc) throw unprocessable(calc.error!.replace(/(\d+) paise/, (_, p) => `₹${(Number(p) / 100).toFixed(2)}`), "DISCOUNT_INVALID");
+      if ("error" in calc) throw unprocessable(calc.error!.replace(/(\d+) paise/, (_, p) => formatMoney(Number(p), auth.currency)), "DISCOUNT_INVALID");
       if (calc.total > totals.balance) {
         // Discounts never create money owed back to the customer; that is a refund, approved separately.
         throw unprocessable(totals.balance <= 0
           ? "This order is already paid in full. Issue a refund instead of a discount."
-          : `The discount (₹${(calc.total / 100).toFixed(2)} incl. GST) is more than the ₹${(totals.balance / 100).toFixed(2)} still due. Reduce it, or issue a refund for the rest.`, "DISCOUNT_EXCEEDS_BALANCE");
+          : `The discount (${formatMoney(calc.total, auth.currency)} incl. tax) is more than the ${formatMoney(totals.balance, auth.currency)} still due. Reduce it, or issue a refund for the rest.`, "DISCOUNT_EXCEEDS_BALANCE");
       }
       const org = await tx.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) });
       const limitBps = org?.settings.maxDiscountBpsWithoutApproval ?? 1000;

@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { COUNTRIES } from "@drycare/shared";
+import { SlideGroup } from "@/components/SlideGroup";
+import { chooseVisitorCountry, cleanMoney, ELSEWHERE, visitor, visitorCountry, visitorPrice } from "@/lib/visitor";
 import { Accordion, EnquiryForm, useVw } from "./parts";
 
 const PLANS = [
@@ -38,7 +41,6 @@ const FAQS: [string, string][] = [
   ["Can Drycare manage multiple stores and a central plant?", "Yes. The Enterprise Plan includes a multi-store dashboard, store-to-plant garment transfer, consolidated reports and central price control."],
   ["Can I request a custom Enterprise quotation?", "Yes. Share your store count, plant setup and integration needs through the enquiry form, and our team will prepare a quotation."],
 ];
-const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 const DEFAULT_INTEREST = "Not sure yet — help me choose";
 const interestOptions = [DEFAULT_INTEREST, "Talk to sales", ...PLANS.map((p) => p.name), ...BUNDLES.map((b) => b[0])];
 
@@ -46,6 +48,13 @@ export function PricingPage() {
   const vw = useVw();
   const cw = Math.min(vw, 1180) - 64;
   const [annual, setAnnual] = useState(false);
+  // Prices follow the visitor's country, and start in rupees until the browser has told us where that is.
+  const [country, setCountry] = useState("IN");
+  useEffect(() => setCountry(visitorCountry()), []);
+  const place = visitor(country);
+  /** A rupee list price (in whole rupees) as this visitor pays it, in hundredths of their currency. */
+  const local = (rupees: number) => visitorPrice(rupees * 100, place);
+  const show = (minor: number) => cleanMoney(minor, place.currency);
   const [cmp, setCmp] = useState(1);
   const [interest, setInterest] = useState(DEFAULT_INTEREST);
   const enquiry = useRef<HTMLElement>(null);
@@ -65,16 +74,23 @@ export function PricingPage() {
             <span className="dc-eyebrow">Drycare · Laundry &amp; Dry Cleaning Software</span>
             <h1 className="dc-h1" style={{ fontSize: "clamp(38px, 5vw, 60px)" }}>The Right Plan for Your Laundry Business</h1>
             <p className="dc-lead">From single-store dry cleaners to multi-branch laundry chains, choose a plan that simplifies order booking, garment tracking, pickups, deliveries and payments.</p>
-            <div role="radiogroup" aria-label="Billing period" style={{ display: "flex", gap: 4, padding: 5, borderRadius: 999, background: "#f3f1ec", border: "1px solid #e4e1d9", marginTop: 10 }}>
+            <SlideGroup label="Billing period" color="#151514" style={{ display: "flex", gap: 4, padding: 5, borderRadius: 999, background: "#f3f1ec", border: "1px solid #e4e1d9", marginTop: 10 }}>
               {([["Monthly", false, null], ["Annual", true, "Save up to 17%"]] as const).map(([label, value, tag]) => {
                 const on = annual === value;
                 return (
-                  <button key={label} type="button" role="radio" aria-checked={on} onClick={() => setAnnual(value)} style={{ font: "inherit", fontSize: 15, fontWeight: 600, minHeight: 44, padding: "10px 24px", borderRadius: 999, border: 0, background: on ? "#151514" : "transparent", color: on ? "#faf8f4" : "#151514", display: "flex", alignItems: "center", gap: 8, transition: "background .25s ease, color .25s ease" }}>
+                  <button key={label} type="button" role="radio" aria-checked={on} onClick={() => setAnnual(value)} style={{ font: "inherit", fontSize: 15, fontWeight: 600, minHeight: 44, padding: "10px 24px", borderRadius: 999, border: 0, background: "transparent", color: on ? "#faf8f4" : "#151514", display: "flex", alignItems: "center", gap: 8 }}>
                     {label}{tag && <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: on ? "#3cbf5a" : "#dff3e4", color: on ? "#151514" : "#1f6b34" }}>{tag}</span>}
                   </button>
                 );
               })}
-            </div>
+            </SlideGroup>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, color: "#4f4e4a" }}>
+              Prices for
+              <select aria-label="Prices for" data-i18n-skip="" value={country} onChange={(event) => chooseVisitorCountry(event.target.value)} style={{ font: "inherit", fontWeight: 600, color: "#151514", background: "#fff", border: "1px solid #e4e1d9", borderRadius: 10, padding: "6px 10px", maxWidth: 240 }}>
+                {[...COUNTRIES].sort((a, b) => a.name.localeCompare(b.name)).map((c) => <option key={c.code} value={c.code}>{c.name} ({c.currency})</option>)}
+                <option value={ELSEWHERE}>Other countries (USD)</option>
+              </select>
+            </label>
             <span aria-live="polite" style={{ fontSize: 14, color: "#6b6963" }}>{annual ? "Annual plans are billed upfront for 12 months." : "Monthly plans are billed every month. Switch to Annual to pay upfront and save."}</span>
           </div>
 
@@ -85,11 +101,11 @@ export function PricingPage() {
               let price: string, per: string, billing: string, save = "";
               if (p.custom) { price = "Custom Pricing"; per = ""; billing = p.note ?? ""; }
               else if (annual) {
-                const yearly = p.monthly! * 12, diff = yearly - p.annual!;
-                price = inr(p.annual!); per = "/ year";
-                billing = `Billed ${inr(p.annual!)} upfront each year · about ${inr(Math.round(p.annual! / 12))}/month`;
-                if (diff > 0) save = `Save ${inr(diff)} vs monthly (${Math.round((diff / yearly) * 100)}%)`;
-              } else { price = inr(p.monthly!); per = "/ month"; billing = `Billed monthly · or ${inr(p.annual!)} when billed annually`; }
+                const year = local(p.annual!), yearly = local(p.monthly!) * 12, diff = yearly - year;
+                price = show(year); per = "/ year";
+                billing = `Billed ${show(year)} upfront each year · about ${show(Math.round(year / 1200) * 100)}/month`;
+                if (diff > 0) save = `Save ${show(diff)} vs monthly (${Math.round((diff / yearly) * 100)}%)`;
+              } else { price = show(local(p.monthly!)); per = "/ month"; billing = `Billed monthly · or ${show(local(p.annual!))} when billed annually`; }
               return (
                 <article key={p.id} className={`dc-plan${hi ? " dc-plan-hi" : ""}`}>
                   {p.badge && <span style={{ position: "absolute", top: -13, left: 28, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", padding: "5px 12px", borderRadius: 999, background: "#3cbf5a", color: "#151514" }}>{p.badge}</span>}

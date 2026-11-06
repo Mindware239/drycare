@@ -1,4 +1,5 @@
 "use client";
+import { shopMethods } from "@/lib/format";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -118,7 +119,7 @@ function BillTab() {
             <div className="mt-3 flex flex-wrap items-end gap-2">
               {due > 0 && can("payments.collect") && (
                 <>
-                  <Field label="Received by" className="w-40"><Select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>{METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}</Select></Field>
+                  <Field label="Received by" className="w-40"><Select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>{shopMethods(METHODS).map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}</Select></Field>
                   {method !== "cash" && <Field label="Reference" className="w-48"><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI / card / UTR ref" /></Field>}
                 </>
               )}
@@ -200,7 +201,7 @@ function LinkTab({ initial }: { initial: string }) {
     <div className="space-y-4">
       <Card>
         <form onSubmit={(e) => { e.preventDefault(); void load(code); }} className="flex flex-wrap gap-2">
-          <div className="relative min-w-64 flex-1"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Order number, or scan a tag's barcode" className="pl-9" aria-label="Order number or barcode" /></div>
+          <div className="relative min-w-64 flex-1"><Search className="pointer-events-none absolute start-3 top-2.5 h-4 w-4 text-slate-400" /><Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Order number, or scan a tag's barcode" className="ps-9" aria-label="Order number or barcode" /></div>
           <Button type="submit" variant="secondary">Find order</Button>
         </form>
       </Card>
@@ -213,7 +214,7 @@ function LinkTab({ initial }: { initial: string }) {
               <ul className="divide-y divide-slate-100 text-sm">
                 {order.garments.map((g) => (
                   <li key={g.id} className={cx("flex items-center gap-3 py-2", target?.id === g.id && "rounded bg-brand-50 px-2")}>
-                    <button type="button" disabled={!!g.epc} onClick={() => setSelected(g.id)} className="min-w-0 flex-1 text-left disabled:cursor-default"><span className="font-medium">{g.garment}</span> <span className="text-slate-500">· {[g.service, g.colour].filter(Boolean).join(" · ")}</span><span className="block font-mono text-xs text-slate-500">{g.scanCode}</span></button>
+                    <button type="button" disabled={!!g.epc} onClick={() => setSelected(g.id)} className="min-w-0 flex-1 text-start disabled:cursor-default"><span className="font-medium">{g.garment}</span> <span className="text-slate-500">· {[g.service, g.colour].filter(Boolean).join(" · ")}</span><span className="block font-mono text-xs text-slate-500">{g.scanCode}</span></button>
                     {g.epc ? <><span className="font-mono text-xs text-slate-600" title={g.epc}>RFID …{g.epc.slice(-8)}</span><Button size="sm" variant="ghost" onClick={() => void unlink(g.epc!)}>Remove</Button></> : <Badge color="amber">No tag</Badge>}
                   </li>
                 ))}
@@ -346,7 +347,7 @@ function RfidInner() {
       <PageHeader title="RFID" subtitle="Link tags at intake, move garments through production, count stock, find anything, and bill at handover." />
       <details className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700">
         <summary className="cursor-pointer font-semibold text-slate-900">Setting up a handheld terminal</summary>
-        <ol className="mt-2 list-decimal space-y-1 pl-5">
+        <ol className="mt-2 list-decimal space-y-1 ps-5">
           <li>Open this page in the terminal&apos;s browser and sign in.</li>
           <li>In the terminal&apos;s own RFID settings, turn on keyboard output for tag reads, so each tag&apos;s number is typed into the selected box. The setting has a different name on each brand. Zebra calls it DataWedge.</li>
           <li>Choose to send the tag&apos;s number (its EPC), followed by Enter.</li>

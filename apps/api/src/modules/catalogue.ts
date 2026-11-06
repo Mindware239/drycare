@@ -1,3 +1,4 @@
+import { orgRegion } from "../lib/region";
 import type { FastifyInstance } from "fastify";
 import { and, asc, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -328,7 +329,7 @@ export async function catalogueRoutes(app: FastifyInstance) {
           garmentTypeId: body.garmentTypeId,
           serviceId: body.serviceId,
           unitPrice: body.unitPrice,
-          taxBps: body.taxBps,
+          taxBps: body.taxBps ?? (await orgRegion(auth.orgId, tx)).defaultTaxBps,
           minimumCharge: body.minimumCharge ?? 0,
           effectiveFrom,
           effectiveTo: next ? timestamp(next.effective_from) : undefined,

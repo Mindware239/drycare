@@ -14,13 +14,13 @@ import { sealSecret } from "../lib/secretBox";
 import {
   billingGaps, getSellerBilling, getStoredPayments, paymentMethodsSchema, paymentsView, razorpayCredentials, sellerBillingSchema, write,
 } from "../lib/platformSettings";
-import { issueCommercialInvoice, planGross } from "../lib/commercialInvoice";
-import { createRazorpayOrder, fetchRazorpayOrder, fetchRazorpayPayment, testRazorpay, verifyCheckoutSignature, verifyWebhookSignature } from "../lib/razorpay";
+import { issueCommercialInvoice, planOffer, rupeesOf } from "../lib/commercialInvoice";
+import { createRazorpayOrder, fetchRazorpayOrder, fetchRazorpayPayment, fromProviderAmount, testRazorpay, toProviderAmount, verifyCheckoutSignature, verifyWebhookSignature } from "../lib/razorpay";
 import { applySubscriptionPayment } from "../lib/subscriptionPayments";
 import { CUSTOMER_ORG } from "./platformConsole";
 
 const invoiceColumns = sql`i.id, i.number, i.status, i.issued_at as "issuedAt", i.organization_id as "organizationId", o.name as "organizationName",
-  i.total_paise as "totalPaise", i.subtotal_paise as "subtotalPaise", i.cgst_paise + i.sgst_paise + i.igst_paise as "taxPaise",
+  i.currency, i.total_paise as "totalPaise", i.subtotal_paise as "subtotalPaise", i.cgst_paise + i.sgst_paise + i.igst_paise as "taxPaise",
   i.period_start as "periodStart", i.period_end as "periodEnd", p.provider, p.provider_reference as "reference", pl.name as "planName"`;
 
 export async function platformBillingRoutes(app: FastifyInstance) {
@@ -118,13 +118,13 @@ export async function platformBillingRoutes(app: FastifyInstance) {
       where ${CUSTOMER_ORG} and (${q.status} = 'all' or i.status = ${q.status}) and (${like}::text is null or i.number ilike ${like} or o.name ilike ${like})
       order by i.issued_at desc limit 500`);
     const [totals] = await db.execute<{ count: number; total: string; tax: string }>(sql`
-      select count(*)::int as count, coalesce(sum(i.total_paise),0) as total, coalesce(sum(i.cgst_paise + i.sgst_paise + i.igst_paise),0) as tax
+      select count(*)::int as count, coalesce(sum(${rupeesOf("i.total_paise", "i.currency")}),0) as total, coalesce(sum(i.cgst_paise + i.sgst_paise + i.igst_paise),0) as tax
       from commercial_invoices i join organizations o on o.id = i.organization_id where i.status = 'issued' and ${CUSTOMER_ORG}`);
     const [missing] = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from commercial_payments p join organizations o on o.id = p.organization_id
       where p.status = 'paid' and ${CUSTOMER_ORG}
         and not exists (select 1 from commercial_invoices i where i.payment_id = p.id)`);
-    return { invoices: rows, totals: { count: totals.count, totalPaise: Number(totals.total), taxPaise: Number(totals.tax) }, paymentsWithoutInvoice: missing.n };
+    return { invoices: rows, totals: { count: totals.count, totalPaise: Math.round(Number(totals.total)), taxPaise: Number(totals.tax) }, paymentsWithoutInvoice: missing.n };
   });
 
   app.get("/platform-admin/invoices/:id", async (req) => {
@@ -168,7 +168,7 @@ export async function platformBillingRoutes(app: FastifyInstance) {
     requirePlatformAdmin(req);
     return db.execute(sql`
       select p.id, p.organization_id as "organizationId", o.name as "organizationName", p.provider, p.provider_reference as "reference",
-        p.amount_paise as "amountPaise", p.provider_payload_json as "details", p.created_at as "createdAt"
+        p.amount_paise as "amountPaise", p.currency, p.provider_payload_json as "details", p.created_at as "createdAt"
       from commercial_payments p join organizations o on o.id = p.organization_id
       where p.provider like 'claim_%' and p.status = 'pending' and ${CUSTOMER_ORG}
       order by p.created_at`);
@@ -197,18 +197,24 @@ export async function platformBillingRoutes(app: FastifyInstance) {
       db.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, auth.orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)] }),
     ]);
     const rate = seller.invoice.gstRateBps;
-    const invoices = await db.execute(sql`select i.id, i.number, i.status, i.issued_at as "issuedAt", i.total_paise as "totalPaise", pl.name as "planName", i.period_start as "periodStart", i.period_end as "periodEnd"
+    const india = org ? planOffer({ pricePaise: 0, gstInclusive: false, currency: "INR" }, org, rate).india : true;
+    const invoices = await db.execute(sql`select i.id, i.number, i.status, i.issued_at as "issuedAt", i.total_paise as "totalPaise", i.currency, pl.name as "planName", i.period_start as "periodStart", i.period_end as "periodEnd"
       from commercial_invoices i left join commercial_plans pl on pl.id = i.plan_id where i.organization_id = ${auth.orgId} order by i.issued_at desc limit 50`);
-    const claims = await db.execute(sql`select id, provider, provider_reference as "reference", amount_paise as "amountPaise", status, created_at as "createdAt", provider_payload_json->>'rejectedReason' as "rejectedReason"
+    const claims = await db.execute(sql`select id, provider, provider_reference as "reference", amount_paise as "amountPaise", currency, status, created_at as "createdAt", provider_payload_json->>'rejectedReason' as "rejectedReason"
       from commercial_payments where organization_id = ${auth.orgId} and provider like 'claim_%' order by created_at desc limit 10`);
     return {
       organization: { name: org?.name, status: org?.status, trialEndsAt: org?.trialEndsAt },
       subscription: subscription ? { ...subscription, plan: plans.find((p) => p.id === subscription.planId) ?? null } : null,
-      plans: plans.map((p) => ({ ...p, gstRateBps: rate, payablePaise: planGross(p, rate) })),
+      plans: plans.map((p) => {
+        const offer = planOffer(p, org!, rate);
+        return { ...p, currency: offer.currency, pricePaise: offer.pricePaise, gstInclusive: offer.gstInclusive, gstRateBps: offer.gstRateBps, payablePaise: offer.payablePaise };
+      }),
       pay: {
+        india,
         methods: payments.methods,
-        upi: payments.methods.upi && seller.upiId ? { vpa: seller.upiId, payeeName: seller.upiPayeeName || seller.tradeName || seller.legalName } : null,
-        bank: payments.methods.bankTransfer && seller.bank.accountNumber ? seller.bank : null,
+        // UPI and the bank details are Indian rails, in rupees: shops abroad pay online in their own currency.
+        upi: india && payments.methods.upi && seller.upiId ? { vpa: seller.upiId, payeeName: seller.upiPayeeName || seller.tradeName || seller.legalName } : null,
+        bank: india && payments.methods.bankTransfer && seller.bank.accountNumber ? seller.bank : null,
         online: Boolean(payments.razorpay.enabled && payments.razorpay.keyId && payments.razorpay.keySecret),
         payee: seller.tradeName || seller.legalName || "DryCare",
       },
@@ -219,14 +225,17 @@ export async function platformBillingRoutes(app: FastifyInstance) {
 
   /** UPI QR with the payee and exact amount for a plan, so the shop cannot mistype either. */
   app.get("/commercial/billing/upi-qr", async (req, reply) => {
-    requirePermission(req, "org.manage");
+    const auth = requirePermission(req, "org.manage");
     const { planId } = z.object({ planId: z.uuid() }).parse(req.query);
-    const [seller, payments, plan] = await Promise.all([
+    const [seller, payments, plan, org] = await Promise.all([
       getSellerBilling(db), getStoredPayments(db),
       db.query.commercialPlans.findFirst({ where: and(eq(schema.commercialPlans.id, planId), eq(schema.commercialPlans.published, true)) }),
+      db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) }),
     ]);
-    if (!plan || !payments.methods.upi || !seller.upiId) throw notFound("UPI payment option");
-    const amount = (planGross(plan, seller.invoice.gstRateBps) / 100).toFixed(2);
+    if (!plan || !org || !payments.methods.upi || !seller.upiId) throw notFound("UPI payment option");
+    const offer = planOffer(plan, org, seller.invoice.gstRateBps);
+    if (!offer.india) throw notFound("UPI payment option");
+    const amount = (offer.payablePaise / 100).toFixed(2);
     const params = new URLSearchParams({ pa: seller.upiId, pn: seller.upiPayeeName || seller.tradeName || seller.legalName || "DryCare", am: amount, cu: "INR", tn: `DryCare ${plan.name}` });
     const svg = bwipjs.toSVG({ bcid: "qrcode", text: `upi://pay?${params.toString()}`, scale: 3, eclevel: "M" } as Parameters<typeof bwipjs.toSVG>[0]);
     reply.header("content-type", "image/svg+xml").header("cache-control", "private, max-age=300");
@@ -269,14 +278,16 @@ export async function platformBillingRoutes(app: FastifyInstance) {
     const plan = await db.query.commercialPlans.findFirst({ where: and(eq(schema.commercialPlans.id, planId), eq(schema.commercialPlans.published, true)) });
     if (!plan) throw notFound("Plan");
     const seller = await getSellerBilling(db);
-    const amountPaise = planGross(plan, seller.invoice.gstRateBps);
-    if (amountPaise <= 0) throw conflict("This plan has no price to pay.", "PLAN_FREE");
     const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) });
+    if (!org) throw notFound("Organization");
+    const offer = planOffer(plan, org, seller.invoice.gstRateBps);
+    if (offer.payablePaise <= 0) throw conflict("This plan has no price to pay.", "PLAN_FREE");
+    const amountPaise = toProviderAmount(offer.payablePaise, offer.currency);
     const order = await createRazorpayOrder(creds, {
-      amountPaise, currency: plan.currency, receipt: `dc_${auth.orgId.slice(0, 8)}_${Date.now()}`,
+      amountPaise, currency: offer.currency, receipt: `dc_${auth.orgId.slice(0, 8)}_${Date.now()}`,
       notes: { organizationId: auth.orgId, planId: plan.id, planCode: plan.code },
     }).catch((e: Error) => { throw new AppError(502, "RAZORPAY_ORDER_FAILED", `Could not start the payment: ${e.message}`); });
-    return { keyId: creds.keyId, orderId: order.id, amountPaise, currency: plan.currency, planName: plan.name, businessName: seller.tradeName || seller.legalName || "DryCare", customerName: org?.name ?? "" };
+    return { keyId: creds.keyId, orderId: order.id, amountPaise, currency: offer.currency, planName: plan.name, businessName: seller.tradeName || seller.legalName || "DryCare", customerName: org.name };
   });
 
   app.post("/commercial/checkout/razorpay/verify", async (req) => {
@@ -359,7 +370,7 @@ async function recordRazorpayPayment(
   try {
     const applied = await db.transaction(async (tx) => {
       const r = await applySubscriptionPayment(tx, {
-        organizationId: orgId, plan, provider: "razorpay", reference: paymentId, amountPaise: payment.amount,
+        organizationId: orgId, plan, provider: "razorpay", reference: paymentId, amountPaise: fromProviderAmount(payment.amount, payment.currency), currency: payment.currency,
         payload: { verificationMode: expectedOrgId ? "razorpay_checkout" : "razorpay_webhook", orderId, method: payment.method, mode: creds.mode },
       });
       await audit(tx, req, { action: "subscription.paid_online", resourceType: "commercial_payment", resourceId: r.payment.id, orgId, after: { plan: plan.code, amountPaise: payment.amount, invoice: r.invoice?.number } });

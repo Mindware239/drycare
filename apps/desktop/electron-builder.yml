@@ -18,6 +18,10 @@ extraResources:
 # No asar archive: the bundled PostgreSQL resolves its .exe paths relative to its own JS file,
 # and Windows cannot execute files that only exist inside an asar archive.
 asar: false
+# Makes the build write latest.yml, which updates are checked against. The app sets the real address from update.json.
+publish:
+  provider: generic
+  url: https://updates.invalid/drycare
 win:
   target: nsis
   icon: build/icon.ico

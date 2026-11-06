@@ -15,8 +15,8 @@ export const signedLicenseSchema = z.object({
   hardware: z.object({
     printers: z.array(z.string().max(120)).max(200),
     scanners: z.array(z.string().max(120)).max(200),
-    /** Printers Mindware sold to this customer. When present, only these can be connected and printed to. */
-    soldPrinters: z.array(z.object({ serial: z.string().max(80), bill: z.string().max(80), model: z.string().max(120) })).max(500).optional(),
+    /** Printers and scanners Mindware sold to this customer. When present, only these can be connected and used. */
+    soldPrinters: z.array(z.object({ serial: z.string().max(80), bill: z.string().max(80), model: z.string().max(120), kind: z.enum(["printer", "scanner"]).optional() })).max(500).optional(),
     rfidReaders: z.array(z.string().max(120)).max(200).optional(),
     driverUrl: z.string().max(500).nullable().optional(),
   }).optional(),

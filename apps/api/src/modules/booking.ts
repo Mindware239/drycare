@@ -1,3 +1,4 @@
+import { resolveRegion, todayInZone } from "@drycare/shared";
 /**
  * Online pickup booking: each shop can switch on a public page (/book?s=<shop>) where customers request a pickup.
  * Requests become scheduled pickups in Pickups & deliveries, marked "Online booking", for staff to confirm.
@@ -18,7 +19,6 @@ import { env, isDesktop } from "../env";
 import { normalizePhone } from "./customers";
 
 const settingsSchema = z.object({ enabled: z.boolean(), branchId: z.uuid().optional(), message: z.string().trim().max(300).optional() });
-const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 
 async function publicShop(slug: string) {
   const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.slug, slug) });
@@ -80,7 +80,9 @@ export async function bookingRoutes(app: FastifyInstance) {
       address: [addr.line1, addr.city].filter(Boolean).join(", "),
       message: shop.message,
       slots: TIME_SLOTS,
-      firstDate: istToday(),
+      firstDate: todayInZone(shop.org.defaultTimezone),
+      currency: shop.org.defaultCurrency,
+      region: resolveRegion(shop.org),
       membershipPlans,
     };
   });
@@ -142,7 +144,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     if (body.website) return { ok: true }; // silently drop bots
     const shop = await publicShop(slug);
     if (!shop || !(await accessState(shop.org.id)).writable) throw notFound("Online booking for this shop");
-    const today = istToday();
+    const today = todayInZone(shop.org.defaultTimezone);
     const maxDate = new Date(Date.parse(today) + 30 * 86_400_000).toISOString().slice(0, 10);
     if (body.date < today || body.date > maxDate) throw badRequest("Choose a date within the next 30 days");
     const phoneNormalized = normalizePhone(body.phone);

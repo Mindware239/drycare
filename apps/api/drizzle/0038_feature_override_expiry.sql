@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "feature_override_expiry_json" jsonb DEFAULT '{}'::jsonb NOT NULL;

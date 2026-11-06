@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { COUNTRIES, guessCountry, DEFAULT_COUNTRY, countryPack } from "@drycare/shared";
+import { currentLanguage } from "@/lib/i18n";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { AuthHeading, AuthNotice, AuthShell, PasswordInput } from "@/components/marketing/AuthShell";
@@ -16,7 +18,13 @@ const underlined = { fontWeight: 600, color: "#151514", textDecoration: "underli
 
 export default function SignupPage() {
   const [step, setStep] = useState<1 | 2>(1);
-  const [f, setF] = useState({ ownerName: "", email: "", password: "", confirmPassword: "", businessName: "", branchName: "", phone: "", state: "", city: "", gstin: "", businessType: "dry_cleaning", outletCount: 1, counterCount: 1, acceptedTerms: false, marketingConsent: false });
+  const [f, setF] = useState({ country: DEFAULT_COUNTRY, ownerName: "", email: "", password: "", confirmPassword: "", businessName: "", branchName: "", phone: "", state: "", city: "", gstin: "", businessType: "dry_cleaning", outletCount: 1, counterCount: 1, acceptedTerms: false, marketingConsent: false });
+  const pack = countryPack(f.country);
+  // Starts on the country this computer's clock is set to.
+  useEffect(() => {
+    const here = guessCountry(Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language);
+    if (here) setF((current) => ({ ...current, country: here }));
+  }, []);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -46,6 +54,7 @@ export default function SignupPage() {
       const { confirmPassword, ...account } = f;
       const body = {
         ...Object.fromEntries(Object.entries(account).filter(([, value]) => typeof value !== "string" || value.trim() !== "")),
+        language: currentLanguage(),
         outletCount: Number(account.outletCount),
         counterCount: Number(account.counterCount),
       };
@@ -103,12 +112,13 @@ export default function SignupPage() {
             </div>
           </fieldset>
           <div className="dc-form">
+            <label className="dc-label-lg dc-full">Country<select className="dc-input dc-input-lg" value={f.country} onChange={set("country")}>{[...COUNTRIES].sort((a, b) => a.name.localeCompare(b.name)).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select></label>
             <label className="dc-label-lg dc-full">Store or business name<input className="dc-input dc-input-lg" required value={f.businessName} onChange={set("businessName")} placeholder="e.g. CleanCare Garment Services" /></label>
             <label className="dc-label-lg dc-full"><span>First branch name <span className="dc-opt">(optional, we&apos;ll call it “Main Store”)</span></span><input className="dc-input dc-input-lg" value={f.branchName} onChange={set("branchName")} placeholder="Main Store" /></label>
             <label className="dc-label-lg">City<input className="dc-input dc-input-lg" value={f.city} onChange={set("city")} placeholder="e.g. Pune" /></label>
             <label className="dc-label-lg">State<input className="dc-input dc-input-lg" value={f.state} onChange={set("state")} placeholder="e.g. Maharashtra" /></label>
-            <label className="dc-label-lg">Mobile number<input className="dc-input dc-input-lg" value={f.phone} onChange={set("phone")} placeholder="+91" autoComplete="tel" /></label>
-            <label className="dc-label-lg"><span>GSTIN <span className="dc-opt">(optional)</span></span><input className="dc-input dc-input-lg" value={f.gstin} onChange={(event) => setF({ ...f, gstin: event.target.value.toUpperCase() })} placeholder="22AAAAA0000A1Z5" /></label>
+            <label className="dc-label-lg">Mobile number<input className="dc-input dc-input-lg" value={f.phone} onChange={set("phone")} placeholder={`+${pack.dialCode}`} autoComplete="tel" /></label>
+            <label className="dc-label-lg"><span>{pack.taxIdLabel} <span className="dc-opt">(optional)</span></span><input className="dc-input dc-input-lg" value={f.gstin} onChange={(event) => setF({ ...f, gstin: event.target.value.toUpperCase() })} placeholder="22AAAAA0000A1Z5" /></label>
             <label className="dc-label-lg">Outlets<input className="dc-input dc-input-lg" type="number" min={1} max={1000} value={f.outletCount} onChange={set("outletCount")} /></label>
             <label className="dc-label-lg">Counters<input className="dc-input dc-input-lg" type="number" min={1} max={1000} value={f.counterCount} onChange={set("counterCount")} /></label>
           </div>

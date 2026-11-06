@@ -1,4 +1,5 @@
 "use client";
+import { formatMoney } from "@drycare/shared";
 import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -15,7 +16,7 @@ type Detail = {
   branches: { id: string; name: string; branchCode: string; phone: string | null; status: string; address: Record<string, string>; createdAt: string }[];
   usage: { customers: number; orders: number; orders30: number; lastOrderAt: string | null; garments: number };
   subscriptions: { id: string; planId?: string; status: string; provider: string; reference: string | null; startsAt: string; endsAt: string | null; canceledAt: string | null; planName: string; pricePaise: number; interval: string }[];
-  payments: { id: string; provider: string; reference: string; amountPaise: number; status: string; createdAt: string }[];
+  payments: { id: string; provider: string; reference: string; amountPaise: number; currency?: string; status: string; createdAt: string }[];
   timeline: { id: string; action: string; createdAt: string; actorEmail: string | null; after: Record<string, unknown> | null }[];
 };
 
@@ -123,7 +124,7 @@ function CustomerDetailInner() {
             {users.map((u) => (
               <tr key={u.id}>
                 <td className="px-5 py-3"><p className="font-medium text-slate-900">{u.name}</p><p className="text-xs text-slate-500">{u.email}</p></td>
-                <td className="px-5 py-3"><Badge color={u.roleKey === "owner" ? "brand" : "slate"}>{u.roleName}</Badge>{u.membershipStatus !== "active" && <span className="ml-1"><StatusBadge status={u.membershipStatus} /></span>}</td>
+                <td className="px-5 py-3"><Badge color={u.roleKey === "owner" ? "brand" : "slate"}>{u.roleName}</Badge>{u.membershipStatus !== "active" && <span className="ms-1"><StatusBadge status={u.membershipStatus} /></span>}</td>
                 <td className="px-5 py-3">{u.emailVerifiedAt ? <Badge color="green">verified</Badge> : <Badge color="amber">unverified</Badge>}</td>
                 <td className="px-5 py-3 text-xs text-slate-600">{u.lastLoginAt ? dateTimeLabel(u.lastLoginAt) : "Never"}</td>
               </tr>
@@ -164,7 +165,7 @@ function CustomerDetailInner() {
                 <td className="px-5 py-3 text-xs text-slate-600">{dateTimeLabel(p.createdAt)}</td>
                 <td className="px-5 py-3">{p.provider.replace("manual_", "").replaceAll("_", " ")}</td>
                 <td className="px-5 py-3 font-mono text-xs">{p.reference}</td>
-                <td className="px-5 py-3 font-semibold tabular-nums">{money(p.amountPaise)} <StatusBadge status={p.status} /></td>
+                <td className="px-5 py-3 font-semibold tabular-nums">{formatMoney(p.amountPaise, p.currency ?? "INR")} <StatusBadge status={p.status} /></td>
               </tr>
             ))}
           </DataTable>

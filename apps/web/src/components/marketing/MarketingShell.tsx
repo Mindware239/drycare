@@ -1,5 +1,6 @@
 "use client";
 
+import { LanguagePicker } from "@/components/I18nRoot";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -71,6 +72,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
             {nav.map(([label, href]) => <Link key={href} href={href} aria-current={current(href)}>{label}</Link>)}
           </nav>
           <div className="dc-actions">
+            <LanguagePicker />
             <Link href="/login" className="dc-signin">Sign in</Link>
             <Link href="/#demo" className="dc-btn dc-btn-demo">Book a Demo</Link>
           </div>
@@ -82,6 +84,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
         <nav aria-label="Mobile" className={`dc-mob-nav${open ? " dc-open" : ""}`}>
           {nav.map(([label, href]) => <Link key={href} href={href} aria-current={current(href)} onClick={() => setOpen(false)}>{label}</Link>)}
           <Link href="/login" onClick={() => setOpen(false)}>Sign in</Link>
+          <LanguagePicker />
         </nav>
       </header>
 

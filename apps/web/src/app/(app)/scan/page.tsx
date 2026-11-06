@@ -9,6 +9,7 @@ import { useSession } from "@/lib/session";
 import { dateTime } from "@/lib/format";
 import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, StageBadge, Textarea, cx } from "@/components/ui";
 import { TagRecord, TagTimeline, type TagTraceData } from "@/components/TagTrace";
+import { PrinterConnect, type DeviceInfo } from "@/components/PrinterConnect";
 
 const QC_CHECKLIST = [
   ["clean", "Clean — no remaining soil or odour"],
@@ -31,6 +32,8 @@ function ScanInner() {
   const [reworkReason, setReworkReason] = useState("");
   const [locationId, setLocationId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const devices = useApi<DeviceInfo>("/labels/shop-printers");
+  const needsScanner = !!devices.data?.missing.scanner;
   const opened = useRef("");
   // The record shown under the scan. The count fetches it again after each change, so the history stays current.
   const [traced, setTraced] = useState<{ code: string; n: number } | null>(null);
@@ -124,6 +127,7 @@ function ScanInner() {
   return (
     <div>
       <PageHeader title="Scan station" subtitle="Scan a tag or bag label, or type its number and press Enter, to see its customer, order and complete history." />
+      {needsScanner && <div className="mb-4"><PrinterConnect kind="scanner" required onChanged={() => void devices.reload()} /></div>}
       <Card>
         <form
           onSubmit={(e) => {
@@ -133,8 +137,8 @@ function ScanInner() {
           className="flex flex-wrap items-center gap-3"
         >
           <div className="relative min-w-64 flex-1">
-            <ScanLine className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-slate-400" />
-            <Input ref={inputRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="Scan the barcode or type its number" className="py-3 pl-11 font-mono text-base" aria-label="Barcode number" />
+            <ScanLine className="pointer-events-none absolute start-3 top-3 h-5 w-5 text-slate-400" />
+            <Input ref={inputRef} autoFocus disabled={needsScanner} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Scan the barcode or type its number" className="py-3 ps-11 font-mono text-base" aria-label="Barcode number" />
           </div>
           <Button type="submit" size="lg" loading={busy}>
             Look up

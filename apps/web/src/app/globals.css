@@ -355,3 +355,21 @@ h1, h2 {
   .dcd-enter { opacity: 1; transform: none; }
 }
 @media print { .dcd-enter { opacity: 1; transform: none; } }
+
+/* Languages: the page waits for its translation, and Arabic reads right to left. */
+html[data-i18n-pending] body { visibility: hidden; }
+html[data-no-upi] option[value="upi"] { display: none; }
+[lang="ar"] * { letter-spacing: 0 !important; }
+[dir="rtl"] .lucide-chevron-right, [dir="rtl"] .lucide-chevron-left, [dir="rtl"] .lucide-arrow-right, [dir="rtl"] .lucide-arrow-left { transform: scaleX(-1); }
+
+/* The dark highlight that slides to the chosen option, and the small squeeze of a pressed button. */
+.dc-slide { position: relative; isolation: isolate; }
+.dc-slide > button { position: relative; z-index: 1; transition: color .3s ease, border-color .3s ease, transform .15s ease; }
+.dc-slide-thumb { position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none; box-shadow: 0 2px 8px rgba(21,21,20,.2); }
+.dc-slide-thumb.dc-slide-live { transition: transform .45s cubic-bezier(.2,.8,.2,1), width .45s cubic-bezier(.2,.8,.2,1), height .45s cubic-bezier(.2,.8,.2,1), opacity .2s ease; }
+.dc-press { transition: transform .12s ease, opacity .15s ease; }
+.dc-press:active:not(:disabled) { transform: scale(.94); }
+@media (prefers-reduced-motion: reduce) {
+  .dc-slide-thumb.dc-slide-live, .dc-slide > button, .dc-press { transition: none; }
+  .dc-press:active:not(:disabled) { transform: none; }
+}

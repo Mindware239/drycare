@@ -14,6 +14,7 @@ import {
   sumLines,
   formatMoney,
   allowedTransitions,
+  resolveRegion,
   type GarmentStage,
 } from "@drycare/shared";
 import { db, schema, type DbOrTx, type Tx } from "../db/client";
@@ -105,6 +106,7 @@ export async function buildQuote(tx: DbOrTx, auth: AuthContext, body: QuoteInput
     tx.query.services.findMany({ where: and(eq(schema.services.organizationId, auth.orgId), inArray(schema.services.id, svcIds)) }),
   ]);
 
+  const taxIncluded = resolveRegion(org).pricesIncludeTax;
   const lines = [];
   for (const [idx, item] of body.items.entries()) {
     const gt = gts.find((g) => g.id === item.garmentTypeId);
@@ -127,13 +129,14 @@ export async function buildQuote(tx: DbOrTx, auth: AuthContext, body: QuoteInput
       discountBps,
       discountFlat: item.discountFlat,
       taxBps: price?.taxBps ?? 0,
+      taxIncluded: taxIncluded,
       minimumCharge: price?.minimumCharge,
     });
     lines.push({ item, gt, svc, price, unitPrice, calc });
   }
   const totals = sumLines(lines.map((l) => l.calc));
   if (coupon && totals.subtotal < coupon.minimumOrderValue) {
-    throw badRequest(`This coupon requires a minimum order of ${formatMoney(coupon.minimumOrderValue)}`);
+    throw badRequest(`This coupon requires a minimum order of ${formatMoney(coupon.minimumOrderValue, auth.currency)}`);
   }
   return { lines, totals, currency: org!.defaultCurrency, surchargeBps, coupon, discountBps, member, memberApplied };
 }

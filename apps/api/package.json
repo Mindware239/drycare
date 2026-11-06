@@ -20,6 +20,8 @@
     "billing-test": "tsx --env-file=../../.env ../../scripts/billing-flow.ts",
     "license-test": "tsx --env-file=../../.env ../../scripts/license-flow.ts",
     "rfid-test": "tsx --env-file=../../.env ../../scripts/rfid-flow.ts",
+    "region-test": "tsx --env-file=../../.env ../../scripts/region-flow.ts",
+    "feature-access-test": "tsx --env-file=../../.env ../../scripts/feature-access-flow.ts",
     "features-test": "tsx --env-file=../../.env ../../scripts/plan-features-flow.ts && tsx --env-file=../../.env ../../scripts/plan-features-desktop.ts",
     "reports-test": "tsx --env-file=../../.env ../../scripts/reports-flow.ts",
     "wallet-test": "tsx --env-file=../../.env ../../scripts/wallet-flow.ts",

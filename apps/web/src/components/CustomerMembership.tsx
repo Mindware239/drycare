@@ -1,4 +1,5 @@
 "use client";
+import { shopMethods } from "@/lib/format";
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Crown, Printer, RefreshCw, XCircle } from "lucide-react";
@@ -123,7 +124,7 @@ function Sell({ customerId, branchId, plans, initialPlanId, onClose, onDone }: {
             {plan.perks.map((perk) => <li key={perk}>✓ {perk}</li>)}
           </ul>
         )}
-        {paid && <Field label="Received by"><Select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>{METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}</Select></Field>}
+        {paid && <Field label="Received by"><Select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>{shopMethods(METHODS).map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}</Select></Field>}
         {paid && method !== "cash" && <Field label="Transaction reference" required><Input required value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI / card / UTR ref" /></Field>}
         {paid && <p className="text-xs text-slate-500">This is money received now: it counts in today&apos;s collections and the cash drawer.</p>}
         <div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={saving} disabled={!plan}>{paid ? `Collect ${money(plan!.price)}` : "Add membership"}</Button></div>

@@ -1,3 +1,4 @@
+import { countryPack, isLanguage } from "@drycare/shared";
 import { randomBytes } from "node:crypto";
 import { SYSTEM_ROLES } from "@drycare/shared";
 import { STANDARD_SERVICES, installStandardCatalogue } from "./standardCatalogue";
@@ -14,14 +15,17 @@ export function slugify(name: string) {
 
 export async function provisionOrganization(
   tx: Tx,
-  input: { businessName: string; gstin?: string; branchName: string; branchCode: string; phone?: string; city?: string; state?: string; businessType?: string; outletCount?: number; counterCount?: number; ownerUserId: string; status?: "trial" | "active"; trialStartedAt?: Date; trialEndsAt?: Date; trialSource?: string },
+  input: { country?: string; language?: string; businessName: string; gstin?: string; branchName: string; branchCode: string; phone?: string; city?: string; state?: string; businessType?: string; outletCount?: number; counterCount?: number; ownerUserId: string; status?: "trial" | "active"; trialStartedAt?: Date; trialEndsAt?: Date; trialSource?: string },
 ) {
+  const pack = countryPack(input.country);
   const [org] = await tx
     .insert(schema.organizations)
     .values({
       name: input.businessName,
       slug: slugify(input.businessName),
       gstin: input.gstin,
+      defaultCurrency: pack.currency,
+      defaultTimezone: pack.timezone,
       status: input.status ?? "trial",
       trialStartedAt: input.trialStartedAt,
       trialEndsAt: input.trialEndsAt,
@@ -30,6 +34,8 @@ export async function provisionOrganization(
         maxDiscountBpsWithoutApproval: 1000,
         expressSurchargeBps: 5000,
         defaultTurnaroundHours: 48,
+        country: pack.code,
+        language: isLanguage(input.language) ? input.language : pack.language,
         ...(input.state ? { state: input.state } : {}),
         ...(input.businessType ? { businessType: input.businessType } : {}),
         ...(input.outletCount ? { outletCount: input.outletCount } : {}),

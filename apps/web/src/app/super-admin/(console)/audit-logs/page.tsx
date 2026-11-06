@@ -26,8 +26,8 @@ export default function AuditLogsPage() {
         title={<SegmentedTabs value={scope} onChange={(v) => { setScope(v); setPage(1); }} options={[{ value: "platform", label: "Control Center actions" }, { value: "all", label: "All platform events" }]} />}
         actions={<>
           <label className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Action, email or business" className="h-8 w-64 pl-9 text-xs" aria-label="Search audit log" />
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Action, email or business" className="h-8 w-64 ps-9 text-xs" aria-label="Search audit log" />
           </label>
           <CsvButton disabled={!data?.items.length} onClick={() => exportCsv("drycare-audit-log.csv", (data?.items ?? []).map((e) => ({ Time: e.createdAt, Action: e.action, Actor: e.actorEmail, Business: e.organizationName, Resource: `${e.resourceType}:${e.resourceId ?? ""}`, IP: e.ip })))} />
         </>}>
@@ -35,7 +35,7 @@ export default function AuditLogsPage() {
         {!data ? <LoadingRows /> : !data.items.length ? <EmptyState icon={Activity} title="No matching events" /> : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left text-sm">
+              <table className="w-full min-w-[860px] text-start text-sm">
                 <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <tr><th className="px-5 py-3">Time</th><th className="px-5 py-3">Event</th><th className="px-5 py-3">By</th><th className="px-5 py-3">Business</th><th className="px-5 py-3">IP address</th><th className="w-10" /></tr>
                 </thead>

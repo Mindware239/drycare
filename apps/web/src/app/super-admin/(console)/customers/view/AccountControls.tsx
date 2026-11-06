@@ -7,6 +7,8 @@ import { Alert, Badge, Button, Field, Input, Modal, Select, Textarea } from "@/c
 import { LoadingRows, Panel, dateLabel, useAdminData } from "../../admin-ui";
 
 type Entitlements = {
+  expiry?: Partial<Record<FeatureKey, string>>;
+  globallyOff?: string[];
   plan: { id: string; name: string; status: string; endsAt: string | null } | null;
   planFeatures: FeatureMap;
   overrides: FeatureOverrides;
@@ -20,6 +22,7 @@ type Choice = "plan" | "on" | "off";
 export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: () => void }) {
   const { data, error, reload } = useAdminData<Entitlements>(`/platform-admin/organizations/${orgId}/entitlements`);
   const [choices, setChoices] = useState<Record<FeatureKey, Choice> | null>(null);
+  const [ends, setEnds] = useState<Partial<Record<FeatureKey, string>>>({});
   const [branchLimit, setBranchLimit] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -28,9 +31,11 @@ export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: 
   useEffect(() => {
     if (!data) return;
     setBranchLimit(data.branches.override === null ? "" : String(data.branches.override));
+    setEnds(Object.fromEntries(Object.entries(data.expiry ?? {}).map(([key, iso]) => [key, new Date(iso as string).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })])));
     setChoices(Object.fromEntries(FEATURE_KEYS.map((key) => [key, data.overrides[key] === undefined ? "plan" : data.overrides[key] ? "on" : "off"])) as Record<FeatureKey, Choice>);
   }, [data]);
-  const changed = !!data && !!choices && (branchLimit !== (data.branches.override === null ? "" : String(data.branches.override)) || FEATURE_KEYS.some((key) => choices[key] !== (data.overrides[key] === undefined ? "plan" : data.overrides[key] ? "on" : "off")));
+  const savedEnd = (key: FeatureKey) => { const iso = data?.expiry?.[key]; return iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : ""; };
+  const changed = !!data && !!choices && (FEATURE_KEYS.some((key) => choices[key] !== "plan" && (ends[key] ?? "") !== savedEnd(key)) || branchLimit !== (data.branches.override === null ? "" : String(data.branches.override)) || FEATURE_KEYS.some((key) => choices[key] !== (data.overrides[key] === undefined ? "plan" : data.overrides[key] ? "on" : "off")));
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -40,7 +45,7 @@ export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: 
     setNotice("");
     try {
       const overrides = Object.fromEntries(FEATURE_KEYS.filter((key) => choices[key] !== "plan").map((key) => [key, choices[key] === "on"]));
-      await api(`/platform-admin/organizations/${orgId}/entitlements`, { method: "PUT", body: { overrides, branchLimit: branchLimit ? Number(branchLimit) : null, reason } });
+      await api(`/platform-admin/organizations/${orgId}/entitlements`, { method: "PUT", body: { overrides, expires: Object.fromEntries(Object.keys(overrides).filter((key) => ends[key as FeatureKey]).map((key) => [key, ends[key as FeatureKey]])), branchLimit: branchLimit ? Number(branchLimit) : null, reason } });
       setReason("");
       setNotice("Saved. The shop sees this the next time a screen opens. For a shop using the PC edition, renew its license key.");
       await reload();
@@ -61,13 +66,15 @@ export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: 
           {notice && <Alert tone="green" onClose={() => setNotice("")}>{notice}</Alert>}
           <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
             {FEATURE_KEYS.map((key) => {
-              const effective = choices[key] === "plan" ? data.planFeatures[key] : choices[key] === "on";
+              const off = data.globallyOff?.includes(key);
+              const effective = !off && (choices[key] === "plan" ? data.planFeatures[key] : choices[key] === "on");
               return (
                 <div key={key} className="flex flex-wrap items-center justify-between gap-3 p-3">
                   <div className="min-w-48 flex-1">
-                    <p className="flex items-center gap-2 text-sm font-medium text-slate-900">{FEATURES[key].label}<Badge color={effective ? "green" : "slate"}>{effective ? "On" : "Off"}</Badge></p>
+                    <p className="flex items-center gap-2 text-sm font-medium text-slate-900">{FEATURES[key].label}<Badge color={effective ? "green" : "slate"}>{effective ? "On" : "Off"}</Badge>{off && <Badge color="red">Off for everyone</Badge>}{choices[key] !== "plan" && <Badge color="amber">Exception</Badge>}<span className="text-xs font-normal text-slate-500">{data.planFeatures[key] ? "In plan" : "Not in plan"}</span></p>
                     <p className="text-xs text-slate-500">{FEATURES[key].description}</p>
                   </div>
+                  {choices[key] !== "plan" && <label className="flex items-center gap-1.5 text-xs text-slate-600">Until<Input type="date" value={ends[key] ?? ""} onChange={(e) => setEnds({ ...ends, [key]: e.target.value })} className="w-36" aria-label={`${FEATURES[key].label} exception ends`} /></label>}
                   <Select value={choices[key]} onChange={(e) => setChoices({ ...choices, [key]: e.target.value as Choice })} className="w-auto" aria-label={`${FEATURES[key].label} for this shop`}>
                     <option value="plan">As in plan ({data.planFeatures[key] ? "on" : "off"})</option>
                     <option value="on">Always on</option>
@@ -84,7 +91,10 @@ export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: 
             </div>
             <Input type="number" min={1} max={1000} value={branchLimit} onChange={(e) => setBranchLimit(e.target.value)} placeholder="As in plan" className="w-28" aria-label="Branches allowed for this shop" />
           </div>
-          <p className="text-xs text-slate-500">Always included: {CORE_FEATURE_LABELS.join(", ")}.</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">Always included: {CORE_FEATURE_LABELS.join(", ")}. Leave "Until" blank for an exception with no end date.</p>
+            <Button type="button" size="sm" variant="ghost" disabled={FEATURE_KEYS.every((key) => choices[key] === "plan")} onClick={() => setChoices(Object.fromEntries(FEATURE_KEYS.map((key) => [key, "plan"])) as Record<FeatureKey, Choice>)}>Restore plan defaults</Button>
+          </div>
           {changed && (
             <>
               <Field label="Reason" required hint="Saved permanently in the audit log. Minimum 8 characters."><Input required minLength={8} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Tag designer included in their negotiated price" /></Field>

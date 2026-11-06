@@ -1,4 +1,5 @@
 "use client";
+import { shopMethods } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock3, Flame, Minus, Plus, Printer, Receipt, Scale, Shirt, Wind } from "lucide-react";
@@ -190,7 +191,7 @@ export function LaundryCheckout({ branchId, mode, preselectMachine, onDone }: { 
               const Icon = SERVICE_ICON(s.machineTypes);
               const sel = s.id === serviceId;
               return (
-                <button key={s.id} type="button" onClick={() => setServiceId(s.id)} className={cx("rounded-2xl border-2 bg-white p-4 text-left transition", big && "p-5", sel ? "border-brand-600 bg-brand-50" : "border-slate-200 hover:border-brand-300")}>
+                <button key={s.id} type="button" onClick={() => setServiceId(s.id)} className={cx("rounded-2xl border-2 bg-white p-4 text-start transition", big && "p-5", sel ? "border-brand-600 bg-brand-50" : "border-slate-200 hover:border-brand-300")}>
                   <Icon className={cx("h-7 w-7", sel ? "text-brand-700" : "text-slate-400")} />
                   <p className={cx("mt-2 font-semibold text-slate-900", big && "text-lg")}>{s.name}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{s.rules.filter((r) => r.enabled).map((r) => r.method === "weight" ? `${money(r.unitPrice)}/kg` : r.method === "cycle" ? `${money(r.unitPrice)}/cycle` : r.method === "package" ? `${money(r.unitPrice)} package` : r.method === "time" ? `${money(r.unitPrice)}/min` : "by item")[0]}</p>
@@ -204,7 +205,7 @@ export function LaundryCheckout({ branchId, mode, preselectMachine, onDone }: { 
           <Step n={2} title="How should we charge?">
             <div className="flex flex-wrap gap-2">
               {rules.map((r) => (
-                <button key={r.method} type="button" onClick={() => setMethod(r.method)} className={cx("rounded-xl border-2 px-4 py-2.5 text-left", method === r.method ? "border-brand-600 bg-brand-50" : "border-slate-200 bg-white hover:border-brand-300")}>
+                <button key={r.method} type="button" onClick={() => setMethod(r.method)} className={cx("rounded-xl border-2 px-4 py-2.5 text-start", method === r.method ? "border-brand-600 bg-brand-50" : "border-slate-200 bg-white hover:border-brand-300")}>
                   <span className="block text-sm font-semibold text-slate-900">{LAUNDRY_METHOD_LABELS[r.method]}</span>
                   <span className="block text-xs text-slate-500">{ruleHint(r)}</span>
                 </button>
@@ -250,7 +251,7 @@ export function LaundryCheckout({ branchId, mode, preselectMachine, onDone }: { 
                 const tooSmall = Boolean(m.capacityGrams && weightGrams > m.capacityGrams);
                 return (
                   <button key={m.id} type="button" disabled={!free || tooSmall} onClick={() => setMachineId(m.id === machineId ? "" : m.id)}
-                    className={cx("rounded-xl border-2 p-3 text-left disabled:cursor-not-allowed disabled:opacity-50", m.id === machineId ? "border-brand-600 bg-brand-50" : "border-slate-200 bg-white hover:border-brand-300")}>
+                    className={cx("rounded-xl border-2 p-3 text-start disabled:cursor-not-allowed disabled:opacity-50", m.id === machineId ? "border-brand-600 bg-brand-50" : "border-slate-200 bg-white hover:border-brand-300")}>
                     <span className="block font-semibold text-slate-900">{m.name}</span>
                     <span className="block text-xs text-slate-500">{m.capacityGrams ? `${m.capacityGrams / 1000} kg` : m.code}</span>
                     <span className={cx("mt-1 block text-xs font-medium", free ? (tooSmall ? "text-amber-700" : "text-emerald-700") : "text-slate-500")}>{free ? (tooSmall ? "Too small for this load" : "Available") : m.status.replaceAll("_", " ")}</span>
@@ -294,7 +295,7 @@ export function LaundryCheckout({ branchId, mode, preselectMachine, onDone }: { 
                 </div>
                 <Field label="Payment">
                   <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
-                    {(["cash", "upi", "card", "later"] as const).map((m) => <button key={m} type="button" onClick={() => setPayMethod(m)} className={cx("rounded-lg py-2", payMethod === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{m === "upi" ? "UPI" : m === "later" ? "Pay later" : m[0].toUpperCase() + m.slice(1)}</button>)}
+                    {shopMethods(["cash", "upi", "card", "later"] as const).map((m) => <button key={m} type="button" onClick={() => setPayMethod(m)} className={cx("rounded-lg py-2", payMethod === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{m === "upi" ? "UPI" : m === "later" ? "Pay later" : m[0].toUpperCase() + m.slice(1)}</button>)}
                   </div>
                 </Field>
                 {(payMethod === "upi" || payMethod === "card") && <Field label="Transaction reference" required><Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder={payMethod === "upi" ? "UPI ref / UTR" : "Card slip no."} /></Field>}

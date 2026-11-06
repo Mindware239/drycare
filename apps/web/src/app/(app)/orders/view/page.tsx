@@ -1,4 +1,5 @@
 "use client";
+import { hasUpi, shopMethods } from "@/lib/format";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -148,8 +149,8 @@ function OrderInner() {
         <ArrowLeft className="h-4 w-4" /> Back to orders
       </Link>
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-900 via-brand-800 to-[#167c6c] p-5 text-white shadow-lg shadow-brand-900/10 sm:p-6">
-        <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full border border-white/10" />
-        <div className="pointer-events-none absolute -right-1 -top-12 h-48 w-48 rounded-full border border-white/10" />
+        <div className="pointer-events-none absolute -end-12 -top-20 h-64 w-64 rounded-full border border-white/10" />
+        <div className="pointer-events-none absolute -end-1 -top-12 h-48 w-48 rounded-full border border-white/10" />
         <div className="relative">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="min-w-0">
@@ -417,11 +418,11 @@ function OrderInner() {
                       <span className="font-medium text-slate-800">{i.garmentTypeName} — {i.serviceName}</span>
                       {i.overrideReason && <span className="mt-1 block text-xs text-amber-700">Price override: {i.overrideReason} (list {money(i.listUnitPrice)})</span>}
                     </Td>
-                    <Td className="text-right tabular-nums">{i.quantity}</Td>
-                    <Td className="text-right tabular-nums">{money(i.unitPrice)}</Td>
-                    <Td className="text-right tabular-nums">{i.discountAmount ? `− ${money(i.discountAmount)}` : "—"}</Td>
-                    <Td className="text-right tabular-nums">{money(i.taxAmount)} <span className="text-xs text-slate-400">({i.taxBps / 100}%)</span></Td>
-                    <Td className="text-right font-semibold tabular-nums text-slate-800">{money(i.lineTotal)}</Td>
+                    <Td className="text-end tabular-nums">{i.quantity}</Td>
+                    <Td className="text-end tabular-nums">{money(i.unitPrice)}</Td>
+                    <Td className="text-end tabular-nums">{i.discountAmount ? `− ${money(i.discountAmount)}` : "—"}</Td>
+                    <Td className="text-end tabular-nums">{money(i.taxAmount)} <span className="text-xs text-slate-400">({i.taxBps / 100}%)</span></Td>
+                    <Td className="text-end font-semibold tabular-nums text-slate-800">{money(i.lineTotal)}</Td>
                   </tr>
                 ))}
               </Table>
@@ -434,14 +435,14 @@ function OrderInner() {
                     <span className="mt-0.5 block text-xs text-slate-500">{i.serviceName} · Qty {i.quantity} × {money(i.unitPrice)}{i.stainCharge > 0 ? ` · includes stain treatment ${money(i.stainCharge)}` : ""}</span>
                     {i.overrideReason && <span className="mt-1 block text-xs text-amber-700">Price override: {i.overrideReason}</span>}
                   </span>
-                  <span className="shrink-0 text-right">
+                  <span className="shrink-0 text-end">
                     <span className="block font-semibold tabular-nums text-slate-800">{money(i.lineTotal)}</span>
                     <span className="mt-0.5 block text-xs text-slate-500">GST {money(i.taxAmount)}</span>
                   </span>
                 </li>
               ))}
             </ul>
-            <dl className="ml-auto w-full max-w-sm space-y-2 border-t border-slate-100 bg-slate-50/50 px-4 py-4 text-sm">
+            <dl className="ms-auto w-full max-w-sm space-y-2 border-t border-slate-100 bg-slate-50/50 px-4 py-4 text-sm">
               <div className="flex justify-between text-slate-600">
                 <dt>Subtotal</dt>
                 <dd className="tabular-nums">{money(o.subtotal)}</dd>
@@ -509,7 +510,7 @@ function OrderInner() {
                   <span className="font-mono font-semibold text-slate-800">{b.scanCode}</span> <span className="font-mono text-xs text-slate-500">{b.bagCode}</span>
                   <span className="text-slate-500">{b.garmentCount} garment{b.garmentCount === 1 ? "" : "s"}</span>
                   <LocationBadge location={b.location} />
-                  <span className="ml-auto text-xs text-slate-500">{b.labelPrintCount > 0 ? `Label printed ${b.labelPrintCount}×` : "Label not printed"}</span>
+                  <span className="ms-auto text-xs text-slate-500">{b.labelPrintCount > 0 ? `Label printed ${b.labelPrintCount}×` : "Label not printed"}</span>
                 </li>
               ))}
             </ul>
@@ -581,12 +582,12 @@ function OrderInner() {
                 <span className="block truncate font-semibold text-slate-900 group-hover:text-brand-700">{o.customer.name}</span>
                 <span className="mt-0.5 block truncate text-xs text-slate-500">{o.customer.customerCode}</span>
               </span>
-              <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-brand-700" />
+              <ArrowRight className="ms-auto h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-brand-700" />
             </Link>
             <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
-              <div className="flex justify-between gap-3"><span className="text-slate-500">Mobile</span><span className="text-right font-medium text-slate-700">{o.customer.phone ?? "Not provided"}</span></div>
-              {o.customer.email && <div className="flex justify-between gap-3"><span className="text-slate-500">Email</span><span className="break-all text-right text-slate-700">{o.customer.email}</span></div>}
-              <div className="flex justify-between gap-3"><span className="text-slate-500">Collection</span><span className="text-right font-medium text-slate-700">{o.deliveryMethod === "home_delivery" ? "Home delivery" : "Counter collection"}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">Mobile</span><span className="text-end font-medium text-slate-700">{o.customer.phone ?? "Not provided"}</span></div>
+              {o.customer.email && <div className="flex justify-between gap-3"><span className="text-slate-500">Email</span><span className="break-all text-end text-slate-700">{o.customer.email}</span></div>}
+              <div className="flex justify-between gap-3"><span className="text-slate-500">Collection</span><span className="text-end font-medium text-slate-700">{o.deliveryMethod === "home_delivery" ? "Home delivery" : "Counter collection"}</span></div>
               <div className="flex justify-between gap-3"><span className="text-slate-500">Invoice</span><span className="font-mono text-xs text-slate-700">{o.invoice?.invoiceNumber ?? "—"}</span></div>
             </div>
             {o.notes && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Order notes</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{o.notes}</p></div>}
@@ -631,7 +632,7 @@ function OrderInner() {
                     </p>
                     {Number(p.refunded) > 0 && <p className="text-xs text-red-600">Refunded {money(p.refunded)}</p>}
                     {p.status === "pending" && can("payments.collect") && (
-                      <button className="mt-1 mr-3 text-xs font-semibold text-brand-700 hover:underline" onClick={() => setModal({ verify: p })}>
+                      <button className="mt-1 me-3 text-xs font-semibold text-brand-700 hover:underline" onClick={() => setModal({ verify: p })}>
                         Verify transfer…
                       </button>
                     )}
@@ -734,7 +735,7 @@ function PayModal({ order, onClose, onDone }: { order: any; onClose: () => void;
           </Field>
           <Field label="Method">
             <Select value={r.method} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, method: e.target.value } : x)))}>
-              {PAYMENT_METHODS.map((m) => (
+              {shopMethods(PAYMENT_METHODS).map((m) => (
                 <option key={m} value={m}>
                   {methodLabel(m)}
                 </option>
@@ -755,7 +756,7 @@ function PayModal({ order, onClose, onDone }: { order: any; onClose: () => void;
         </div>
       ))}
       {rows.length < 3 && (
-        <Button variant="secondary" size="sm" onClick={() => setRows([...rows, { amount: "", method: "upi", reference: "", pending: false }])}>
+        <Button variant="secondary" size="sm" onClick={() => setRows([...rows, { amount: "", method: hasUpi() ? "upi" : "card", reference: "", pending: false }])}>
           + Split payment
         </Button>
       )}
@@ -811,7 +812,7 @@ function HandoverModal({ order, ready, itemById, onClose, onDone }: { order: any
               <input type="checkbox" checked={sel.includes(g.id)} onChange={(e) => setSel(e.target.checked ? [...sel, g.id] : sel.filter((x) => x !== g.id))} />
               <span className="font-mono text-xs">{g.tagCode}</span>
               <span>{itemById(g.orderItemId)?.garmentTypeName}</span>
-              <span className="ml-auto text-xs text-slate-500">Rack {g.storageLocation ?? "—"}</span>
+              <span className="ms-auto text-xs text-slate-500">Rack {g.storageLocation ?? "—"}</span>
             </label>
           </li>
         ))}

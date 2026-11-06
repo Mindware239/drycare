@@ -2,6 +2,7 @@ import { getStoredPayments, razorpayReady } from "../lib/platformSettings";
 import { platformAdminPassword } from "./auth";
 import type { FastifyInstance } from "fastify";
 import { eq, sql } from "drizzle-orm";
+import { rupeesOf } from "../lib/commercialInvoice";
 import { z } from "zod";
 import { db, schema } from "../db/client";
 import { requirePlatformAdmin } from "../lib/context";
@@ -57,8 +58,8 @@ export async function platformConsoleRoutes(app: FastifyInstance) {
            from subs where status = 'active' and (ends_at is null or ends_at > now())) as "mrrPaise",
         (select count(*) from subs where status = 'active' and ends_at between now() and now() + interval '14 days')::int as "renewals14",
         (select count(*) from subs where status in ('canceled', 'expired') or (status = 'active' and ends_at <= now()))::int as "lapsedSubscriptions",
-        (select coalesce(sum(amount_paise), 0) from pays where status = 'paid') as "collectedPaise",
-        (select coalesce(sum(amount_paise), 0) from pays where status = 'paid' and created_at >= now() - interval '30 days') as "collected30Paise",
+        (select coalesce(sum(${rupeesOf("amount_paise", "currency")}), 0) from pays where status = 'paid') as "collectedPaise",
+        (select coalesce(sum(${rupeesOf("amount_paise", "currency")}), 0) from pays where status = 'paid' and created_at >= now() - interval '30 days') as "collected30Paise",
         (select count(*) from pays where status = 'paid')::int as "paymentCount",
         (select count(*) from public_leads where status = 'new')::int as "newLeads",
         (select count(*) from users u where exists (
@@ -284,21 +285,21 @@ export async function platformConsoleRoutes(app: FastifyInstance) {
     const [monthly, byPlan, byChannel, [totals]] = await Promise.all([
       db.execute(sql`
         select to_char(date_trunc('month', p.created_at at time zone 'Asia/Kolkata'), 'YYYY-MM') as month,
-          coalesce(sum(p.amount_paise) filter (where p.status = 'paid'), 0)::bigint as "collectedPaise",
+          coalesce(sum(${rupeesOf("p.amount_paise", "p.currency")}) filter (where p.status = 'paid'), 0)::bigint as "collectedPaise",
           count(*) filter (where p.status = 'paid')::int as payments
         from commercial_payments p join organizations o on o.id = p.organization_id
         where ${CUSTOMER_ORG} and ${range} group by 1 order by 1`),
       db.execute(sql`
-        select coalesce(pl.name, 'Unassigned') as plan, coalesce(sum(p.amount_paise), 0)::bigint as "collectedPaise", count(*)::int as payments
+        select coalesce(pl.name, 'Unassigned') as plan, coalesce(sum(${rupeesOf("p.amount_paise", "p.currency")}), 0)::bigint as "collectedPaise", count(*)::int as payments
         from commercial_payments p join organizations o on o.id = p.organization_id
         left join commercial_subscriptions s on s.id = p.subscription_id left join commercial_plans pl on pl.id = s.plan_id
         where ${CUSTOMER_ORG} and p.status = 'paid' and ${range} group by 1 order by 2 desc`),
       db.execute(sql`
-        select p.provider as channel, coalesce(sum(p.amount_paise), 0)::bigint as "collectedPaise", count(*)::int as payments
+        select p.provider as channel, coalesce(sum(${rupeesOf("p.amount_paise", "p.currency")}), 0)::bigint as "collectedPaise", count(*)::int as payments
         from commercial_payments p join organizations o on o.id = p.organization_id
         where ${CUSTOMER_ORG} and p.status = 'paid' and ${range} group by 1 order by 2 desc`),
       db.execute(sql`
-        select coalesce(sum(p.amount_paise) filter (where p.status = 'paid'), 0)::bigint as "collectedPaise",
+        select coalesce(sum(${rupeesOf("p.amount_paise", "p.currency")}) filter (where p.status = 'paid'), 0)::bigint as "collectedPaise",
           count(*) filter (where p.status = 'paid')::int as "paidCount",
           count(distinct p.organization_id) filter (where p.status = 'paid')::int as "payingCustomers"
         from commercial_payments p join organizations o on o.id = p.organization_id

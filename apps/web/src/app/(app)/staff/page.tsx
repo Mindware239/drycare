@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, BriefcaseBusiness, CalendarDays, CalendarCheck, CalendarOff, Check, Clock3, ContactRound, Mail, MapPin, Pencil, Phone, Plus, Search, ShieldCheck, UserRound, Users, X, type LucideIcon } from "lucide-react";
 import { PERMISSIONS } from "@drycare/shared";
@@ -83,7 +84,7 @@ function shiftDate(value: string, days: number) {
 function formatWorkDate(value: string | null | undefined) {
   if (!value) return "—";
   const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
-  return date.toLocaleDateString("en-IN", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
+  return date.toLocaleDateString(appLocale(), { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
 }
 
 function initials(name: string) {
@@ -191,8 +192,8 @@ export default function StaffPage() {
             <p className="mt-0.5 text-sm text-slate-500">Contact details and account access for your team.</p>
           </div>
           <label className="relative block w-full sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employees…" className="pl-9" />
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employees…" className="ps-9" />
           </label>
         </div>
         {visibleStaff.length === 0 ? (
@@ -211,7 +212,7 @@ export default function StaffPage() {
                     <Td>
                       <div className="flex min-w-48 items-center gap-3">
                         <EmployeeAvatar staff={person} className="h-10 w-10 text-xs" />
-                        <button type="button" onClick={() => setSelected(person)} className="min-w-0 text-left focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                        <button type="button" onClick={() => setSelected(person)} className="min-w-0 text-start focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                           <span className="block truncate font-semibold text-slate-800 hover:text-brand-700">{person.name}</span>
                           <span className="block truncate text-xs text-slate-500">{person.jobTitle || person.email}</span>
                         </button>
@@ -246,7 +247,7 @@ export default function StaffPage() {
                     <EmployeeAvatar staff={person} className="h-11 w-11 text-sm" />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <button type="button" onClick={() => setSelected(person)} className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                        <button type="button" onClick={() => setSelected(person)} className="min-w-0 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                           <span className="block truncate font-semibold text-slate-900">{person.name}</span>
                           <span className="block truncate text-xs text-slate-500">{person.jobTitle || person.roleName}</span>
                         </button>
@@ -344,14 +345,14 @@ export default function StaffPage() {
             <table className="min-w-full text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-600">
-                  <th className="sticky left-0 z-10 min-w-52 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-left">Permission</th>
+                  <th className="sticky start-0 z-10 min-w-52 border-b border-e border-slate-200 bg-slate-50 px-3 py-3 text-start">Permission</th>
                   {roleRows.map((role) => <th key={role.key} className="min-w-28 border-b border-slate-200 px-3 py-3 text-center">{role.name}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {Object.entries(PERMISSIONS).map(([key, label]) => (
                   <tr key={key} className="hover:bg-slate-50/70">
-                    <td className="sticky left-0 border-r border-slate-100 bg-white px-3 py-2.5 font-medium text-slate-700">{label}</td>
+                    <td className="sticky start-0 border-e border-slate-100 bg-white px-3 py-2.5 font-medium text-slate-700">{label}</td>
                     {roleRows.map((role) => <td key={role.key} className="px-3 py-2.5 text-center">{role.permissions.includes(key) ? <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><Check className="h-3.5 w-3.5" /></span> : <span className="text-slate-300">—</span>}</td>)}
                   </tr>
                 ))}
@@ -402,14 +403,14 @@ function EmployeeDetails({
       footer={
         <div className="flex w-full flex-wrap justify-between gap-2">
           <Button variant="secondary" onClick={onRecordLeave}><CalendarDays className="h-4 w-4" />Record leave</Button>
-          <div className="ml-auto flex gap-2">
+          <div className="ms-auto flex gap-2">
             <Button variant="secondary" onClick={onClose}>Close</Button>
             <Button onClick={onEdit}><Pencil className="h-4 w-4" />Edit profile</Button>
           </div>
         </div>
       }
     >
-      <div className="max-h-[70vh] space-y-4 overflow-y-auto overscroll-contain pr-1">
+      <div className="max-h-[70vh] space-y-4 overflow-y-auto overscroll-contain pe-1">
         <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4">
           <EmployeeAvatar staff={employee} className="h-16 w-16 text-lg" />
           <div className="min-w-[14rem] flex-1">
@@ -420,7 +421,7 @@ function EmployeeDetails({
             <p className="mt-1 text-sm text-slate-600">{employee.jobTitle || employee.roleName} · {employee.roleName}</p>
             <p className="mt-1 text-xs text-slate-500">{branchText}</p>
           </div>
-          <div className="text-left text-xs text-slate-500 sm:text-right">
+          <div className="text-start text-xs text-slate-500 sm:text-end">
             <p>Joined {formatWorkDate(employee.joiningDate)}</p>
             <p className="mt-1">Last sign-in {dateTime(employee.lastLoginAt)}</p>
           </div>
@@ -562,7 +563,7 @@ function AttendanceCard({
       <div className="flex flex-wrap items-start gap-3">
         <EmployeeAvatar staff={{ name: entry.name, photoUrl: null }} className="h-11 w-11 text-sm" />
         <div className="min-w-0 flex-1">
-          <button type="button" onClick={onEmployeeClick} className="text-left font-semibold text-slate-900 hover:text-brand-700 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">{entry.name}</button>
+          <button type="button" onClick={onEmployeeClick} className="text-start font-semibold text-slate-900 hover:text-brand-700 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">{entry.name}</button>
           <p className="mt-0.5 truncate text-xs text-slate-500">{entry.jobTitle || entry.roleName} · {entry.phone || entry.email}</p>
         </div>
         {status === "present" ? <Badge color="green">Present</Badge> : status === "absent" ? <Badge color="red">Absent</Badge> : status === "on_leave" ? <Badge color="amber">On leave</Badge> : <Badge color="slate">Not recorded</Badge>}
@@ -776,14 +777,14 @@ function EmployeeForm({ roles, employee, onClose, onDone }: { roles: any[]; empl
       footer={
         <div className="flex w-full items-center justify-between gap-3">
           <p className="hidden text-xs text-slate-500 sm:block">Employee data is restricted to staff managers. Salary is owner-only.</p>
-          <div className="ml-auto flex gap-2">
+          <div className="ms-auto flex gap-2">
             <Button variant="secondary" onClick={() => { if (accountCreated) onDone(); else onClose(); }}>Close</Button>
             <Button onClick={save} loading={saving} disabled={!canSubmit}>{accountCreated ? "Retry photo upload" : employee ? "Save profile" : "Create employee"}</Button>
           </div>
         </div>
       }
     >
-      <div className="max-h-[65vh] space-y-5 overflow-y-auto overscroll-contain pr-2">
+      <div className="max-h-[65vh] space-y-5 overflow-y-auto overscroll-contain pe-2">
         {err && <Alert>{accountCreated ? `Employee account was created. ${err}` : err}</Alert>}
         {!employee && !accountCreated && (
           <section className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
@@ -831,7 +832,7 @@ function EmployeeForm({ roles, employee, onClose, onDone }: { roles: any[]; empl
             <Field label="Job title"><Input value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Pressing operator" /></Field>
             <Field label="Joining date"><Input type="date" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} /></Field>
             <Field label="Mobile number"><Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} autoComplete="tel" /></Field>
-            {isOwner && <Field label="Monthly salary (₹)" hint="Private to the business owner. Stored as INR paise."><Input type="number" min="0" step="0.01" value={form.monthlySalary} onChange={(e) => setForm({ ...form, monthlySalary: e.target.value })} inputMode="decimal" placeholder="Not set" /></Field>}
+            {isOwner && <Field label="Monthly salary (₹)" hint="Private to the business owner."><Input type="number" min="0" step="0.01" value={form.monthlySalary} onChange={(e) => setForm({ ...form, monthlySalary: e.target.value })} inputMode="decimal" placeholder="Not set" /></Field>}
             <Field label="Employee photo" hint="JPG, PNG, or WebP up to 600 KB. Stored privately in the business database.">
               <Input type="file" accept="image/jpeg,image/png,image/webp" className="px-2 py-1.5 text-xs" onChange={(e) => { setPhoto(e.target.files?.[0] ?? null); setRemovePhoto(false); setPhotoSaved(false); }} />
               {employee?.photoUrl && !removePhoto && !photo && <button type="button" onClick={() => { setRemovePhoto(true); setPhotoSaved(false); }} className="mt-1 text-xs font-medium text-red-600 hover:text-red-700">Remove current photo</button>}

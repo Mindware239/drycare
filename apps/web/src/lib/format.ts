@@ -1,17 +1,48 @@
-import { formatMoney } from "@drycare/shared";
+import { formatLocale, formatMoney, resolveRegion, todayInZone, type Region } from "@drycare/shared";
+import { currentLanguage, setTerms } from "./i18n";
 
-export const money = (paise: number | string | null | undefined, currency = "INR") => formatMoney(Number(paise ?? 0), currency);
+const REGION_KEY = "drycare.region";
+let region: Region = resolveRegion(null);
+
+/** The shop's country settings, used by every format below. Remembered so print pages have them too. */
+export function setRegion(next: Region, remember = true) {
+  region = next;
+  if (typeof window === "undefined") return;
+  if (remember) {
+    try {
+      localStorage.setItem(REGION_KEY, JSON.stringify(next));
+    } catch {}
+  }
+  document.documentElement.toggleAttribute("data-no-upi", !next.hasUpi);
+  setTerms(next, currencySymbol());
+}
+
+export const currentRegion = () => region;
+export const hasUpi = () => region.hasUpi;
+export const appZone = () => region.timezone;
+export const appLocale = () => (region.country === "IN" && currentLanguage() === "en" ? "en-IN" : formatLocale(currentLanguage(), region.country));
+/** Payment choices this country has: UPI is India's. */
+export const shopMethods = <T extends string>(methods: readonly T[]) => methods.filter((m) => m !== "upi" || region.hasUpi);
+export function currencySymbol() {
+  return new Intl.NumberFormat(appLocale(), { style: "currency", currency: region.currency }).formatToParts(0).find((p) => p.type === "currency")?.value ?? region.currency;
+}
+/** An amount without decimals, for dashboards. */
+export const wholeMoney = (minor: number | string) => new Intl.NumberFormat(appLocale(), { style: "currency", currency: region.currency, maximumFractionDigits: 0 }).format(Number(minor) / 100);
+/** Mindware's own prices to its customers are always in rupees. */
+export const rupees = (paise: number | string | null | undefined) => formatMoney(Number(paise ?? 0), "INR", "en-IN");
+
+export const money = (minor: number | string | null | undefined, currency = region.currency) => formatMoney(Number(minor ?? 0), currency, appLocale());
 
 export const dateTime = (d: string | Date | null | undefined) =>
-  d ? new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+  d ? new Date(d).toLocaleString(appLocale(), { timeZone: appZone(), day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 
 export const dateOnly = (d: string | Date | null | undefined) =>
-  d ? new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "—";
+  d ? new Date(d).toLocaleDateString(appLocale(), { timeZone: appZone(), day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 /** Rupee input (e.g. "249.50") to paise. Returns NaN on invalid input. */
 export const rupeesToPaise = (v: string) => (v.trim() === "" || isNaN(Number(v)) ? NaN : Math.round(Number(v) * 100));
 
-export const todayISO = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+export const todayISO = () => todayInZone(region.timezone);
 
 export const isOverdue = (promisedAt: string, status: string) =>
   new Date(promisedAt) < new Date() && ["received", "in_processing", "partially_ready"].includes(status);
@@ -31,4 +62,12 @@ export function amountInWords(paise: number) {
   const r = Math.floor(paise / 100);
   const p = paise % 100;
   return `Rupees ${r ? words(r) : "Zero"}${p ? ` and ${words(p)} Paise` : ""} Only`;
+}
+
+
+if (typeof window !== "undefined") {
+  try {
+    const saved = localStorage.getItem(REGION_KEY);
+    if (saved) setRegion(JSON.parse(saved) as Region, false);
+  } catch {}
 }

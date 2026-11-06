@@ -65,8 +65,8 @@ export function CustomerList({ mode, initialWindow, initialSort }: { mode: Mode;
       <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center">
         {mode === "trials" && <SegmentedTabs value={trialWindow} options={[...TRIAL_WINDOWS]} onChange={(v) => { setTrialWindow(v); setPage(1); }} />}
         <label className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Search business, owner, email, phone or GSTIN" aria-label="Search customers" className="pl-9" />
+          <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Search business, owner, email, phone or GSTIN" aria-label="Search customers" className="ps-9" />
         </label>
         {mode === "customers" && (
           <Select aria-label="Filter by status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="lg:w-44">
@@ -114,7 +114,7 @@ export function CustomerList({ mode, initialWindow, initialSort }: { mode: Mode;
                 </td>
                 <td className="px-5 py-3.5 text-xs text-slate-600">{r.branches} branch{r.branches === 1 ? "" : "es"} · {r.users} user{r.users === 1 ? "" : "s"}<br />{r.orders.toLocaleString("en-IN")} orders</td>
                 <td className="px-5 py-3.5 text-xs text-slate-600">{r.lastLoginAt ? dateLabel(r.lastLoginAt) : "Never signed in"}</td>
-                <td className="px-5 py-3.5 text-right"><Link href={`/super-admin/customers/view?id=${r.id}`} aria-label={`Open ${r.name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"><ChevronRight className="h-4 w-4" /></Link></td>
+                <td className="px-5 py-3.5 text-end"><Link href={`/super-admin/customers/view?id=${r.id}`} aria-label={`Open ${r.name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"><ChevronRight className="h-4 w-4" /></Link></td>
               </tr>
             ))}
           </DataTable>

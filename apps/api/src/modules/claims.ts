@@ -1,3 +1,5 @@
+import { formatMoney, todayInZone } from "@drycare/shared";
+import { zone } from "../lib/region";
 /**
  * Customer claims: damaged, lost or badly finished garments and other complaints.
  * Reported at the counter, investigated, decided by a manager, then settled by wallet credit,
@@ -18,8 +20,6 @@ import { assertDrawerCash, openShiftFor } from "./payments";
 
 const uuid = z.uuid();
 const ACTIVE = ["open", "investigating", "approved"];
-const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 
 async function lockClaim(tx: Tx, auth: AuthContext, id: string) {
   const [c] = await tx.select().from(schema.claims).where(and(eq(schema.claims.id, id), eq(schema.claims.organizationId, auth.orgId))).for("update");
@@ -89,7 +89,7 @@ export async function claimRoutes(app: FastifyInstance) {
       select count(*) filter (where status in ('open', 'investigating')) as pending,
              count(*) filter (where status = 'approved') as "toSettle",
              count(*) filter (where status in ('open', 'investigating') and created_at < now() - interval '3 days') as "olderThan3Days",
-             coalesce(sum(approved_amount) filter (where status = 'settled' and settled_at >= date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'), 0) as "paidThisMonth",
+             coalesce(sum(approved_amount) filter (where status = 'settled' and settled_at >= date_trunc('month', now() at time zone ${zone(auth.timezone)}) at time zone ${zone(auth.timezone)}), 0) as "paidThisMonth",
              count(*) filter (where created_at >= now() - interval '90 days') as "last90Days"
       from claims where organization_id = ${auth.orgId} ${branchFilter}`);
     const byKind = await db.execute<{ kind: string; count: number }>(sql`
@@ -186,7 +186,7 @@ export async function claimRoutes(app: FastifyInstance) {
       const resolution = body.outcome === "approve" ? body.resolution : "none";
       const amount = body.outcome === "approve" && (resolution === "wallet_credit" || resolution === "cash") ? body.amount : 0;
       await tx.update(schema.claims).set({ status, resolution, approvedAmount: amount, decisionNote: body.note, decidedBy: auth.userId, decidedAt: new Date(), updatedAt: new Date() }).where(eq(schema.claims.id, id));
-      await event(tx, auth, id, { kind: "decision", fromStatus: c.status, toStatus: status, amount, note: `${status === "approved" ? `Approved — ${CLAIM_RESOLUTIONS[resolution]}${amount ? ` ${rupees(amount)}` : ""}` : "Rejected"}. ${body.note}` });
+      await event(tx, auth, id, { kind: "decision", fromStatus: c.status, toStatus: status, amount, note: `${status === "approved" ? `Approved — ${CLAIM_RESOLUTIONS[resolution]}${amount ? ` ${formatMoney(amount, auth.currency)}` : ""}` : "Rejected"}. ${body.note}` });
       await audit(tx, req, { action: `claim.${status}`, resourceType: "claim", resourceId: id, before: { status: c.status }, after: { status, resolution, amount, note: body.note } });
     });
     return claimDetail(db, auth, id);
@@ -209,7 +209,7 @@ export async function claimRoutes(app: FastifyInstance) {
       if (c.resolution === "wallet_credit") {
         const entry = await walletEntry(tx, { orgId: auth.orgId, customerId: c.customerId, branchId: c.branchId, kind: "claim", amount: c.approvedAmount, note: `Claim ${c.claimNumber}`, userId: auth.userId });
         walletEntryId = entry.id;
-        detail = `${rupees(c.approvedAmount)} credited to the customer's wallet (balance ${rupees(entry.balanceAfter)})`;
+        detail = `${formatMoney(c.approvedAmount, auth.currency)} credited to the customer's wallet (balance ${formatMoney(entry.balanceAfter, auth.currency)})`;
       } else if (c.resolution === "cash") {
         const method = body.method ?? "cash";
         if (method !== "cash" && !body.reference) throw badRequest(`Enter the ${method === "upi" ? "UPI" : "bank"} transaction reference`);
@@ -221,12 +221,12 @@ export async function claimRoutes(app: FastifyInstance) {
           shiftId = shift.id;
         }
         const [exp] = await tx.insert(schema.expenses).values({
-          organizationId: auth.orgId, branchId: c.branchId, category: "Claims & compensation", amount: c.approvedAmount, method, spentOn: istToday(),
+          organizationId: auth.orgId, branchId: c.branchId, category: "Claims & compensation", amount: c.approvedAmount, method, spentOn: todayInZone(auth.timezone),
           vendor: customer?.name ?? null, reference: body.reference || c.claimNumber, description: `Compensation for claim ${c.claimNumber} (${CLAIM_KINDS[c.kind as keyof typeof CLAIM_KINDS] ?? c.kind})`,
           shiftId, createdBy: auth.userId,
         }).returning();
         expenseId = exp.id;
-        detail = `${rupees(c.approvedAmount)} paid by ${method === "cash" ? "cash" : method === "upi" ? "UPI" : "bank transfer"}${shiftId ? " from the cash drawer" : ""}`;
+        detail = `${formatMoney(c.approvedAmount, auth.currency)} paid by ${method === "cash" ? "cash" : method === "upi" ? "UPI" : "bank transfer"}${shiftId ? " from the cash drawer" : ""}`;
       } else {
         detail = c.resolution === "reclean" ? "Re-clean / repair done free of charge" : "Closed without compensation";
       }

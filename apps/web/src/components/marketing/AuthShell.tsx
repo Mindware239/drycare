@@ -1,5 +1,6 @@
 "use client";
 
+import { LanguagePicker } from "@/components/I18nRoot";
 import Link from "next/link";
 import { useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { SiteBrand } from "./MarketingShell";
@@ -12,6 +13,7 @@ export function AuthShell({ children, maxWidth = 460, showWebsiteLinks = true }:
       <main className="dc-authmain">
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <SiteBrand />
+          <LanguagePicker />
           {showWebsiteLinks && <Link href="/" style={{ textDecoration: "none", fontSize: 15, fontWeight: 500, color: "#151514", display: "inline-flex", alignItems: "center", minHeight: 44 }}>← Back to website</Link>}
         </header>
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 0" }}>
@@ -49,7 +51,7 @@ export function PasswordInput(props: InputHTMLAttributes<HTMLInputElement>) {
   const [show, setShow] = useState(false);
   return (
     <span style={{ position: "relative", display: "block" }}>
-      <input {...props} type={show ? "text" : "password"} className={`dc-input dc-input-lg ${props.className ?? ""}`} style={{ paddingRight: 84 }} />
+      <input {...props} type={show ? "text" : "password"} className={`dc-input dc-input-lg ${props.className ?? ""}`} style={{ paddingInlineEnd: 84 }} />
       <button type="button" className="dc-showpw" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button>
     </span>
   );

@@ -81,7 +81,7 @@ export function RfidReader({ onRead, placeholder }: { onRead: (epcs: string[]) =
   return (
     <div>
       <div className="relative">
-        <Radio className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+        <Radio className="pointer-events-none absolute start-3 top-3.5 h-5 w-5 text-slate-400" />
         <Input
           ref={input}
           defaultValue=""
@@ -102,12 +102,12 @@ export function RfidReader({ onRead, placeholder }: { onRead: (epcs: string[]) =
           onBlur={(e) => { if (!e.relatedTarget) setTimeout(() => input.current?.focus(), 150); }}
           placeholder={placeholder}
           aria-label="RFID reader input"
-          className="h-12 pl-11 font-mono text-base"
+          className="h-12 ps-11 font-mono text-base"
         />
       </div>
       {bad && <p className="mt-1 text-sm text-red-700">{bad}</p>}
       <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-slate-500">
-        <span>Keep the cursor here and pull the trigger, or type a number and press Enter.{count > 0 && <strong className="ml-1 text-slate-700">{count} read.</strong>}</span>
+        <span>Keep the cursor here and pull the trigger, or type a number and press Enter.{count > 0 && <strong className="ms-1 text-slate-700">{count} read.</strong>}</span>
         <label className="flex min-h-8 items-center gap-1.5"><input type="checkbox" checked={hideKeyboard} onChange={(e) => toggleKeyboard(e.target.checked)} />Hide the on-screen keyboard</label>
       </div>
     </div>

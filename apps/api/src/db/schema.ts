@@ -61,6 +61,8 @@ export const organizations = pgTable("organizations", {
   settings: jsonb("settings_json").$type<OrgSettings>().notNull().default(sql`'{}'::jsonb`),
   /** The software owner's exceptions to this shop's plan. Kept out of `settings`, which shop owners can edit. */
   featureOverrides: jsonb("feature_overrides_json").$type<import("@drycare/shared").FeatureOverrides>().notNull().default(sql`'{}'::jsonb`),
+  /** When a temporary exception ends. */
+  featureOverrideExpiry: jsonb("feature_override_expiry_json").$type<import("@drycare/shared").FeatureOverrideExpiry>().notNull().default(sql`'{}'::jsonb`),
   /** The software owner's exception to the plan's branch limit. Null means the plan decides. */
   branchLimitOverride: integer("branch_limit_override"),
   createdAt: createdAt(),
@@ -110,6 +112,13 @@ export const commercialSubscriptions = pgTable(
 );
 
 export interface OrgSettings {
+  /** Where the shop is: sets tax wording, formats and defaults. No country means India, for shops from before this. */
+  country?: string;
+  language?: string;
+  pricesIncludeTax?: boolean;
+  taxName?: string;
+  taxIdLabel?: string;
+  defaultTaxBps?: number;
   platformInternal?: boolean;
   /** Set on a cloud business that mirrors a shop PC: read-only in the cloud web, changed only by the PC's uploads. */
   syncSource?: "device";
@@ -156,6 +165,8 @@ export const soldPrinters = pgTable(
   "sold_printers",
   {
     id: id(),
+    /** printer | scanner. A serial number is unique across both. */
+    deviceType: text("device_type").notNull().default("printer"),
     serialNumber: text("serial_number").notNull(),
     billNumber: text("bill_number").notNull(),
     model: text("model").notNull(),
@@ -943,11 +954,15 @@ export const shopPrinters = pgTable(
   {
     id: id(),
     organizationId: orgId(),
+    /** printer | scanner */
+    deviceType: text("device_type").notNull().default("printer"),
     serialNumber: text("serial_number").notNull(),
     billNumber: text("bill_number").notNull(),
     model: text("model").notNull(),
     /** Its name in Windows, on a PC. */
     printerName: text("printer_name"),
+    /** The printer itself reported this serial number. Only TSC printers on a PC can. */
+    serialConfirmed: boolean("serial_confirmed").notNull().default(false),
     connectedBy: uuid("connected_by").notNull(),
     createdAt: createdAt(),
   },

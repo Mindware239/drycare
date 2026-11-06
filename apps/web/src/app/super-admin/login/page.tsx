@@ -35,10 +35,10 @@ export default function SuperAdminLoginPage() {
     <main className="grid min-h-screen bg-[#f7f7f5] lg:grid-cols-[minmax(0,1.7fr)_minmax(460px,1fr)]">
       <section className="relative hidden overflow-hidden bg-[#151514] text-white lg:block">
         {/* Store photo on the right, fading into the dark panel behind the text */}
-        <div className="absolute inset-y-0 right-0 w-[56%] bg-cover bg-[center_right] 2xl:w-[64%] 2xl:bg-center" style={{ backgroundImage: "url(/images/super-admin-hero.jpg)" }} aria-hidden="true" />
+        <div className="absolute inset-y-0 end-0 w-[56%] bg-cover bg-[center_right] 2xl:w-[64%] 2xl:bg-center" style={{ backgroundImage: "url(/images/super-admin-hero.jpg)" }} aria-hidden="true" />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,#151514_0%,#151514_34%,rgba(21,21,20,0.86)_46%,rgba(21,21,20,0.35)_62%,rgba(21,21,20,0)_78%)]" aria-hidden="true" />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#151514]/70 to-transparent" aria-hidden="true" />
-        <div className="absolute -left-40 top-1/3 h-[28rem] w-[28rem] rounded-full bg-brand-500/10 blur-3xl" aria-hidden="true" />
+        <div className="absolute -start-40 top-1/3 h-[28rem] w-[28rem] rounded-full bg-brand-500/10 blur-3xl" aria-hidden="true" />
 
         <div className="relative flex h-full min-h-screen flex-col justify-between p-12 xl:p-14">
           <div className="flex items-center gap-4">
@@ -68,9 +68,9 @@ export default function SuperAdminLoginPage() {
 
       <section className="relative flex flex-col overflow-hidden p-5 sm:p-8 xl:p-12">
         {/* Soft background shapes */}
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-100/70 blur-2xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-brand-100/70 blur-2xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-20 -right-16 h-56 w-56 rounded-full bg-brand-100/60 blur-2xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -end-24 -top-24 h-72 w-72 rounded-full bg-brand-100/70 blur-2xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-28 -start-20 h-72 w-72 rounded-full bg-brand-100/70 blur-2xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-20 -end-16 h-56 w-56 rounded-full bg-brand-100/60 blur-2xl" aria-hidden="true" />
 
         <div className="relative flex flex-1 items-center justify-center">
         <div className="w-full max-w-[540px] rounded-3xl border border-white bg-white p-7 shadow-[0_30px_80px_-30px_rgba(21,21,20,0.25)] sm:p-11">
@@ -340,7 +340,7 @@ function PrimaryButton({ children, loading, disabled, className }: { children: R
   return (
     <button type="submit" disabled={disabled || loading}
       className={cx("relative flex h-14 w-full items-center justify-center rounded-full bg-brand-500 px-6 text-base font-semibold text-slate-900 transition hover:bg-brand-400 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-600/30 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none", className)}>
-      {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <>{children}<ArrowRight className="absolute right-6 h-5 w-5" /></>}
+      {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <>{children}<ArrowRight className="absolute end-6 h-5 w-5" /></>}
     </button>
   );
 }

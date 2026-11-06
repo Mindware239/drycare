@@ -84,8 +84,8 @@ function OrdersInner() {
   return (
     <div className="space-y-5 pb-8">
       <section className="relative overflow-hidden rounded-3xl border border-brand-100 bg-gradient-to-br from-white via-brand-50/70 to-cyan-50/70 px-5 py-5 shadow-sm sm:px-7 sm:py-6">
-        <div className="pointer-events-none absolute -right-10 -top-20 h-56 w-56 rounded-full border border-brand-200/50" />
-        <div className="pointer-events-none absolute -right-1 -top-12 h-40 w-40 rounded-full border border-brand-200/40" />
+        <div className="pointer-events-none absolute -end-10 -top-20 h-56 w-56 rounded-full border border-brand-200/50" />
+        <div className="pointer-events-none absolute -end-1 -top-12 h-40 w-40 rounded-full border border-brand-200/40" />
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-700">
@@ -130,13 +130,13 @@ function OrdersInner() {
         <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:px-4">
           <form onSubmit={applySearch} className="flex min-w-0 flex-1 gap-2">
             <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Search className="pointer-events-none absolute start-3 top-2.5 h-4 w-4 text-slate-400" />
               <Input
                 value={q}
                 onChange={(event) => setQ(event.target.value)}
                 placeholder="Search order, customer or phone"
                 aria-label="Search order, customer or phone"
-                className="h-10 rounded-xl border-slate-200 bg-slate-50 pl-9 focus:bg-white"
+                className="h-10 rounded-xl border-slate-200 bg-slate-50 ps-9 focus:bg-white"
               />
             </div>
             <Button type="submit" className="h-10 rounded-xl px-3.5">
@@ -179,14 +179,14 @@ function OrdersInner() {
         ) : (
           <>
             <div className="hidden overflow-x-auto xl:block">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-start text-sm">
                 <thead className="bg-white text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <tr className="border-b border-slate-100">
                     <th className="px-4 py-3">Order</th>
                     <th className="px-4 py-3">Customer</th>
                     <th className="px-4 py-3">Received / promised</th>
                     <th className="px-4 py-3 text-center">Items</th>
-                    <th className="px-4 py-3 text-right">Order total</th>
+                    <th className="px-4 py-3 text-end">Order total</th>
                     <th className="px-4 py-3">Order status</th>
                     <th className="px-4 py-3">Payment</th>
                   </tr>
@@ -216,7 +216,7 @@ function OrdersInner() {
                         <td className="px-4 py-3.5 text-center">
                           <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium tabular-nums text-slate-700"><Shirt className="h-3.5 w-3.5 text-slate-500" />{order.garment_count}</span>
                         </td>
-                        <td className="px-4 py-3.5 text-right">
+                        <td className="px-4 py-3.5 text-end">
                           <span className="block font-semibold tabular-nums text-slate-800">{money(order.grand_total, order.currency)}</span>
                           <span className={cx("mt-1 block text-xs tabular-nums", Number(order.balance) > 0 ? "font-medium text-amber-700" : "text-slate-500")}>
                             {Number(order.balance) > 0 ? `${money(order.balance, order.currency)} due` : "Settled"}
@@ -224,7 +224,7 @@ function OrdersInner() {
                         </td>
                         <td className="px-4 py-3.5">
                           <OrderStatusBadge status={order.operational_status} />
-                          {overdue && <Badge color="red" className="ml-1.5">Overdue</Badge>}
+                          {overdue && <Badge color="red" className="ms-1.5">Overdue</Badge>}
                         </td>
                         <td className="px-4 py-3.5">
                           <PaymentStatusBadge total={Number(order.grand_total)} paid={Number(order.paid)} cancelled={order.operational_status === "cancelled"} />
@@ -249,7 +249,7 @@ function OrdersInner() {
                         <p className="mt-1 truncate text-sm font-medium text-slate-800">{order.customer_name}</p>
                         <p className="mt-0.5 text-xs text-slate-500">{order.customer_phone ?? "No phone"} <span className="mx-1 text-slate-300">·</span> {order.branch_code}</p>
                       </div>
-                      <div className="shrink-0 text-right">
+                      <div className="shrink-0 text-end">
                         <p className="font-semibold tabular-nums text-slate-900">{money(order.grand_total, order.currency)}</p>
                         <p className={cx("mt-1 text-xs tabular-nums", Number(order.balance) > 0 ? "font-medium text-amber-700" : "text-slate-500")}>
                           {Number(order.balance) > 0 ? `${money(order.balance, order.currency)} due` : "Settled"}

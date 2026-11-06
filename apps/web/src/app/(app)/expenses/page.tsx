@@ -1,4 +1,5 @@
 "use client";
+import { shopMethods } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { Ban, CalendarDays, Download, Plus, Receipt, Search, Tags, Wallet } from "lucide-react";
 import { EXPENSE_CATEGORIES, PAYMENT_METHOD_LABELS, SHOP_PAYMENT_METHODS } from "@drycare/shared";
@@ -89,7 +90,7 @@ export default function ExpensesPage() {
               <option value="">All categories</option>
               {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </Select>
-            <label className="relative ml-auto"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Vendor, bill no., note" className="h-8 w-52 pl-8 text-xs" aria-label="Search expenses" /></label>
+            <label className="relative ms-auto"><Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Vendor, bill no., note" className="h-8 w-52 ps-8 text-xs" aria-label="Search expenses" /></label>
           </div>
           {list.error && <div className="p-4"><Alert>{list.error.message}</Alert></div>}
           {!list.data ? <Spinner /> : !rows.length ? (
@@ -97,8 +98,8 @@ export default function ExpensesPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">
-                <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  <tr><th className="px-4 py-2.5">Date</th><th className="px-4 py-2.5">Category</th><th className="px-4 py-2.5">Details</th><th className="px-4 py-2.5">Paid by</th><th className="px-4 py-2.5 text-right">Amount</th><th className="px-4 py-2.5" /></tr>
+                <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <tr><th className="px-4 py-2.5">Date</th><th className="px-4 py-2.5">Category</th><th className="px-4 py-2.5">Details</th><th className="px-4 py-2.5">Paid by</th><th className="px-4 py-2.5 text-end">Amount</th><th className="px-4 py-2.5" /></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rows.map(({ e, branchCode, createdByName }) => (
@@ -111,12 +112,12 @@ export default function ExpensesPage() {
                         {e.voidedAt && <p className="mt-0.5 text-xs text-red-600">Voided {dateTime(e.voidedAt)} — {e.voidReason}</p>}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">{methodLabel(e.method)}{e.shiftId && <span className="block text-[11px] text-amber-700">from cash drawer</span>}</td>
-                      <td className={cx("whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums", e.voidedAt ? "line-through" : "text-slate-900")}>{money(e.amount)}</td>
-                      <td className="px-2 py-3 text-right">{!e.voidedAt && <button type="button" onClick={() => setVoiding(e)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Void this expense" aria-label="Void expense"><Ban className="h-4 w-4" /></button>}</td>
+                      <td className={cx("whitespace-nowrap px-4 py-3 text-end font-semibold tabular-nums", e.voidedAt ? "line-through" : "text-slate-900")}>{money(e.amount)}</td>
+                      <td className="px-2 py-3 text-end">{!e.voidedAt && <button type="button" onClick={() => setVoiding(e)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Void this expense" aria-label="Void expense"><Ban className="h-4 w-4" /></button>}</td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot><tr className="bg-slate-50 font-semibold"><td colSpan={4} className="px-4 py-2.5">Total ({live.length} active)</td><td className="px-4 py-2.5 text-right tabular-nums">{money(total)}</td><td /></tr></tfoot>
+                <tfoot><tr className="bg-slate-50 font-semibold"><td colSpan={4} className="px-4 py-2.5">Total ({live.length} active)</td><td className="px-4 py-2.5 text-end tabular-nums">{money(total)}</td><td /></tr></tfoot>
               </table>
             </div>
           )}
@@ -188,7 +189,7 @@ function AddExpenseModal({ branchId, onClose, onSaved }: { branchId: string; onC
         <Field label="Amount (₹)" required><Input inputMode="decimal" autoFocus value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^0-9.]/g, "") })} placeholder="0.00" className="text-lg" /></Field>
         <Field label="Date" required><Input type="date" value={f.spentOn} max={todayISO()} onChange={(e) => setF({ ...f, spentOn: e.target.value })} /></Field>
         <Field label="Paid by">
-          <Select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>{SHOP_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}</Select>
+          <Select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>{shopMethods(SHOP_PAYMENT_METHODS).map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}</Select>
         </Field>
         <Field label="Paid to (vendor / person)"><Input value={f.vendor} onChange={(e) => setF({ ...f, vendor: e.target.value })} placeholder="e.g. Sharma Chemicals" /></Field>
         <Field label="Bill / receipt no."><Input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} placeholder="Optional" /></Field>

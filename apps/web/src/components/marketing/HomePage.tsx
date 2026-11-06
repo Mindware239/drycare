@@ -157,7 +157,7 @@ export function Workflow() {
           <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: "50%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
             <span className="dc-eyebrow">Stage {num} of 6</span>
             <span style={{ fontFamily: '"Urbanist", sans-serif', fontWeight: 600, fontSize: "clamp(20px, 2.4vw, 26px)", lineHeight: 1.1 }}>{cur.title}</span>
-            <div className="dc-card" style={{ width: "100%", borderRadius: 12, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, textAlign: "left", boxShadow: "0 8px 24px rgba(21,21,20,.08)" }}>
+            <div className="dc-card" style={{ width: "100%", borderRadius: 12, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, textAlign: "start", boxShadow: "0 8px 24px rgba(21,21,20,.08)" }}>
               {cur.rows.map(([k, v, c, bar]) => (
                 <div key={k} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}><span style={{ color: "#6b6963" }}>{k}</span><span style={{ fontWeight: 600, color: c ?? "#151514" }}>{v}</span></div>
@@ -186,7 +186,7 @@ export function Workflow() {
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <button type="button" aria-label="Previous stage" onClick={() => setI((i + 5) % 6)} style={{ font: "inherit", fontSize: 14, fontWeight: 500, width: 44, height: 44, borderRadius: "50%", border: "1.5px solid #151514", background: "transparent", color: "#151514" }}>←</button>
             <button type="button" aria-label="Next stage" onClick={() => setI((i + 1) % 6)} style={{ font: "inherit", fontSize: 14, fontWeight: 500, width: 44, height: 44, borderRadius: "50%", border: "1.5px solid #151514", background: "#151514", color: "#faf8f4" }}>→</button>
-            <span style={{ fontSize: 14, color: "#6b6963", marginLeft: 6 }}>Tap any stage or use the arrows</span>
+            <span style={{ fontSize: 14, color: "#6b6963", marginInlineStart: 6 }}>Tap any stage or use the arrows</span>
           </div>
         </div>
       </div>

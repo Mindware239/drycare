@@ -61,7 +61,7 @@ function ClaimsPage() {
           <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-semibold">
             {TABS.map(([k, l]) => <button key={k} type="button" onClick={() => setStatus(k)} className={cx("rounded-md px-2.5 py-1", status === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{l}</button>)}
           </div>
-          <label className="relative ml-auto"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Claim no., customer, phone, order, tag" className="h-8 w-64 pl-8 text-xs" aria-label="Search claims" /></label>
+          <label className="relative ms-auto"><Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Claim no., customer, phone, order, tag" className="h-8 w-64 ps-8 text-xs" aria-label="Search claims" /></label>
         </div>
         {list.error && <div className="p-4"><Alert>{list.error.message}</Alert></div>}
         {!list.data ? <Spinner /> : !list.data.length ? (
@@ -70,13 +70,13 @@ function ClaimsPage() {
           <ul className="divide-y divide-slate-100">
             {list.data.map((c) => (
               <li key={c.id}>
-                <button type="button" onClick={() => setOpenId(c.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left hover:bg-slate-50">
+                <button type="button" onClick={() => setOpenId(c.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-start hover:bg-slate-50">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">{c.claimNumber} · {kindLabel(c.kind)}</p>
                     <p className="mt-0.5 truncate text-xs text-slate-500">{c.customerName}{c.customerPhone ? ` · ${c.customerPhone}` : ""}{c.orderNumber ? ` · ${c.orderNumber}` : ""}{c.tagCode ? ` · ${c.tagCode} ${c.garmentType ?? ""}` : ""}</p>
                     <p className="mt-0.5 line-clamp-1 text-sm text-slate-700">{c.description}</p>
                   </div>
-                  <div className="text-right text-xs text-slate-500">
+                  <div className="text-end text-xs text-slate-500">
                     {c.status === "settled" || c.status === "approved" ? <span className="block text-sm font-semibold tabular-nums text-slate-900">{Number(c.approvedAmount) ? money(c.approvedAmount) : CLAIM_RESOLUTIONS[c.resolution as ClaimResolution] ?? ""}</span>
                       : c.customerAsk ? <span className="block tabular-nums">asks {money(c.customerAsk)}</span> : null}
                     <span className={cx(c.ageDays >= 3 && (c.status === "open" || c.status === "investigating") && "font-semibold text-red-600")}>{c.ageDays === 0 ? "today" : `${c.ageDays} day${c.ageDays === 1 ? "" : "s"} ago`}</span>
@@ -199,9 +199,9 @@ function NewClaimModal({ prefill, onClose, onCreated }: { prefill: Prefill; onCl
           {searching && <p className="text-xs text-slate-500">Searching…</p>}
           <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 empty:hidden">
             {results.map((r) => mode === "order" ? (
-              <li key={r.id}><button type="button" onClick={() => pickOrder(r.id)} className="flex w-full justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"><span><b>{r.order_number}</b> · {r.customer_name}<span className="block text-xs text-slate-500">{r.customer_phone} · {r.garment_count} garments</span></span><span className="text-xs text-slate-500">{dateOnly(r.received_at)}</span></button></li>
+              <li key={r.id}><button type="button" onClick={() => pickOrder(r.id)} className="flex w-full justify-between gap-3 px-3 py-2 text-start text-sm hover:bg-slate-50"><span><b>{r.order_number}</b> · {r.customer_name}<span className="block text-xs text-slate-500">{r.customer_phone} · {r.garment_count} garments</span></span><span className="text-xs text-slate-500">{dateOnly(r.received_at)}</span></button></li>
             ) : (
-              <li key={r.id}><button type="button" onClick={() => setCustomer(r)} className="flex w-full justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"><span><b>{r.name}</b><span className="block text-xs text-slate-500">{r.phone}</span></span></button></li>
+              <li key={r.id}><button type="button" onClick={() => setCustomer(r)} className="flex w-full justify-between gap-3 px-3 py-2 text-start text-sm hover:bg-slate-50"><span><b>{r.name}</b><span className="block text-xs text-slate-500">{r.phone}</span></span></button></li>
             ))}
           </ul>
         </>
@@ -222,7 +222,7 @@ function NewClaimModal({ prefill, onClose, onCreated }: { prefill: Prefill; onCl
       <Field label="What is the problem?" required>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(Object.keys(CLAIM_KINDS) as ClaimKind[]).map((k) => (
-            <button key={k} type="button" onClick={() => setKind(k)} className={cx("rounded-lg border px-2.5 py-2 text-left text-xs font-medium", kind === k ? "border-brand-600 bg-brand-50 text-brand-800 ring-1 ring-brand-600" : "border-slate-200 text-slate-700 hover:border-slate-300")}>{CLAIM_KINDS[k]}</button>
+            <button key={k} type="button" onClick={() => setKind(k)} className={cx("rounded-lg border px-2.5 py-2 text-start text-xs font-medium", kind === k ? "border-brand-600 bg-brand-50 text-brand-800 ring-1 ring-brand-600" : "border-slate-200 text-slate-700 hover:border-slate-300")}>{CLAIM_KINDS[k]}</button>
           ))}
         </div>
       </Field>
@@ -262,14 +262,14 @@ function ClaimModal({ id, onClose, onChanged }: { id: string; onClose: () => voi
             <div><dt className="text-xs text-slate-500">Customer</dt><dd><a className="font-medium text-brand-700 hover:underline" href={`/customers/view?id=${c.customerId}`}>{c.customerName}</a><span className="block text-xs text-slate-500">{c.customerPhone}</span></dd></div>
             <div><dt className="text-xs text-slate-500">Order</dt><dd>{c.orderId ? <a className="font-medium text-brand-700 hover:underline" href={`/orders/view?id=${c.orderId}`}>{c.orderNumber}</a> : "—"}{c.orderDate && <span className="block text-xs text-slate-500">{dateOnly(c.orderDate)}</span>}</dd></div>
             <div><dt className="text-xs text-slate-500">Garment</dt><dd>{c.tagCode ? <><span className="font-mono">{c.tagCode}</span> · {c.garmentType}{c.garmentLineTotal !== null && <span className="block text-xs text-slate-500">Cleaning charge {money(c.garmentLineTotal)}</span>}</> : "Whole order / general"}</dd></div>
-            <div className="sm:col-span-3"><dt className="text-xs text-slate-500">Customer&apos;s complaint</dt><dd className="text-slate-800">{c.description}{c.customerAsk !== null && <span className="ml-1 font-medium">· asks {money(c.customerAsk)}</span>}</dd></div>
+            <div className="sm:col-span-3"><dt className="text-xs text-slate-500">Customer&apos;s complaint</dt><dd className="text-slate-800">{c.description}{c.customerAsk !== null && <span className="ms-1 font-medium">· asks {money(c.customerAsk)}</span>}</dd></div>
           </dl>
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Timeline</p>
-            <ol className="relative space-y-3 border-l border-slate-200 pl-5">
+            <ol className="relative space-y-3 border-s border-slate-200 ps-5">
               {c.events.map((e: any) => (
                 <li key={e.id} className="relative">
-                  <span className={cx("absolute -left-[27px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-white", e.kind === "settled" ? "bg-emerald-500" : e.kind === "decision" ? (e.toStatus === "rejected" ? "bg-slate-400" : "bg-blue-500") : e.kind === "created" ? "bg-red-500" : "bg-amber-400")} />
+                  <span className={cx("absolute -start-[27px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-white", e.kind === "settled" ? "bg-emerald-500" : e.kind === "decision" ? (e.toStatus === "rejected" ? "bg-slate-400" : "bg-blue-500") : e.kind === "created" ? "bg-red-500" : "bg-amber-400")} />
                   <p className="text-sm text-slate-800">{e.kind === "created" ? "Claim logged" : e.kind === "note" ? "Note" : e.kind === "status" ? "Investigation started" : e.kind === "decision" ? "Decision" : "Settled"}{e.note && <span className="text-slate-600"> — {e.note}</span>}</p>
                   <p className="text-xs text-slate-500">{dateTime(e.createdAt)} · {e.by}</p>
                 </li>
@@ -334,7 +334,7 @@ function DecideModal({ claim, onClose, onDone }: { claim: any; onClose: () => vo
       {err && <Alert>{err}</Alert>}
       <div className="grid grid-cols-2 gap-2">
         {([["approve", CircleCheck, "Approve", "The shop is responsible"], ["reject", CircleX, "Reject", "Not the shop's fault"]] as const).map(([k, Icon, label, sub]) => (
-          <button key={k} type="button" onClick={() => setOutcome(k)} className={cx("flex items-start gap-2 rounded-xl border p-3 text-left", outcome === k ? (k === "approve" ? "border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600" : "border-red-500 bg-red-50 ring-1 ring-red-500") : "border-slate-200")}>
+          <button key={k} type="button" onClick={() => setOutcome(k)} className={cx("flex items-start gap-2 rounded-xl border p-3 text-start", outcome === k ? (k === "approve" ? "border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600" : "border-red-500 bg-red-50 ring-1 ring-red-500") : "border-slate-200")}>
             <Icon className={cx("mt-0.5 h-5 w-5", k === "approve" ? "text-emerald-600" : "text-red-600")} /><span className="text-sm font-semibold">{label}<span className="block text-xs font-normal text-slate-500">{sub}</span></span>
           </button>
         ))}
@@ -344,7 +344,7 @@ function DecideModal({ claim, onClose, onDone }: { claim: any; onClose: () => vo
           <Field label="How will you make it right?">
             <div className="grid gap-2 sm:grid-cols-3">
               {(["wallet_credit", "cash", "reclean"] as const).filter((r) => r !== "wallet_credit" || walletOn).map((r) => (
-                <button key={r} type="button" onClick={() => setResolution(r)} className={cx("rounded-lg border px-3 py-2 text-left text-sm", resolution === r ? "border-brand-600 bg-brand-50 font-medium text-brand-800 ring-1 ring-brand-600" : "border-slate-200 text-slate-700")}>
+                <button key={r} type="button" onClick={() => setResolution(r)} className={cx("rounded-lg border px-3 py-2 text-start text-sm", resolution === r ? "border-brand-600 bg-brand-50 font-medium text-brand-800 ring-1 ring-brand-600" : "border-slate-200 text-slate-700")}>
                   {CLAIM_RESOLUTIONS[r]}
                   <span className="block text-xs font-normal text-slate-500">{r === "wallet_credit" ? "Customer uses it on future orders" : r === "cash" ? "Cash, UPI or bank transfer now" : "No money changes hands"}</span>
                 </button>

@@ -81,7 +81,7 @@ export function TagTimeline({ data }: { data: TagTraceData }) {
 const Fact = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="flex justify-between gap-3 border-b border-slate-100 py-1.5 text-sm last:border-0">
     <dt className="text-slate-500">{label}</dt>
-    <dd className="text-right font-medium text-slate-900">{children}</dd>
+    <dd className="text-end font-medium text-slate-900">{children}</dd>
   </div>
 );
 

@@ -43,7 +43,7 @@ export default function SubscriptionsPage() {
                   <td className="px-5 py-3 text-xs text-slate-600">{dateLabel(s.startsAt)} → {dateLabel(s.endsAt)}</td>
                   <td className="px-5 py-3"><p className="text-slate-800">{dateLabel(s.endsAt)}</p><p className={soon ? "text-xs font-medium text-amber-700" : "text-xs text-slate-500"}>{relativeDays(s.endsAt)}</p></td>
                   <td className="px-5 py-3 text-xs text-slate-600">{s.provider.replace("manual_", "").replaceAll("_", " ")}{s.reference && <span className="block font-mono">{s.reference}</span>}</td>
-                  <td className="px-5 py-3 text-right"><Link href={`/super-admin/payments?org=${s.organizationId}`} className="text-xs font-semibold text-brand-700 hover:underline">Record renewal</Link></td>
+                  <td className="px-5 py-3 text-end"><Link href={`/super-admin/payments?org=${s.organizationId}`} className="text-xs font-semibold text-brand-700 hover:underline">Record renewal</Link></td>
                 </tr>
               );
             })}

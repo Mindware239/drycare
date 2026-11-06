@@ -19,13 +19,13 @@ export async function billSendRoutes(app: FastifyInstance) {
     assertBranchAccess(auth, o.branchId);
     const to = o.customer?.email;
     if (!to) throw unprocessable("This customer has no email address. Add one on the customer's page first.", "NO_EMAIL");
-    const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId), columns: { name: true, settings: true } });
+    const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId), columns: { name: true, settings: true, defaultCurrency: true, defaultTimezone: true } });
     const messages = org?.settings.billTemplates?.messages ?? DEFAULT_BILL_MESSAGES;
-    const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(o.promisedAt);
+    const when = new Intl.DateTimeFormat(auth.currency === "INR" ? "en-IN" : "en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: auth.timezone }).format(o.promisedAt);
     const values = {
       customer: o.customer?.name, shop: org?.name, shopPhone: org?.settings.billing?.phone || o.branch?.phone, invoice: o.invoice?.invoiceNumber, order: o.orderNumber,
       pieces: o.garments.filter((g) => g.currentStatus !== "cancelled").length, items: o.items.map((i) => `${i.garmentTypeName}${i.quantity > 1 ? ` ×${i.quantity}` : ""}`).join(", "),
-      total: formatMoney(o.invoice?.payable ?? o.grandTotal), paid: formatMoney(o.invoice?.paid ?? 0), balance: formatMoney(o.invoice?.balance ?? 0), ready: when, upi: org?.settings.billing?.upi?.vpa,
+      total: formatMoney(o.invoice?.payable ?? o.grandTotal, auth.currency), paid: formatMoney(o.invoice?.paid ?? 0, auth.currency), balance: formatMoney(o.invoice?.balance ?? 0, auth.currency), ready: when, upi: org?.settings.billing?.upi?.vpa,
     };
     await db.transaction(async (tx) => {
       await tx.insert(schema.notificationJobs).values({

@@ -1,4 +1,5 @@
 "use client";
+import { formatMoney } from "@drycare/shared";
 import { useState } from "react";
 import Link from "next/link";
 import { FilePlus2, FileText, IndianRupee, Receipt, Search } from "lucide-react";
@@ -7,7 +8,7 @@ import { money } from "@/lib/format";
 import { Alert, Button, Input } from "@/components/ui";
 import { ConsoleHeader, CsvButton, DataTable, EmptyState, LoadingRows, MetricCard, Panel, SegmentedTabs, StatusBadge, dateLabel, exportCsv, rupees, useAdminData } from "../admin-ui";
 
-type Row = {
+type Row = { currency?: string;
   id: string; number: string; status: string; issuedAt: string; organizationId: string; organizationName: string;
   totalPaise: number; subtotalPaise: number; taxPaise: number; periodStart: string | null; periodEnd: string | null; provider: string; reference: string; planName: string | null;
 };
@@ -43,7 +44,7 @@ export default function InvoicesPage() {
         <div className="mb-5">
           <Alert tone="amber">
             {data.paymentsWithoutInvoice} paid subscription payment{data.paymentsWithoutInvoice === 1 ? " was" : "s were"} recorded before invoicing was set up.{" "}
-            <Button size="sm" variant="secondary" loading={busy} onClick={() => void issueMissing()} className="ml-2"><FilePlus2 className="h-4 w-4" />Issue their invoices</Button>
+            <Button size="sm" variant="secondary" loading={busy} onClick={() => void issueMissing()} className="ms-2"><FilePlus2 className="h-4 w-4" />Issue their invoices</Button>
           </Alert>
         </div>
       )}
@@ -55,8 +56,8 @@ export default function InvoicesPage() {
       <Panel padded={false} title="Invoice register"
         actions={<>
           <form onSubmit={(e) => { e.preventDefault(); setQuery(search.trim()); }} className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Invoice no. or business" className="w-64 pl-9" aria-label="Search invoices" />
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Invoice no. or business" className="w-64 ps-9" aria-label="Search invoices" />
           </form>
           <SegmentedTabs value={status} onChange={setStatus} options={[{ value: "all", label: "All" }, { value: "issued", label: "Issued" }, { value: "void", label: "Void" }]} />
         </>}>
@@ -69,9 +70,9 @@ export default function InvoicesPage() {
                 <td className="px-5 py-3 text-xs text-slate-600">{dateLabel(r.issuedAt)}</td>
                 <td className="px-5 py-3"><Link href={`/super-admin/customers/view?id=${r.organizationId}`} className="font-medium text-slate-900 hover:text-brand-700">{r.organizationName}</Link></td>
                 <td className="px-5 py-3 text-xs text-slate-600">{r.planName ?? "—"}<br />{dateLabel(r.periodStart)} – {dateLabel(r.periodEnd)}</td>
-                <td className="px-5 py-3 tabular-nums">{money(r.subtotalPaise)}</td>
-                <td className="px-5 py-3 tabular-nums text-slate-600">{money(r.taxPaise)}</td>
-                <td className="px-5 py-3 font-semibold tabular-nums">{money(r.totalPaise)}</td>
+                <td className="px-5 py-3 tabular-nums">{formatMoney(r.subtotalPaise, r.currency ?? "INR")}</td>
+                <td className="px-5 py-3 tabular-nums text-slate-600">{formatMoney(r.taxPaise, r.currency ?? "INR")}</td>
+                <td className="px-5 py-3 font-semibold tabular-nums">{formatMoney(r.totalPaise, r.currency ?? "INR")}</td>
                 <td className="px-5 py-3"><StatusBadge status={r.status === "issued" ? "paid" : "canceled"} /></td>
               </tr>
             ))}

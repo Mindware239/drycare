@@ -1,7 +1,10 @@
 "use client";
+import { SlideGroup } from "@/components/SlideGroup";
+import { currencySymbol, hasUpi, wholeMoney } from "@/lib/format";
+import { appLocale, appZone } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowRight, Building2, Check, CircleAlert, Crown, Factory, IndianRupee, MapPin, Phone, Plus, Barcode, ScanLine, Settings2, Shirt, Target, Truck, UserRound, Users, Wallet, WashingMachine } from "lucide-react";
+import { ArrowDown, ArrowRight, Building2, Check, CircleAlert, Crown, Factory, Banknote, MapPin, Phone, Plus, Barcode, ScanLine, Settings2, Shirt, Target, Truck, UserRound, Users, Wallet, WashingMachine } from "lucide-react";
 import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { dateOnly, money, rupeesToPaise, todayISO } from "@/lib/format";
@@ -34,10 +37,10 @@ type LiveData = {
   route: RouteStop[] | null;
 };
 
-const IST_DAY = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(date);
+const IST_DAY = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: appZone() }).format(date);
 const shift = (iso: string, days: number) => new Date(Date.parse(iso) + days * 86_400_000).toISOString().slice(0, 10);
-const inr = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
-const inrK = (paise: number) => (paise >= 100_000 ? `₹${(paise / 100_000).toFixed(1)}k` : inr(paise));
+const inr = (minor: number) => wholeMoney(minor);
+const inrK = (minor: number) => (minor >= 100_000 ? `${currencySymbol()}${(minor / 100_000).toFixed(1)}k` : inr(minor));
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 type PeriodName = "Today" | "This week" | "This month" | "Quarter" | "Custom";
@@ -121,7 +124,7 @@ function Ring({ size, stroke, value, color, show, children, label }: { size: num
 function GlanceCard({ value, label, sub, tone, icon, onClick }: { value: string | number; label: string; sub: string; tone: "plain" | "red" | "blue"; icon: ReactNode; onClick: () => void }) {
   const colors = { plain: ["var(--dc-soft)", "var(--dc-ink)", "var(--dc-ink)"], red: ["var(--dc-red-bg)", "var(--dc-red-fg)", "var(--dc-red-fg)"], blue: ["var(--dc-blue-bg)", "var(--dc-blue-fg)", "var(--dc-ink)"] }[tone];
   return (
-    <button type="button" onClick={onClick} aria-label={`${label}: ${value}. ${sub}`} className="dcd-lift flex min-h-14 cursor-pointer items-center gap-3 rounded-[14px] border px-3 py-2.5 text-left" style={{ background: "var(--dc-card)", borderColor: "var(--dc-line)" }}>
+    <button type="button" onClick={onClick} aria-label={`${label}: ${value}. ${sub}`} className="dcd-lift flex min-h-14 cursor-pointer items-center gap-3 rounded-[14px] border px-3 py-2.5 text-start" style={{ background: "var(--dc-card)", borderColor: "var(--dc-line)" }}>
       <span aria-hidden="true" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] font-bold" style={{ background: colors[0], color: colors[1] }}>{icon}</span>
       <span className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className="flex items-baseline gap-2"><span className="dcd-h text-xl" style={{ color: colors[2] }}>{value}</span><span className="truncate text-sm font-semibold">{label}</span></span>
@@ -140,12 +143,12 @@ function Kpi({ k, index, show, columns }: { k: KpiCell; index: number; show: boo
   const inner = (
     <>
       {k.ring !== null && (
-        <span className="absolute right-4 top-4">
+        <span className="absolute end-4 top-4">
           <Ring size={52} stroke={5} value={k.ring} color={k.key} show={show} label={`${k.label}: ${k.ring}% ${k.target}`}><span className="text-[13px] font-bold tabular-nums">{k.ring}%</span></Ring>
         </span>
       )}
-      <span className="flex items-center gap-2 pr-[60px] text-[15px] font-semibold"><span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: k.key }} />{k.label}</span>
-      <span className="-mt-1 pr-[60px] text-[13px]" style={{ color: "var(--dc-sub)" }}>{k.def}</span>
+      <span className="flex items-center gap-2 pe-[60px] text-[15px] font-semibold"><span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: k.key }} />{k.label}</span>
+      <span className="-mt-1 pe-[60px] text-[13px]" style={{ color: "var(--dc-sub)" }}>{k.def}</span>
       <span className={cx("dcd-h mt-1.5 leading-[1.1] tabular-nums", k.big ? "text-[clamp(30px,2.5vw,38px)]" : "text-[clamp(26px,2.2vw,30px)]")}>{k.value}</span>
       <span className="flex flex-wrap items-center gap-2">
         {k.delta !== null && (
@@ -237,7 +240,7 @@ function ProductionLine({ live, inView, sectionRef, flash, canOrders }: { live: 
               const on = picked === i;
               const count = counts[s.key] ?? 0;
               return (
-                <button key={s.key} type="button" onClick={() => setPicked(i)} aria-pressed={on} className="dcd-lift flex min-h-[156px] cursor-pointer flex-col gap-2.5 rounded-2xl border-[1.5px] p-4 text-left" style={{ background: on ? "var(--dc-solid)" : "var(--dc-soft2)", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)", borderColor: on ? "var(--dc-solid)" : "var(--dc-line)" }}>
+                <button key={s.key} type="button" onClick={() => setPicked(i)} aria-pressed={on} className="dcd-lift flex min-h-[156px] cursor-pointer flex-col gap-2.5 rounded-2xl border-[1.5px] p-4 text-start" style={{ background: on ? "var(--dc-solid)" : "var(--dc-soft2)", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)", borderColor: on ? "var(--dc-solid)" : "var(--dc-line)" }}>
                   <span className="flex min-w-0 items-center justify-between gap-2"><span className="truncate text-[15px] font-semibold">{i + 1}. {s.label}</span><span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.dot, boxShadow: `0 0 0 2px ${on ? "var(--dc-solid)" : "var(--dc-card)"}` }} /></span>
                   <span className="flex items-baseline gap-1.5"><span className="dcd-h text-[30px] leading-none tabular-nums">{count}</span><span className="text-sm font-semibold">{pct(count, total)}%</span></span>
                   <span aria-hidden="true" className="block h-1 overflow-hidden rounded-sm" style={{ background: on ? "#6b6963" : "var(--dc-line2)" }}><span className="block h-full rounded-sm" style={{ width: inView ? `${pct(count, total)}%` : "0%", background: s.dot, transition: "width .9s cubic-bezier(.2,.8,.2,1) .3s" }} /></span>
@@ -256,13 +259,13 @@ function ProductionLine({ live, inView, sectionRef, flash, canOrders }: { live: 
                 const count = counts[s.key] ?? 0;
                 const shown = Math.min(count, 6);
                 return (
-                  <button key={s.key} type="button" onClick={() => setPicked(i)} aria-label={`Show ${s.label} tags`} className="relative flex min-h-24 cursor-pointer flex-col gap-2 rounded-[10px] px-3 pb-3 pt-2.5 text-left" style={{ background: on ? "rgba(60,191,90,.16)" : "rgba(255,255,255,.02)", boxShadow: `inset 0 0 0 1.5px ${on ? "#3cbf5a" : "rgba(255,255,255,.06)"}`, transition: "background .3s ease,box-shadow .3s ease" }}>
+                  <button key={s.key} type="button" onClick={() => setPicked(i)} aria-label={`Show ${s.label} tags`} className="relative flex min-h-24 cursor-pointer flex-col gap-2 rounded-[10px] px-3 pb-3 pt-2.5 text-start" style={{ background: on ? "rgba(60,191,90,.16)" : "rgba(255,255,255,.02)", boxShadow: `inset 0 0 0 1.5px ${on ? "#3cbf5a" : "rgba(255,255,255,.06)"}`, transition: "background .3s ease,box-shadow .3s ease" }}>
                     <span className="flex items-center justify-between gap-1.5 text-[13px] font-semibold text-[#faf8f4]"><span>{s.label}</span><span className="rounded-full px-2 py-px" style={{ background: "rgba(255,255,255,.12)" }}>{count}</span></span>
                     <span className="flex flex-wrap items-center gap-1.5">
                       {Array.from({ length: shown }, (_, j) => shirt(s.tile, j, i))}
                       {count > shown && <span className="px-1 text-[13px] font-semibold text-[#faf8f4]">+{count - shown}</span>}
                     </span>
-                    {i < 4 && <span aria-hidden="true" className="absolute -right-4 top-1/2 z-[2] -mt-[11px] grid h-[22px] w-[22px] place-items-center rounded-full text-[13px] font-bold text-[#151514]" style={{ background: "#3cbf5a", boxShadow: "0 0 0 3px #1d1d1b" }}>→</span>}
+                    {i < 4 && <span aria-hidden="true" className="absolute -end-4 top-1/2 z-[2] -mt-[11px] grid h-[22px] w-[22px] place-items-center rounded-full text-[13px] font-bold text-[#151514]" style={{ background: "#3cbf5a", boxShadow: "0 0 0 3px #1d1d1b" }}>→</span>}
                   </button>
                 );
               })}
@@ -302,7 +305,7 @@ function BilledChart({ trend, inView, selected, setSelected, sectionRef, flash }
   const totalC = week.reduce((s, d) => s + d.collected, 0);
   const label = (d: { day: string }, i: number) => {
     const date = new Date(`${d.day}T00:00:00Z`);
-    return { day: i === week.length - 1 ? "Today" : date.toLocaleDateString("en-IN", { weekday: "short", timeZone: "UTC" }), date: date.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" }) };
+    return { day: i === week.length - 1 ? "Today" : date.toLocaleDateString(appLocale(), { weekday: "short", timeZone: "UTC" }), date: date.toLocaleDateString(appLocale(), { day: "numeric", month: "short", timeZone: "UTC" }) };
   };
   const owedSel = sel.billed - sel.collected;
   const owedAll = totalB - totalC;
@@ -316,10 +319,10 @@ function BilledChart({ trend, inView, selected, setSelected, sectionRef, flash }
         <strong>{selected === week.length - 1 ? "Today, " : ""}{label(sel, selected).date}</strong>
         <span>Billed <strong>{inr(sel.billed)}</strong></span>
         <span>Collected <strong>{inr(sel.collected)}</strong></span>
-        <span className="ml-auto rounded-full px-2.5 py-1 font-semibold" style={{ background: owedSel > 0 ? "var(--dc-red-bg)" : "var(--dc-green-bg)", color: owedSel > 0 ? "var(--dc-red-fg)" : "var(--dc-green-fg)" }}>{owedSel > 0 ? `Still owed ${inr(owedSel)}` : owedSel < 0 ? `Extra collected ${inr(-owedSel)}` : "Nothing owed"}</span>
+        <span className="ms-auto rounded-full px-2.5 py-1 font-semibold" style={{ background: owedSel > 0 ? "var(--dc-red-bg)" : "var(--dc-green-bg)", color: owedSel > 0 ? "var(--dc-red-fg)" : "var(--dc-green-fg)" }}>{owedSel > 0 ? `Still owed ${inr(owedSel)}` : owedSel < 0 ? `Extra collected ${inr(-owedSel)}` : "Nothing owed"}</span>
       </div>
       <div className="grid grid-cols-[46px_1fr] gap-x-2">
-        <div className="relative h-[200px]">{ticks.map((t) => <span key={t} className="absolute right-0 -translate-y-1/2 text-[13px]" style={{ bottom: `calc(${(t / max) * 100}% - 8px)`, color: "var(--dc-sub)" }}>{inrK(t)}</span>)}</div>
+        <div className="relative h-[200px]">{ticks.map((t) => <span key={t} className="absolute end-0 -translate-y-1/2 text-[13px]" style={{ bottom: `calc(${(t / max) * 100}% - 8px)`, color: "var(--dc-sub)" }}>{inrK(t)}</span>)}</div>
         <div className="relative h-[200px]">
           {ticks.map((t) => <span key={t} aria-hidden="true" className="absolute inset-x-0 h-px" style={{ bottom: `${(t / max) * 100}%`, background: t ? "var(--dc-line2)" : "var(--dc-line)" }} />)}
           <div className="absolute inset-0 grid grid-cols-7">
@@ -436,17 +439,17 @@ function RecentOrders({ live, financial, inView, sectionRef }: { live: LiveData;
       </div>
       {!live.recentOrders.length ? <p className="px-7 pb-8 text-sm" style={{ color: "var(--dc-sub)" }}>No orders yet. <Link href="/pos" className="font-semibold underline">Create your first order</Link></p> : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-sm">
-            <thead style={{ background: "var(--dc-soft)" }}><tr className="text-[13px] font-semibold">{["Order", "Customer", "Items", "Due", "Status", ...(financial ? ["Amount"] : [])].map((h) => <th key={h} className={cx("px-3 py-3 first:pl-5 last:pr-5", h === "Amount" && "text-right")}>{h}</th>)}</tr></thead>
+          <table className="w-full min-w-[620px] text-start text-sm">
+            <thead style={{ background: "var(--dc-soft)" }}><tr className="text-[13px] font-semibold">{["Order", "Customer", "Items", "Due", "Status", ...(financial ? ["Amount"] : [])].map((h) => <th key={h} className={cx("px-3 py-3 first:ps-5 last:pe-5", h === "Amount" && "text-end")}>{h}</th>)}</tr></thead>
             <tbody>
               {live.recentOrders.map((o) => (
                 <tr key={o.id} className="dcd-row border-t" style={{ borderColor: "var(--dc-line2)" }}>
-                  <td className="whitespace-nowrap py-3.5 pl-5 pr-3 font-semibold"><Link href={`/orders/view?id=${o.id}`} className="hover:underline">{o.orderNumber}</Link></td>
+                  <td className="whitespace-nowrap py-3.5 ps-5 pe-3 font-semibold"><Link href={`/orders/view?id=${o.id}`} className="hover:underline">{o.orderNumber}</Link></td>
                   <td className="max-w-[130px] truncate px-3 py-3.5 font-medium" title={o.name}>{o.name}</td>
                   <td className="max-w-[120px] truncate px-3 py-3.5" style={{ color: "var(--dc-sub)" }} title={o.items ?? ""}>{o.items}</td>
                   <td className="whitespace-nowrap px-3 py-3.5" style={o.late ? { color: "var(--dc-red-fg)", fontWeight: 600 } : { color: "var(--dc-sub)" }}>{dateOnly(o.promisedAt)}</td>
                   <td className="whitespace-nowrap px-3 py-3.5">{o.late ? <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-semibold" style={{ background: "var(--dc-red-bg)", color: "var(--dc-red-fg)" }}>! Overdue</span> : <OrderStatusBadge status={o.status} />}</td>
-                  {financial && <td className="whitespace-nowrap py-3.5 pl-3 pr-5 text-right font-semibold tabular-nums">{inr(o.total ?? 0)}</td>}
+                  {financial && <td className="whitespace-nowrap py-3.5 ps-3 pe-5 text-end font-semibold tabular-nums">{inr(o.total ?? 0)}</td>}
                 </tr>
               ))}
             </tbody>
@@ -524,8 +527,8 @@ function BranchTable({ data }: { data: DashboardData }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[620px] text-sm">
-        <thead className="bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          <tr><th className="px-4 py-3">Branch</th>{["Orders", "Dry cleaning", "Self-service", "Collected", "Dues"].map((h) => <th key={h} className="px-4 py-3 text-right">{h}</th>)}</tr>
+        <thead className="bg-slate-50/80 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <tr><th className="px-4 py-3">Branch</th>{["Orders", "Dry cleaning", "Self-service", "Collected", "Dues"].map((h) => <th key={h} className="px-4 py-3 text-end">{h}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {rows.map((b) => (
@@ -561,15 +564,15 @@ function CounterTable({ data }: { data: DashboardData }) {
       {!data.counters.length ? <p className="px-5 py-8 text-sm text-slate-500">No payments collected in this period.</p> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Counter / cashier</th>{["Cash", "UPI", "Card / other", "Total"].map((h) => <th key={h} className="px-4 py-3 text-right">{h}</th>)}</tr></thead>
+            <thead className="bg-slate-50/80 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Counter / cashier</th>{["Cash", "UPI", "Card / other", "Total"].map((h) => <th key={h} className="px-4 py-3 text-end">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-slate-100">
               {data.counters.map((c) => (
                 <tr key={`${c.branchId}-${c.userId}`} className="dcd-row">
                   <td className="px-4 py-3"><span className="block font-medium text-slate-800">{c.staffName}</span><span className="text-xs text-slate-500">{c.branchName} · {c.payments} payment{c.payments === 1 ? "" : "s"}</span></td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">{money(c.cash)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">{money(c.upi)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">{money(c.card + c.other)}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{money(c.total)}</td>
+                  <td className="px-4 py-3 text-end tabular-nums text-slate-600">{money(c.cash)}</td>
+                  <td className="px-4 py-3 text-end tabular-nums text-slate-600">{money(c.upi)}</td>
+                  <td className="px-4 py-3 text-end tabular-nums text-slate-600">{money(c.card + c.other)}</td>
+                  <td className="px-4 py-3 text-end font-semibold tabular-nums text-slate-900">{money(c.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -616,10 +619,10 @@ export default function DashboardPage() {
   }, [reloadLive, reloadData]);
 
   const firstName = session.user.name.trim().split(/\s+/)[0] || "there";
-  const hour = Number(new Intl.DateTimeFormat("en", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()));
+  const hour = Number(new Intl.DateTimeFormat("en", { hour: "numeric", hour12: false, timeZone: appZone() }).format(new Date()));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const dateLabel = new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date());
-  const clock = updated ? new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(updated) : "";
+  const dateLabel = new Intl.DateTimeFormat(appLocale(), { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: appZone() }).format(new Date());
+  const clock = updated ? new Intl.DateTimeFormat(appLocale(), { hour: "numeric", minute: "2-digit", hour12: true, timeZone: appZone() }).format(updated) : "";
 
   const lineEl = useEnter();
   const kpiEl = useEnter();
@@ -659,15 +662,15 @@ export default function DashboardPage() {
       const billed = data.sales.grossBilled;
       return [
         { label: "Billed", def: "Total invoiced to customers", value: inr(billed * count), big: true, key: "var(--dc-solid)", delta: change(billed, data.previous.grossBilled), cmp: range.cmp, note: `${data.operations.orders_received} order${data.operations.orders_received === 1 ? "" : "s"}`, ring: billingTarget ? pct(billed, billingTarget) : null, target: billingTarget ? `of ${inr(billingTarget)} billing target` : noTarget, spark: spark((d) => d.billed), href: can("reports.financial") ? "/reports" : undefined },
-        { label: "Collected", def: "Payments received · cash, UPI, card", value: inr(data.collections.net * count), big: true, key: "var(--dc-green)", delta: change(data.collections.net, data.previous.collections), cmp: range.cmp, note: billed ? `${pct(data.collections.net, billed)}% of billed` : "Nothing billed yet", ring: billed ? pct(data.collections.net, billed) : null, target: billed ? "of billed amount collected" : "Shows once something is billed", spark: spark((d) => d.collected), href: can("payments.collect") ? "/cashier" : undefined },
+        { label: "Collected", def: hasUpi() ? "Payments received · cash, UPI, card" : "Payments received · cash, card", value: inr(data.collections.net * count), big: true, key: "var(--dc-green)", delta: change(data.collections.net, data.previous.collections), cmp: range.cmp, note: billed ? `${pct(data.collections.net, billed)}% of billed` : "Nothing billed yet", ring: billed ? pct(data.collections.net, billed) : null, target: billed ? "of billed amount collected" : "Shows once something is billed", spark: spark((d) => d.collected), href: can("payments.collect") ? "/cashier" : undefined },
         { label: "Outstanding dues", def: "Billed but not yet paid, as of now", value: inr(data.receivables.outstanding * count), big: false, key: "var(--dc-blue)", delta: null, cmp: range.cmp, note: `${data.receivables.openInvoices} unpaid invoice${data.receivables.openInvoices === 1 ? "" : "s"}`, ring: targets.duesLimit ? pct(data.receivables.outstanding, targets.duesLimit) : null, target: targets.duesLimit ? `of ${inr(targets.duesLimit)} limit · lower is better` : noTarget, spark: spark((d) => Math.max(0, d.billed - d.collected)), href: canOrders ? "/orders?view=unpaid" : undefined },
-        { label: "Garments handled", def: "Received or delivered in this period", value: Math.round(data.garments.handled * count).toLocaleString("en-IN"), big: false, key: "var(--dc-grey)", delta: change(data.garments.handled, data.previous.garments), cmp: range.cmp, note: handledNote, ring: garmentsTarget ? pct(data.garments.handled, garmentsTarget) : null, target: garmentsTarget ? `of ${garmentsTarget.toLocaleString("en-IN")} garment capacity used` : noTarget, spark: spark((d) => d.garments), href: canOrders ? "/tags" : undefined },
+        { label: "Garments handled", def: "Received or delivered in this period", value: Math.round(data.garments.handled * count).toLocaleString(appLocale()), big: false, key: "var(--dc-grey)", delta: change(data.garments.handled, data.previous.garments), cmp: range.cmp, note: handledNote, ring: garmentsTarget ? pct(data.garments.handled, garmentsTarget) : null, target: garmentsTarget ? `of ${garmentsTarget.toLocaleString(appLocale())} garment capacity used` : noTarget, spark: spark((d) => d.garments), href: canOrders ? "/tags" : undefined },
       ];
     }
-    const n = (v: number) => Math.round(v * count).toLocaleString("en-IN");
+    const n = (v: number) => Math.round(v * count).toLocaleString(appLocale());
     return [
       { label: "Orders received", def: "Booked in this period", value: n(data.operations.orders_received), big: true, key: "var(--dc-solid)", delta: change(data.operations.orders_received, data.previous.orders), cmp: range.cmp, note: "", ring: null, target: "No target", spark: [], href: canOrders ? "/orders" : undefined },
-      { label: "Garments handled", def: "Received or delivered in this period", value: n(data.garments.handled), big: true, key: "var(--dc-grey)", delta: change(data.garments.handled, data.previous.garments), cmp: range.cmp, note: handledNote, ring: garmentsTarget ? pct(data.garments.handled, garmentsTarget) : null, target: garmentsTarget ? `of ${garmentsTarget.toLocaleString("en-IN")} garment capacity used` : noTarget, spark: spark((d) => d.garments), href: canOrders ? "/tags" : undefined },
+      { label: "Garments handled", def: "Received or delivered in this period", value: n(data.garments.handled), big: true, key: "var(--dc-grey)", delta: change(data.garments.handled, data.previous.garments), cmp: range.cmp, note: handledNote, ring: garmentsTarget ? pct(data.garments.handled, garmentsTarget) : null, target: garmentsTarget ? `of ${garmentsTarget.toLocaleString(appLocale())} garment capacity used` : noTarget, spark: spark((d) => d.garments), href: canOrders ? "/tags" : undefined },
       { label: "Ready to collect", def: "Orders waiting for handoff", value: n(data.operations.ready_orders), big: false, key: "var(--dc-green)", delta: null, cmp: range.cmp, note: `${data.operations.ready_garments} garments on racks`, ring: null, target: "No target", spark: [], href: canOrders ? "/orders?view=ready" : undefined },
       { label: "Overdue orders", def: "Past their promised date", value: n(data.operations.overdue_orders), big: false, key: "var(--dc-red-fg)", delta: null, cmp: range.cmp, note: `${data.operations.exceptions} garment exceptions`, ring: null, target: "No target", spark: [], href: canOrders ? "/orders?view=overdue" : undefined },
     ];
@@ -720,7 +723,7 @@ export default function DashboardPage() {
         <section aria-label="Today at a glance" className={cx("dcd-enter grid gap-3 md:grid-cols-3", entered && "is-in")} style={{ transitionDelay: ".05s" }}>
           <GlanceCard value={inStore} label="garments in store" sub="Open production line" tone="plain" icon={<Shirt className="h-4 w-4" />} onClick={() => glide("sec-line")} />
           {canOrders && <GlanceCard value={live.production.lateOrders} label={live.production.lateOrders === 1 ? "order late" : "orders late"} sub="See late orders" tone="red" icon="!" onClick={() => { setAttTab("overdue"); glide("sec-att"); }} />}
-          {financial && <GlanceCard value={inr(owedToday)} label="still owed today" sub="Open billing graph" tone="blue" icon={<IndianRupee className="h-4 w-4" />} onClick={() => { setChartDay(6); glide("sec-chart"); }} />}
+          {financial && <GlanceCard value={inr(owedToday)} label="still owed today" sub="Open billing graph" tone="blue" icon={<Banknote className="h-4 w-4" />} onClick={() => { setChartDay(6); glide("sec-chart"); }} />}
         </section>
       )}
 
@@ -738,12 +741,12 @@ export default function DashboardPage() {
                     {[[true, "All branches"], [false, branch?.name ?? "This branch"]].map(([all, name]) => <button key={String(all)} type="button" onClick={() => setAllBranches(all as boolean)} aria-pressed={allBranches === all} className="dcd-pill min-h-10 cursor-pointer rounded-full px-3.5 text-sm font-semibold" style={{ background: allBranches === all ? "var(--dc-solid)" : "transparent", color: allBranches === all ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{name as string}</button>)}
                   </div>
                 )}
-                <div role="radiogroup" aria-label="Period" className="flex flex-wrap gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
+                <SlideGroup label="Period" className="flex flex-wrap gap-1 rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
                   {PERIODS.map((p) => {
                     const on = period === p;
-                    return <button key={p} type="button" role="radio" aria-checked={on} onClick={() => setPeriod(p)} className="dcd-pill flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full px-4 text-sm font-semibold" style={{ background: on ? "var(--dc-solid)" : "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{on && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#3cbf5a]" />}{p}</button>;
+                    return <button key={p} type="button" role="radio" aria-checked={on} onClick={() => setPeriod(p)} className="dcd-pill flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full px-4 text-sm font-semibold" style={{ background: "transparent", color: on ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{on && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#3cbf5a]" />}{p}</button>;
                   })}
-                </div>
+                </SlideGroup>
                 {can("org.manage") && <button type="button" onClick={() => setSettingTargets(true)} title="Set your targets" className="dcd-pill inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold" style={{ borderColor: "var(--dc-line)" }}><Target className="h-4 w-4" />Targets</button>}
               </div>
             </div>
@@ -755,7 +758,7 @@ export default function DashboardPage() {
               </div>
             )}
             <div className="grid sm:grid-cols-2 xl:grid-cols-4">
-              {kpis.map((k, i) => <Kpi key={k.label} k={k} index={i} show={kpiEl.inView} columns={cx("sm:border-t-0 xl:border-l", i % 2 === 1 && "sm:border-l", i >= 2 && "sm:border-t xl:border-t-0", i === 0 && "xl:border-l-0")} />)}
+              {kpis.map((k, i) => <Kpi key={k.label} k={k} index={i} show={kpiEl.inView} columns={cx("sm:border-t-0 xl:border-s", i % 2 === 1 && "sm:border-s", i >= 2 && "sm:border-t xl:border-t-0", i === 0 && "xl:border-s-0")} />)}
             </div>
           </section>
 

@@ -47,7 +47,7 @@ function ModuleSection({ m, index }: { m: Module; index: number }) {
           ))}
         </ul>
         <div className="dc-rv dc-rv-up" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, paddingTop: 6, ...rv(0.84, 0.91) }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#4f4e4a", marginRight: 4 }}>Useful for</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#4f4e4a", marginInlineEnd: 4 }}>Useful for</span>
           {m.inds.map((ind) => <span key={ind} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 999, background: "#f3f1ec", color: "#33332f" }}>{ind}</span>)}
         </div>
       </div>
@@ -56,7 +56,7 @@ function ModuleSection({ m, index }: { m: Module; index: number }) {
         <div aria-hidden="true" className="dc-card-18 dc-rv dc-rv-card" style={{ position: "relative", overflow: "hidden", boxShadow: "0 14px 40px rgba(21,21,20,.08)", ...rv(0.98, 0.21) }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderBottom: "1px solid #eeece6" }}>
             <div style={{ display: "flex", gap: 6 }}>{[0, 1, 2].map((d) => <span key={d} style={{ width: 10, height: 10, borderRadius: "50%", background: "#e4e1d9" }} />)}</div>
-            <span style={{ fontSize: 14, fontWeight: 600, marginRight: "auto" }}>{m.short}</span>
+            <span style={{ fontSize: 14, fontWeight: 600, marginInlineEnd: "auto" }}>{m.short}</span>
             <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, background: "#f3f1ec", color: "#4f4e4a" }}>Sample</span>
           </div>
           <div style={{ padding: "clamp(16px, 2.4vw, 24px)", display: "flex", flexDirection: "column", gap: 16 }}>

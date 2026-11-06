@@ -1,0 +1,1 @@
+ALTER TABLE "shop_printers" ADD COLUMN "serial_confirmed" boolean DEFAULT false NOT NULL;

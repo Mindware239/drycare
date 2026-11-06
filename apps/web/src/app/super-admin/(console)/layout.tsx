@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Store,
+  ToggleRight,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +44,7 @@ const NAV: { section: string; items: { href: string; label: string; icon: Lucide
   {
     section: "Billing",
     items: [
+      { href: "/super-admin/features", label: "Features & permissions", icon: ToggleRight },
       { href: "/super-admin/plans", label: "Plans & pricing", icon: Store },
       { href: "/super-admin/subscriptions", label: "Subscriptions & renewals", icon: Repeat },
       { href: "/super-admin/payments", label: "Payments & UPI / bank", icon: CreditCard },
@@ -144,7 +146,7 @@ export default function SuperAdminConsoleLayout({ children }: { children: ReactN
                       active ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-100")}>
                     <item.icon aria-hidden="true" className={cx("h-[17px] w-[17px] shrink-0", active ? "text-brand-300" : "text-slate-500")} strokeWidth={1.9} />
                     <span className="truncate">{item.label}</span>
-                    {active && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-r bg-brand-400" />}
+                    {active && <span aria-hidden="true" className="absolute inset-y-2 start-0 w-0.5 rounded-e bg-brand-400" />}
                   </Link>
                 );
               })}
@@ -169,8 +171,8 @@ export default function SuperAdminConsoleLayout({ children }: { children: ReactN
 
   return (
     <AdminContext.Provider value={user}>
-      <div className="min-h-screen bg-slate-50 lg:pl-64">
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">{nav}</aside>
+      <div className="min-h-screen bg-slate-50 lg:ps-64">
+        <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 lg:block">{nav}</aside>
         {mobileOpen && (
           <div className="fixed inset-0 z-40 lg:hidden">
             <button type="button" aria-label="Close menu" className="absolute inset-0 bg-slate-950/50" onClick={() => setMobileOpen(false)} />

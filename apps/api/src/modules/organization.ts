@@ -9,7 +9,7 @@ import { audit } from "../lib/audit";
 import { conflict, notFound, badRequest, forbidden, unprocessable } from "../lib/errors";
 import { tagNumbersUsed } from "../lib/sequences";
 import { issueToken, linkFor } from "../lib/tokens";
-import { DEFAULT_LABEL_SETTINGS, GSTIN_PATTERN, billTemplateSettingsSchema, billingProfileSchema, labelSettingsSchema } from "@drycare/shared";
+import { COUNTRIES, DEFAULT_LABEL_SETTINGS, billTemplateSettingsSchema, countryPack, isLanguage, isTimeZone, resolveRegion, validTaxId, billingProfileSchema, labelSettingsSchema } from "@drycare/shared";
 import { assertBranchAvailable, hasFeature } from "../lib/entitlements";
 import bwipjs from "bwip-js";
 import { orgView } from "../lib/orgView";
@@ -23,7 +23,9 @@ async function assertStoreCodeFree(tx: Pick<typeof db, "query">, orgId: string, 
 const orgUpdateSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   legalName: z.string().trim().max(160).optional(),
-  gstin: z.string().trim().toUpperCase().refine((v) => v === "" || GSTIN_PATTERN.test(v), "GSTIN should look like 22AAAAA0000A1Z5").optional(),
+  gstin: z.string().trim().toUpperCase().max(30).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  timezone: z.string().refine(isTimeZone, "Choose a time zone").optional(),
   settings: z
     .object({
       maxDiscountBpsWithoutApproval: z.number().int().min(0).max(10000).optional(),
@@ -37,6 +39,12 @@ const orgUpdateSchema = z.object({
       labels: labelSettingsSchema.optional(),
       billing: billingProfileSchema.optional(),
       facilityName: z.string().trim().min(2).max(80).optional(),
+      country: z.string().refine((c) => COUNTRIES.some((x) => x.code === c), "Choose a country").optional(),
+      language: z.string().refine(isLanguage, "Choose a language").optional(),
+      pricesIncludeTax: z.boolean().optional(),
+      taxName: z.string().trim().max(30).optional(),
+      taxIdLabel: z.string().trim().max(30).optional(),
+      defaultTaxBps: z.number().int().min(0).max(5000).optional(),
     })
     .optional(),
 });
@@ -107,7 +115,7 @@ export async function organizationRoutes(app: FastifyInstance) {
       const digits = body.settings?.labels?.scanDigits;
       if (digits && digits !== (before!.settings.labels?.scanDigits ?? 6)) {
         const used = await tagNumbersUsed(tx, auth.orgId);
-        if (used > 10 ** digits - 1) throw unprocessable(`This shop has already issued ${used.toLocaleString("en-IN")} tag numbers, so a barcode needs at least ${String(used).length} digits.`, "SCAN_DIGITS_TOO_SHORT");
+        if (used > 10 ** digits - 1) throw unprocessable(`This shop has already issued ${used.toLocaleString()} tag numbers, so a barcode needs at least ${String(used).length} digits.`, "SCAN_DIGITS_TOO_SHORT");
       }
       // Without the tag designer only print settings can change. Designs stay as saved, so they return on an upgrade.
       if (body.settings?.labels && !(await hasFeature(auth.orgId, "labelDesigner", tx))) {
@@ -115,9 +123,23 @@ export async function organizationRoutes(app: FastifyInstance) {
         const { garmentDesign, bagDesign, templates } = saved.success ? saved.data : DEFAULT_LABEL_SETTINGS;
         body.settings.labels = { ...body.settings.labels, garmentDesign, bagDesign, templates };
       }
+      // A new country brings its currency and time zone, unless the owner chose their own.
+      const movedTo = body.settings?.country && body.settings.country !== before!.settings.country ? countryPack(body.settings.country) : undefined;
+      const currency = body.currency ?? movedTo?.currency;
+      const timezone = body.timezone ?? movedTo?.timezone;
+      const country = body.settings?.country ?? resolveRegion(before).country;
+      if (body.gstin && !validTaxId(country, body.gstin)) {
+        const pack = countryPack(country);
+        throw badRequest(`${pack.taxIdLabel} should look like ${pack.taxIdExample ?? "your registered number"}`);
+      }
+      // Bills already issued keep their amounts, so their currency cannot change underneath them.
+      if (currency && currency !== before!.defaultCurrency) {
+        const billed = await tx.query.invoices.findFirst({ where: eq(schema.invoices.organizationId, auth.orgId), columns: { id: true } });
+        if (billed) throw conflict("This shop already has bills, so its currency cannot be changed.", "CURRENCY_LOCKED");
+      }
       const [after] = await tx
         .update(schema.organizations)
-        .set({ name: body.name, legalName: body.legalName, gstin: body.gstin, settings: body.settings ? { ...before!.settings, ...body.settings } : undefined, updatedAt: new Date() })
+        .set({ name: body.name, legalName: body.legalName, gstin: body.gstin, defaultCurrency: currency, defaultTimezone: timezone, settings: body.settings ? { ...before!.settings, ...body.settings } : undefined, updatedAt: new Date() })
         .where(eq(schema.organizations.id, auth.orgId))
         .returning();
       await audit(tx, req, { action: "organization.updated", resourceType: "organization", resourceId: auth.orgId, before: before && orgView(before), after: orgView(after) });

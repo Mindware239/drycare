@@ -347,10 +347,57 @@ try {
   r = await sa.req("GET", "/platform-admin/sold-printers");
   check("the owner sees it connected", r.json.find((p: { id: string }) => p.id === soldId)?.connectedAt != null, r.json[0]);
   r = await shop.req("DELETE", `/labels/shop-printers/${shopPrinterId}`);
-  check("a shop can disconnect a printer", r.status === 200, r.json);
-  await sa.req("POST", `/platform-admin/sold-printers/${soldId}/status`, { status: "revoked" });
+  check("a shop cannot remove a printer itself", r.status === 404, r.json);
+  r = await shop.req("GET", "/labels/shop-printers");
+  check("it is still connected after that", r.json.printers.some((p: { id: string }) => p.id === shopPrinterId), r.json);
+
+  // Serial numbers are unique across printers and scanners.
+  const scanSerial = `SC-${runId}`.toUpperCase();
+  const scanBill = `SB-${runId}`.toUpperCase();
+  r = await sa.req("POST", "/platform-admin/sold-printers", { deviceType: "scanner", serialNumber: serial, billNumber: "X1", model: "Any Scanner" });
+  check("a scanner cannot take a printer's serial number", r.status === 409, r.json);
+  r = await sa.req("POST", "/platform-admin/sold-printers", { deviceType: "scanner", serialNumber: scanSerial, billNumber: scanBill, model: "Any Scanner" });
+  check("the owner records a scanner sold", r.status === 201 && r.json.deviceType === "scanner", r.json);
+  r = await shop.req("POST", "/labels/shop-printers", { deviceType: "printer", serial: scanSerial, bill: scanBill });
+  check("a scanner's numbers do not connect a printer", r.status === 403, r.json);
+
+  // Mandatory for a paying shop, and not for a trial.
+  const shopOrgId: string = (await shop.req("GET", "/auth/session")).json.organization.id;
+  const originalStatus = (await db.query.organizations.findFirst({ where: (o, { eq }) => eq(o.id, shopOrgId) }))!.status;
+  await sqlClient`update organizations set status = 'trial' where id = ${shopOrgId}`;
+  r = await shop.req("GET", "/labels/shop-printers");
+  check("a shop on trial is not held to it", r.json.missing.scanner === false, r.json.missing);
+  await sqlClient`update organizations set status = 'active' where id = ${shopOrgId}`;
+  r = await shop.req("GET", "/labels/shop-printers");
+  check("a paying shop must connect a scanner", r.json.missing.scanner === true && r.json.missing.printer === false, r.json.missing);
+  r = await shop.req("GET", "/garments/by-tag/NOSUCHTAG");
+  check("scanning is refused until it does", r.status === 403 && r.json.error.code === "SCANNER_NOT_CONNECTED", r.json);
+  r = await shop.req("POST", "/labels/shop-printers", { deviceType: "scanner", serial: scanSerial, bill: scanBill });
+  check("the scanner connects", r.status === 201 && r.json.deviceType === "scanner", r.json);
+  r = await shop.req("GET", "/garments/by-tag/NOSUCHTAG");
+  check("then scanning works", r.status === 404, r.json);
+
+  // Only the owner can change a device.
+  const newSerial = `SN2-${runId}`.toUpperCase();
+  const newBill = `BILL2-${runId}`.toUpperCase();
+  r = await shop.req("POST", `/platform-admin/sold-printers/${soldId}/replace`, { serialNumber: newSerial, billNumber: newBill, reason: "Trying it myself" });
+  check("a shop cannot replace a printer", r.status === 401 || r.status === 403, r.status);
+  r = await sa.req("POST", `/platform-admin/sold-printers/${soldId}/replace`, { serialNumber: serial, billNumber: newBill, reason: "Same serial" });
+  check("a replacement cannot reuse a serial number", r.status === 409, r.json);
+  r = await sa.req("POST", `/platform-admin/sold-printers/${soldId}/replace`, { serialNumber: newSerial, billNumber: newBill, reason: "Faulty head" });
+  check("the owner replaces the printer in one step", r.status === 201 && r.json.organizationId === shopOrgId && r.json.model === "Any Model 200", r.json);
+  r = await shop.req("GET", "/labels/shop-printers");
+  check("the old printer leaves the shop at once", !r.json.printers.some((p: { serialNumber: string }) => p.serialNumber === serial) && r.json.missing.printer === true, r.json);
   r = await shop.req("POST", "/labels/shop-printers", { serial, bill });
-  check("a blocked printer cannot be connected", r.status === 403, r.json);
+  check("the old printer cannot be connected again", r.status === 403, r.json);
+  r = await shop.req("POST", "/labels/shop-printers", { serial: newSerial, bill: newBill });
+  check("the new printer connects", r.status === 201, r.json);
+  const scanRow = (await sa.req("GET", "/platform-admin/sold-printers")).json.find((p: { serialNumber: string }) => p.serialNumber === scanSerial);
+  r = await sa.req("POST", `/platform-admin/sold-printers/${scanRow.id}/status`, { status: "revoked" });
+  check("the owner disables the scanner", r.status === 200 && r.json.status === "revoked", r.json);
+  r = await shop.req("GET", "/garments/by-tag/NOSUCHTAG");
+  check("and scanning stops at once", r.status === 403, r.json);
+  await sqlClient`update organizations set status = ${originalStatus} where id = ${shopOrgId}`;
 
   // ---- Bill templates
   const myTemplate = { ...BILL_PRESETS[2], id: `mine-${runId}`, name: "Our bill", accent: "#123456" };
@@ -560,7 +607,7 @@ try {
   check("a claim can be opened", r.status === 201, r.json);
   const claimId = r.json.id;
   r = await basic.req("POST", `/claims/${claimId}/decision`, { outcome: "approve", resolution: "wallet_credit", amount: 5000, note: "Agreed compensation" });
-  check("wallet compensation on a claim is refused", r.status === 403 && r.json.error.code === "FEATURE_NOT_IN_PLAN", r.json);
+  check("wallet compensation on a claim is refused", r.status === 403 && r.json.error.code === "FEATURE_DISABLED", r.json);
   r = await basic.req("POST", `/claims/${claimId}/decision`, { outcome: "approve", resolution: "cash", amount: 5000, note: "Agreed compensation" });
   check("cash compensation still works", r.status === 200, r.json);
   await sa.req("PUT", `/platform-admin/organizations/${basicOrg}/entitlements`, { overrides: {}, reason: REASON });

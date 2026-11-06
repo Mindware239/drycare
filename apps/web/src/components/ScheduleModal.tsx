@@ -123,7 +123,7 @@ export function ScheduleModal({
             <ul className="mt-1 divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm">
               {results.map((c) => (
                 <li key={c.id}>
-                  <button className="w-full px-3 py-2 text-left hover:bg-slate-50" onClick={() => (setCustomerId(c.id), setQ(""))}>
+                  <button className="w-full px-3 py-2 text-start hover:bg-slate-50" onClick={() => (setCustomerId(c.id), setQ(""))}>
                     {c.name} · {c.phone ?? "no phone"}
                   </button>
                 </li>

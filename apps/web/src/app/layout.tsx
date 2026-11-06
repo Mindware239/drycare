@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { PwaRegister } from "@/components/PwaRegister";
+import { I18nRoot } from "@/components/I18nRoot";
+import { BOOT_SCRIPT } from "@/lib/i18n";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,10 +30,12 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-IN">
+    <html lang="en-IN" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} /></head>
       <body className="min-h-screen antialiased" suppressHydrationWarning>
         {children}
         <PwaRegister />
+        <I18nRoot />
       </body>
     </html>
   );

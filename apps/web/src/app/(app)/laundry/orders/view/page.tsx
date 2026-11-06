@@ -1,4 +1,5 @@
 "use client";
+import { shopMethods } from "@/lib/format";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -91,10 +92,10 @@ function OrderInner() {
           <Card title="Charges" padded={false}>
             <table className="w-full text-sm">
               <tbody className="divide-y divide-slate-100">
-                {d.items.map((i: any) => <tr key={i.id}><td className="px-4 py-2.5">{i.description}{d.pricingMethod === "item" ? ` × ${i.quantity}` : ""}</td><td className="px-4 py-2.5 text-right tabular-nums">{money(i.amount)}</td></tr>)}
+                {d.items.map((i: any) => <tr key={i.id}><td className="px-4 py-2.5">{i.description}{d.pricingMethod === "item" ? ` × ${i.quantity}` : ""}</td><td className="px-4 py-2.5 text-end tabular-nums">{money(i.amount)}</td></tr>)}
               </tbody>
             </table>
-            <dl className="ml-auto max-w-sm space-y-1.5 border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-sm">
+            <dl className="ms-auto max-w-sm space-y-1.5 border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-sm">
               {d.weightGrams ? <div className="flex justify-between text-slate-500"><dt>Weight (billed)</dt><dd>{kg(d.weightGrams)} ({kg(d.billableGrams)})</dd></div> : null}
               <div className="flex justify-between text-slate-600"><dt>Subtotal</dt><dd className="tabular-nums">{money(d.subtotal)}</dd></div>
               {d.discountTotal > 0 && <div className="flex justify-between text-slate-600"><dt>Discount{d.discountReason ? ` (${d.discountReason})` : ""}</dt><dd className="tabular-nums">− {money(d.discountTotal)}</dd></div>}
@@ -154,7 +155,7 @@ function PayModal({ order, onClose, onDone }: { order: any; onClose: () => void;
       {err && <Alert>{err}</Alert>}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Amount (₹)"><Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} /></Field>
-        <Field label="Method"><Select value={method} onChange={(e) => setMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}</Select></Field>
+        <Field label="Method"><Select value={method} onChange={(e) => setMethod(e.target.value)}>{shopMethods(PAYMENT_METHODS).map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}</Select></Field>
         {method !== "cash" && <Field label="Reference" className="col-span-2"><Input value={ref} onChange={(e) => setRef(e.target.value)} /></Field>}
       </div>
       {method === "bank_transfer" && <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" checked={pending} onChange={(e) => setPending(e.target.checked)} className="mt-0.5" />Not yet seen in the bank — record as awaiting verification (machine stays locked)</label>}
@@ -182,7 +183,7 @@ function CancelModal({ order, canRefund, onClose, onDone }: { order: any; canRef
       {err && <Alert>{err}</Alert>}
       <p className="text-sm text-slate-600">Booked machines are released. Orders whose machine has already run cannot be cancelled here.</p>
       {order.paid > 0 && (canRefund
-        ? <Field label="Refund by"><Select value={method} onChange={(e) => setMethod(e.target.value)}>{SHOP_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}</Select></Field>
+        ? <Field label="Refund by"><Select value={method} onChange={(e) => setMethod(e.target.value)}>{shopMethods(SHOP_PAYMENT_METHODS).map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}</Select></Field>
         : <Alert tone="amber">{money(order.paid)} was paid. A manager must cancel this order to approve the refund.</Alert>)}
       <Field label="Reason" required><Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
     </Modal>

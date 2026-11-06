@@ -82,7 +82,7 @@ export function ProcessTab() {
         {items.length > 0 && <div className="mt-2 flex justify-between text-sm"><span>{garments.length} garment{garments.length === 1 ? "" : "s"} read{items.length > garments.length ? `, ${items.length - garments.length} tag${items.length - garments.length === 1 ? "" : "s"} not on a garment` : ""}</span><button type="button" onClick={() => { setItems([]); setEpcs([]); setNotice(""); setProblems([]); setRound((n) => n + 1); }} className="font-semibold underline underline-offset-4">Start again</button></div>}
       </Card>
       {notice && <Alert tone="green">{notice}</Alert>}
-      {problems.length > 0 && <Alert><p className="font-semibold">Not moved:</p><ul className="mt-1 list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul></Alert>}
+      {problems.length > 0 && <Alert><p className="font-semibold">Not moved:</p><ul className="mt-1 list-disc ps-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul></Alert>}
       {groups.map((g) => (
         <Card key={`${g.stage}>${g.to}`} title={<span className="flex flex-wrap items-center gap-2"><StageBadge stage={g.stage} /><span>{g.list.length} garment{g.list.length === 1 ? "" : "s"}</span></span>} actions={
           g.to && can("garments.process") ? <Button size="sm" loading={busy === g.to} disabled={!!busy || (g.to === "ready" && g.list.some((x) => !x.rack))} onClick={() => void move(g.to!, g.list)}>Move to {stageName(g.to)}</Button>

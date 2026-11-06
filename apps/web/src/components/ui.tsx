@@ -19,7 +19,7 @@ export function Button({ variant = "primary", loading, className, children, disa
       {...rest}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-medium transition duration-150 active:scale-[.97] disabled:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" ? "h-8 px-2.5 text-xs" : size === "lg" ? "h-11 px-5 text-base" : "h-9 px-3.5 text-sm",
         variants[variant],
         className,
@@ -44,9 +44,9 @@ export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribut
   const [show, setShow] = useState(false);
   return (
     <div className={cx("relative", withWidth(className))}>
-      <input ref={ref} {...rest} type={show ? "text" : "password"} className={cx(fieldBase, "w-full pr-11")} />
+      <input ref={ref} {...rest} type={show ? "text" : "password"} className={cx(fieldBase, "w-full pe-11")} />
       <button type="button" onClick={() => setShow(!show)} aria-label={show ? "Hide password" : "Show password"} title={show ? "Hide password" : "Show password"}
-        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md text-slate-500 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30">
+        className="absolute inset-y-0 end-0 flex w-10 items-center justify-center rounded-e-md text-slate-500 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30">
         {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>
     </div>
@@ -55,7 +55,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribut
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...rest} className={cx(fieldBase, "pr-8", withWidth(className))}>
+    <select {...rest} className={cx(fieldBase, "pe-8", withWidth(className))}>
       {children}
     </select>
   );
@@ -64,8 +64,8 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 export function DateInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <span className={cx("relative block", withWidth(className))}>
-      <input {...rest} type="date" className={cx(fieldBase, "pr-9", withWidth(className))} />
-      <CalendarDays aria-hidden="true" className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+      <input {...rest} type="date" className={cx(fieldBase, "pe-9", withWidth(className))} />
+      <CalendarDays aria-hidden="true" className="pointer-events-none absolute end-3 top-3 h-4 w-4 text-slate-400" />
     </span>
   );
 }
@@ -286,7 +286,7 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
     <div className="w-full overflow-x-auto">
       <table ref={tableRef} className="min-w-full text-sm">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <tr className="border-b border-slate-200 bg-slate-50 text-start text-xs font-medium uppercase tracking-wide text-slate-500">
             {head.map((h, i) => (
               <th key={i} scope="col" className="whitespace-nowrap px-4 py-2.5">
                 {h}

@@ -1,3 +1,4 @@
+import { zone } from "../lib/region";
 /**
  * Memberships a shop sells to its own customers: plans, selling and renewing at the counter, and cancelling.
  * The fee is real money received now, so it is recorded like a wallet top-up and counts in collections and the drawer.
@@ -65,7 +66,7 @@ export async function membershipRoutes(app: FastifyInstance) {
   /** The numbers at the top of the Memberships screen. Money only for those allowed to see it. */
   app.get("/customer-memberships/summary", async (req) => {
     const auth = requirePermission(req, "customers.read");
-    const monthStart = sql`date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'`;
+    const monthStart = sql`date_trunc('month', now() at time zone ${zone(auth.timezone)}) at time zone ${zone(auth.timezone)}`;
     const [members] = await db.execute<{ current: number; expiring: number }>(sql`
       select count(*) filter (where status = 'active' and ends_at > now() and starts_at <= now())::int as current,
              count(*) filter (where status = 'active' and ends_at > now() and ends_at <= now() + interval '15 days')::int as expiring

@@ -31,7 +31,7 @@ export default function DriverPage() {
                 <Badge color={s.kind === "pickup" ? "violet" : "brand"}>{KIND_LABEL[s.kind]}</Badge>
                 <span className="text-sm font-semibold">{s.time_slot}</span>
                 {s.scheduled_date !== today && <span className="text-xs text-slate-500">{s.scheduled_date}</span>}
-                <span className="ml-auto">
+                <span className="ms-auto">
                   <DeliveryStatusBadge status={s.status} />
                 </span>
               </div>

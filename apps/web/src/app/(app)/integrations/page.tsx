@@ -92,7 +92,7 @@ export default function IntegrationsPage() {
       </Card>
 
       <Card title="Start delivery after configuration">
-        <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-600">
+        <ol className="list-decimal space-y-2 ps-5 text-sm text-slate-600">
           <li>Save the environment settings in the workspace-root <code>.env</code> file.</li>
           <li>Restart the API so it loads the new settings.</li>
           <li>In another terminal, start the notification worker with <code>pnpm dev:worker</code>. The regular <code>pnpm dev</code> command does not start this worker.</li>

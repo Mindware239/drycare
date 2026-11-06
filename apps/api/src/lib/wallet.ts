@@ -1,3 +1,5 @@
+import { formatMoney } from "@drycare/shared";
+import { orgRegion } from "./region";
 /** Customer wallet (prepaid balance): an append-only ledger with a running balance, written under a customer row lock. */
 import { and, desc, eq } from "drizzle-orm";
 import { schema, type DbOrTx } from "../db/client";
@@ -24,7 +26,7 @@ export async function walletEntry(tx: DbOrTx, input: {
   if (!customer) throw notFound("Customer");
   const balance = await walletBalance(tx, input.customerId);
   const after = balance + input.amount;
-  if (after < 0) throw unprocessable(`Wallet balance is only ₹${(balance / 100).toFixed(2)}`, "WALLET_INSUFFICIENT");
+  if (after < 0) throw unprocessable(`Wallet balance is only ${formatMoney(balance, (await orgRegion(input.orgId, tx)).currency)}`, "WALLET_INSUFFICIENT");
   const [row] = await tx.insert(schema.customerWalletEntries).values({
     organizationId: input.orgId, customerId: input.customerId, branchId: input.branchId ?? null, kind: input.kind,
     amount: input.amount, balanceAfter: after, paymentId: input.paymentId ?? null, note: input.note ?? null, createdBy: input.userId,

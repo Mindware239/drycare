@@ -1,3 +1,5 @@
+import { todayInZone } from "@drycare/shared";
+import { zone } from "../lib/region";
 /**
  * Stock of consumables (solvent, detergent, hangers, packing), suppliers and purchase orders.
  * Stock on hand is always derived from the append-only movement ledger, per branch, in thousandths of a unit.
@@ -16,7 +18,6 @@ import { nextNumber, pad } from "../lib/sequences";
 import { assertDrawerCash, openShiftFor } from "./payments";
 
 const uuid = z.uuid();
-const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 /** Value of a quantity (thousandths) at a unit price (paise), rounded to the paisa. */
 const lineValue = (milli: number, unitCost: number) => Math.round((milli * unitCost) / 1000);
 const fmtQty = (milli: number, unit: string) => `${Number((milli / 1000).toFixed(3))} ${unit}`;
@@ -272,7 +273,7 @@ export async function inventoryRoutes(app: FastifyInstance) {
              coalesce(sum(m.quantity_milli) filter (where m.kind = 'count'), 0) as "countDifference"
       from inventory_movements m join inventory_items i on i.id = m.item_id
       where m.organization_id = ${auth.orgId} ${branchFilter}
-        and (m.created_at at time zone 'Asia/Kolkata')::date between ${q.from}::date and ${q.to}::date
+        and (m.created_at at time zone ${zone(auth.timezone)})::date between ${q.from}::date and ${q.to}::date
       group by i.id order by i.category, i.name`);
     return rows.map((r) => ({
       ...r, lastUnitCost: Number(r.lastUnitCost), purchased: Number(r.purchased), purchasedValue: Math.round(Number(r.purchasedValue)), used: Number(r.used),
@@ -329,7 +330,7 @@ export async function inventoryRoutes(app: FastifyInstance) {
       select po.id, po.po_number as "poNumber", po.status, po.expected_on as "expectedOn", po.total, po.created_at as "createdAt", po.ordered_at as "orderedAt",
              s.name as "supplierName", b.branch_code as "branchCode", u.name as "createdByName",
              (select count(*)::int from purchase_order_lines l where l.purchase_order_id = po.id) as "lineCount",
-             (po.status in ('ordered', 'partial') and po.expected_on is not null and po.expected_on::date < ${istToday()}::date) as overdue
+             (po.status in ('ordered', 'partial') and po.expected_on is not null and po.expected_on::date < ${todayInZone(auth.timezone)}::date) as overdue
       from purchase_orders po join suppliers s on s.id = po.supplier_id join branches b on b.id = po.branch_id left join users u on u.id = po.created_by
       where po.organization_id = ${auth.orgId} ${statusFilter} ${branches ? sql`and po.branch_id = any(${`{${branches.join(",")}}`}::uuid[])` : sql``}
       order by po.created_at desc limit 300`);
@@ -458,7 +459,7 @@ export async function inventoryRoutes(app: FastifyInstance) {
         }
         const supplier = await supplierOf(tx, auth.orgId, po.supplierId);
         const [exp] = await tx.insert(schema.expenses).values({
-          organizationId: auth.orgId, branchId: po.branchId, category: body.bill.category, amount: value, method: body.bill.method, spentOn: istToday(),
+          organizationId: auth.orgId, branchId: po.branchId, category: body.bill.category, amount: value, method: body.bill.method, spentOn: todayInZone(auth.timezone),
           vendor: supplier.name, reference: body.bill.reference || null, description: `Goods received against ${po.poNumber}`, shiftId, createdBy: auth.userId,
         }).returning();
         expenseId = exp.id;

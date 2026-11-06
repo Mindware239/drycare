@@ -1,5 +1,6 @@
 "use client";
 
+import { appLocale } from "@/lib/format";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, MailCheck, Store, Tags } from "lucide-react";
@@ -14,7 +15,7 @@ type License = { plan: string | null; demo: { endsAt: string; daysLeft: number; 
 
 const CATALOGUE_KEY = "drycare.onboarding.catalogueReviewed";
 const included = ["Orders, garment tags and production board", "Billing with GST, payments and receipts", "Pickups, deliveries and customer wallet"];
-const dateLabel = (iso: string) => new Intl.DateTimeFormat("en-IN", { dateStyle: "long" }).format(new Date(iso));
+const dateLabel = (iso: string) => new Intl.DateTimeFormat(appLocale(), { dateStyle: "long" }).format(new Date(iso));
 
 function StepTag({ tone, children }: { tone: "done" | "next" | "optional"; children: React.ReactNode }) {
   const colours = tone === "done" ? { background: "#dff3e4", color: "#1f6b34" } : tone === "next" ? { background: "#d8e7fa", color: "#2a4f86" } : { background: "#f3f1ec", color: "#4f4e4a" };

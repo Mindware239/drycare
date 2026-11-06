@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { useEffect, useState } from "react";
 import { Cloud, CloudOff, CloudUpload, ExternalLink, Link2, LoaderCircle, RefreshCw, TriangleAlert, Wifi, WifiOff } from "lucide-react";
 import { api, ApiError, useApi } from "@/lib/api";
@@ -59,7 +60,7 @@ export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: bool
     : hold === "plan_required" ? "Cloud plan needed"
     : hold === "schema_too_new" ? "Cloud update pending"
     : s.failed > 0 ? "Sync errors"
-    : s.pending > 0 ? `${s.pending.toLocaleString("en-IN")} to upload`
+    : s.pending > 0 ? `${s.pending.toLocaleString(appLocale())} to upload`
     : "Synced";
   const Icon = s.syncing ? LoaderCircle : attention ? TriangleAlert : !s.cloudLinked ? CloudOff : s.pending ? CloudUpload : Cloud;
 
@@ -89,7 +90,7 @@ export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: bool
           <Icon aria-hidden="true" className={cx("h-4 w-4", s.syncing && "animate-spin")} />
           <span className="hidden lg:inline">{label}</span>
         </summary>
-        <div className="absolute right-0 z-40 mt-2 w-[340px] rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-xl">
+        <div className="absolute end-0 z-40 mt-2 w-[340px] rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-xl">
           <div className="flex items-center justify-between">
             <p className="font-semibold text-slate-900">Cloud sync</p>
             {s.syncing && <span className="inline-flex items-center gap-1 text-xs text-brand-700"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Uploading…</span>}
@@ -100,7 +101,7 @@ export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: bool
             {s.cloudLinked && (
               <>
                 {s.linkedBy && <Row label="Approved by" value={<span className="max-w-[170px] truncate">{s.linkedBy}</span>} />}
-                <Row label="Waiting to upload" value={<span className="tabular-nums">{s.pending.toLocaleString("en-IN")}</span>} hint={s.oldestPendingAt ? `oldest from ${dateTime(s.oldestPendingAt)}` : undefined} />
+                <Row label="Waiting to upload" value={<span className="tabular-nums">{s.pending.toLocaleString(appLocale())}</span>} hint={s.oldestPendingAt ? `oldest from ${dateTime(s.oldestPendingAt)}` : undefined} />
                 <Row label="Last successful cloud sync" value={s.lastSuccessAt ? dateTime(s.lastSuccessAt) : <span className="text-slate-500">Not yet</span>} />
                 {s.failed > 0 && <Row label="Failed uploads" value={<span className="tabular-nums text-amber-700">{s.failed}</span>} hint={s.lastError ?? undefined} />}
                 {s.conflicts > 0 && <Row label="Conflicts to review" value={<button type="button" onClick={() => setConflictsOpen(true)} className="font-semibold text-red-700 underline">{s.conflicts} — review</button>} />}
@@ -139,8 +140,8 @@ export function SyncStatus({ dark, canManage }: { dark: boolean; canManage: bool
 function Row({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3"><dt className="text-slate-500">{label}</dt><dd className="text-right font-medium text-slate-800">{value}</dd></div>
-      {hint && <p className="mt-0.5 truncate text-right text-[11px] text-slate-500" title={hint}>{hint}</p>}
+      <div className="flex items-baseline justify-between gap-3"><dt className="text-slate-500">{label}</dt><dd className="text-end font-medium text-slate-800">{value}</dd></div>
+      {hint && <p className="mt-0.5 truncate text-end text-[11px] text-slate-500" title={hint}>{hint}</p>}
     </div>
   );
 }
@@ -193,7 +194,7 @@ function LinkModal({ status, onClose, reload }: { status: Status; onClose: () =>
           {l?.status === "expired" && <Alert tone="amber">The code expired. Start again.</Alert>}
           {l?.status === "failed" && <Alert>{l.message ?? "Linking failed."}</Alert>}
           <p>Your orders, bills and reports will also be visible in Drycare Cloud, so you can check the shop from anywhere. The shop keeps working offline; changes upload whenever there is internet.</p>
-          <ul className="list-disc space-y-1 pl-5 text-xs">
+          <ul className="list-disc space-y-1 ps-5 text-xs">
             <li>You approve this PC by signing in to Drycare Cloud — your cloud password is never typed here.</li>
             <li>Only one PC per shop can be linked, so invoice numbers stay unique.</li>
             <li>The cloud copy is view-only; keep making changes on this PC.</li>

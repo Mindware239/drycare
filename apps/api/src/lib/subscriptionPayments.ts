@@ -12,6 +12,8 @@ export async function applySubscriptionPayment(tx: DbOrTx, input: {
   provider: string;
   reference: string;
   amountPaise: number;
+  /** The currency it was paid in, when it is not the plan's own. */
+  currency?: string;
   payload: Record<string, unknown>;
 }) {
   const { organizationId, plan } = input;
@@ -54,7 +56,7 @@ export async function applySubscriptionPayment(tx: DbOrTx, input: {
     provider: input.provider,
     providerReference: input.reference,
     amountPaise: input.amountPaise,
-    currency: plan.currency,
+    currency: input.currency ?? plan.currency,
     status: "paid",
     providerPayload: { ...input.payload, renewal: Boolean(existing), periodStart: periodStart.toISOString(), periodEnd: endsAt.toISOString() },
   }).returning();

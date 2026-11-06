@@ -73,7 +73,7 @@ export default function TagsPage() {
       {s && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
           {tiles.map(([label, value, state]) => (
-            <button key={label} type="button" disabled={!state} onClick={() => { if (state) { setStatus(state); setPage(0); } }} className={cx("rounded-xl border bg-white p-3 text-left", state && state === status ? "border-brand-600 ring-1 ring-brand-600" : "border-slate-200", state && "hover:border-slate-400")}>
+            <button key={label} type="button" disabled={!state} onClick={() => { if (state) { setStatus(state); setPage(0); } }} className={cx("rounded-xl border bg-white p-3 text-start", state && state === status ? "border-brand-600 ring-1 ring-brand-600" : "border-slate-200", state && "hover:border-slate-400")}>
               <span className="block text-xs text-slate-500">{label}</span>
               <span className="mt-0.5 block text-xl font-bold tabular-nums text-slate-900">{value}</span>
             </button>
@@ -83,8 +83,8 @@ export default function TagsPage() {
       <Card padded={false}>
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
           <label className="relative min-w-64 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Barcode, RFID, order number, customer, phone or garment" className="pl-9" aria-label="Search tags" />
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Barcode, RFID, order number, customer, phone or garment" className="ps-9" aria-label="Search tags" />
           </label>
           <Select value={status} onChange={(e) => { setStatus(e.target.value as typeof status); setPage(0); }} className="w-auto" aria-label="Stage">
             {STATES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -106,7 +106,7 @@ export default function TagsPage() {
                 <Td>{t.rack ?? "—"}</Td>
                 <Td className="text-xs text-slate-600">{dateTime(t.createdAt)}</Td>
                 <Td className="tabular-nums">{t.printCount ? `${t.printCount}×` : "Not yet"}</Td>
-                {shownMoney && <Td className="text-right tabular-nums">{money(Number(t.charge ?? 0))}</Td>}
+                {shownMoney && <Td className="text-end tabular-nums">{money(Number(t.charge ?? 0))}</Td>}
               </tr>
             ))}
           </Table>

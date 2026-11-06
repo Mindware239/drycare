@@ -40,7 +40,7 @@ export async function walletRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     const body = z.object({
       branchId: z.uuid(),
-      amount: z.number().int().min(100, "Minimum top-up is ₹1").max(10_000_000),
+      amount: z.number().int().min(100, "The top-up amount is too small").max(10_000_000),
       method: z.enum(["cash", "upi", "card", "bank_transfer", "wallet", "other"]),
       reference: z.string().trim().max(80).optional(),
       note: z.string().trim().max(200).optional(),

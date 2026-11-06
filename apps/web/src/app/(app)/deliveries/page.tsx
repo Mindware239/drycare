@@ -77,7 +77,7 @@ export default function DeliveriesPage() {
                   {onlyActive && <span className="block text-xs text-slate-500">{r.scheduled_date}</span>}
                   <span className="mt-1 block">
                     <Badge color={r.kind === "pickup" ? "violet" : "brand"}>{KIND_LABEL[r.kind]}</Badge>
-                    {r.attempts > 1 && <span className="ml-1 text-xs text-slate-500">try {r.attempts}</span>}
+                    {r.attempts > 1 && <span className="ms-1 text-xs text-slate-500">try {r.attempts}</span>}
                   </span>
                 </Td>
                 <Td className="max-w-sm whitespace-normal">

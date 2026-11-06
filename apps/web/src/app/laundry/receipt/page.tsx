@@ -3,7 +3,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { LAUNDRY_METHOD_LABELS, type LaundryPricingMethod } from "@drycare/shared";
 import { useApi } from "@/lib/api";
-import { dateTime, money } from "@/lib/format";
+import { currentRegion, dateTime, money } from "@/lib/format";
 import { Alert, Button, Spinner } from "@/components/ui";
 
 /** 80 mm receipt for a self-service order: itemized charges, GST, payments and a QR to follow the machine. */
@@ -28,7 +28,7 @@ function Receipt() {
           <p className="text-sm font-bold">{org.name}</p>
           <p>{o.branch?.name}</p>
           {billing.phone && <p>Ph: {billing.phone}</p>}
-          {org.gstin && <p>GSTIN: {org.gstin}</p>}
+          {org.gstin && <p>{currentRegion().taxIdLabel}: {org.gstin}</p>}
           <p className="mt-1 font-bold">SELF-SERVICE LAUNDRY RECEIPT</p>
         </div>
         <hr className="my-2 border-dashed border-black" />
@@ -43,8 +43,8 @@ function Receipt() {
         <hr className="my-2 border-dashed border-black" />
         <Line l="Subtotal" r={money(o.subtotal)} />
         {o.discountTotal > 0 && <Line l="Discount" r={`-${money(o.discountTotal)}`} />}
-        <Line l={`CGST ${o.taxBps / 200}%`} r={money(half)} />
-        <Line l={`SGST ${o.taxBps / 200}%`} r={money(o.taxTotal - half)} />
+        {currentRegion().splitsGst ? <><Line l={`CGST ${o.taxBps / 200}%`} r={money(half)} />
+        <Line l={`SGST ${o.taxBps / 200}%`} r={money(o.taxTotal - half)} /></> : o.taxTotal > 0 && <Line l={`${currentRegion().taxName} ${o.taxBps / 100}%`} r={money(o.taxTotal)} />}
         <Line l="TOTAL" r={money(o.total)} bold />
         <Line l="Paid" r={money(o.paid)} />
         {o.refunded > 0 && <Line l="Refunded" r={money(o.refunded)} />}

@@ -253,6 +253,27 @@
       "when": 1793883481503,
       "tag": "0035_stain_charge",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793947200412,
+      "tag": "0036_device_serials",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793947881017,
+      "tag": "0037_printer_serial_confirmed",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793948788441,
+      "tag": "0038_feature_override_expiry",
+      "breakpoints": true
     }
   ]
 }

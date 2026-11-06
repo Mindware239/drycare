@@ -1,4 +1,5 @@
 "use client";
+import { appLocale } from "@/lib/format";
 import { useState } from "react";
 import { Download, Printer } from "lucide-react";
 import { LAUNDRY_MACHINE_LABELS, LAUNDRY_METHOD_LABELS, type LaundryMachineType, type LaundryPricingMethod } from "@drycare/shared";
@@ -60,7 +61,7 @@ export default function LaundryReportsPage() {
             <Kpi label="Sales" value={money(d.totals.billed)} hint={`GST ${money(d.totals.tax)}`} />
             <Kpi label="Collected" value={money(d.totals.collected - d.totals.refunded)} hint={d.totals.refunded ? `${money(d.totals.refunded)} refunded` : "net of refunds"} />
             <Kpi label="Outstanding" value={money(d.totals.outstanding)} tone={d.totals.outstanding ? "text-amber-700" : undefined} />
-            <Kpi label="Laundry weight" value={`${(d.totals.grams / 1000).toLocaleString("en-IN", { maximumFractionDigits: 1 })} kg`} />
+            <Kpi label="Laundry weight" value={`${(d.totals.grams / 1000).toLocaleString(appLocale(), { maximumFractionDigits: 1 })} kg`} />
           </div>
 
           {d.openMaintenance.length > 0 && <Alert tone="amber">Maintenance open: {d.openMaintenance.map((m: any) => `${m.machine} — ${m.kind}`).join(" · ")}</Alert>}
@@ -88,15 +89,15 @@ export default function LaundryReportsPage() {
           <Card title="Machines" padded={false}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Machine</th><th className="px-4 py-2.5 text-right">Cycles</th><th className="px-4 py-2.5 text-right">Avg cycle</th><th className="px-4 py-2.5 text-right">Failures</th><th className="px-4 py-2.5 text-right">Revenue</th><th className="px-4 py-2.5">Utilization</th></tr></thead>
+                <thead className="bg-slate-50 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5">Machine</th><th className="px-4 py-2.5 text-end">Cycles</th><th className="px-4 py-2.5 text-end">Avg cycle</th><th className="px-4 py-2.5 text-end">Failures</th><th className="px-4 py-2.5 text-end">Revenue</th><th className="px-4 py-2.5">Utilization</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {d.byMachine.map((m: any) => (
                     <tr key={m.id}>
                       <td className="px-4 py-2.5"><span className="font-medium text-slate-900">{m.name}</span><span className="block text-xs text-slate-500">{LAUNDRY_MACHINE_LABELS[m.machineType as LaundryMachineType]} · {m.code} · {m.branchCode}</span></td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{m.cycles}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{m.avgMinutes ? `${m.avgMinutes} min` : "—"}</td>
-                      <td className={cx("px-4 py-2.5 text-right tabular-nums", m.failures && "text-red-600")}>{m.failures}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{money(m.revenue)}</td>
+                      <td className="px-4 py-2.5 text-end tabular-nums">{m.cycles}</td>
+                      <td className="px-4 py-2.5 text-end tabular-nums">{m.avgMinutes ? `${m.avgMinutes} min` : "—"}</td>
+                      <td className={cx("px-4 py-2.5 text-end tabular-nums", m.failures && "text-red-600")}>{m.failures}</td>
+                      <td className="px-4 py-2.5 text-end tabular-nums">{money(m.revenue)}</td>
                       <td className="px-4 py-2.5"><div className="flex items-center gap-2"><div className="h-2 w-28 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-500" style={{ width: `${m.utilizationPct}%` }} /></div><span className="text-xs tabular-nums text-slate-600">{m.utilizationPct}%</span></div></td>
                     </tr>
                   ))}

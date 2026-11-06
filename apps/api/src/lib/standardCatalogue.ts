@@ -1,3 +1,5 @@
+import { startingPrice } from "@drycare/shared";
+import { orgRegion } from "./region";
 import { and, eq, isNull } from "drizzle-orm";
 import { DEFAULT_TEMPLATE, type GarmentStage } from "@drycare/shared";
 import { schema, type Tx } from "../db/client";
@@ -326,12 +328,13 @@ export async function installStandardCatalogue(tx: Tx, orgId: string, opts: { dr
   const inserted = missing.length
     ? await tx.insert(schema.garmentTypes).values(missing.map((g) => ({ organizationId: orgId, name: g.name, category: g.category }))).onConflictDoNothing().returning()
     : [];
+  const region = await orgRegion(orgId, tx);
   const prices = inserted.flatMap((gt) => {
     const def = missing.find((g) => g.name === gt.name)!;
     // Prices only attach to services the store still has, active, under the standard codes.
     return Object.entries(def.prices).flatMap(([code, price]) => {
       const svc = services.find((s) => s.serviceCode === code && s.active);
-      return svc ? [{ organizationId: orgId, priceListId: priceList.id, garmentTypeId: gt.id, serviceId: svc.id, unitPrice: price!, taxBps: 1800 }] : [];
+      return svc ? [{ organizationId: orgId, priceListId: priceList.id, garmentTypeId: gt.id, serviceId: svc.id, unitPrice: startingPrice(price!, region.currency), taxBps: region.defaultTaxBps }] : [];
     });
   });
   if (prices.length) await tx.insert(schema.servicePrices).values(prices);
