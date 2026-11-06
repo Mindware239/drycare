@@ -59,6 +59,21 @@ async function resolveCode(tx: Tx | typeof db, orgId: string, raw: string) {
   return { kind: "not_found" as const, code };
 }
 
+/** Why a bag cannot join this draft batch, or null when it can. Also gives how many garments it holds. */
+async function bagProblem(tx: Tx, batch: { id: string; direction: string }, bag: { id: string; bagCode: string }) {
+  const flow = TRANSFER_FLOW[batch.direction as TransferDirection];
+  const gs = await tx.query.garments.findMany({ where: eq(schema.garments.bagId, bag.id) });
+  const active = gs.filter((g) => !["cancelled", "delivered"].includes(g.currentStatus));
+  const wrong = active.filter((g) => !flow.from.includes(g.location as GarmentLocation));
+  if (!active.length) return { problem: `${bag.bagCode} has no garments to send.`, count: 0 };
+  if (wrong.length) return { problem: `${bag.bagCode} cannot be added: ${wrong.length} garment(s) are not at the ${batch.direction === "to_facility" ? "shop" : "facility"}.`, count: 0 };
+  const open = await tx.execute(sql`
+    select tb.batch_number from transfer_batch_bags x join transfer_batches tb on tb.id = x.batch_id
+    where x.bag_id = ${bag.id} and tb.status in ('draft', 'dispatched') and tb.id <> ${batch.id} limit 1`);
+  if (open.length) return { problem: `${bag.bagCode} is already in batch ${open[0].batch_number}.`, count: 0 };
+  return { problem: null, count: active.length };
+}
+
 async function loadBatch(tx: Tx, auth: AuthContext, batchId: string, lock = false) {
   const q = tx.select().from(schema.transferBatches).where(and(eq(schema.transferBatches.id, batchId), eq(schema.transferBatches.organizationId, auth.orgId)));
   const [batch] = lock ? await q.for("update") : await q;
@@ -89,9 +104,11 @@ async function batchDetail(tx: Tx, auth: AuthContext, batchId: string) {
     from scan_events s left join users u on u.id = s.scanned_by where s.batch_id = ${batch.id} order by s.scanned_at desc limit 200`);
   const people = await tx.execute<{ id: string; name: string }>(sql`select id, name from users where id = any(${`{${[batch.createdBy, batch.dispatchedBy, batch.receivedBy].filter(Boolean).join(",")}}`}::uuid[])`);
   const nameOf = (id: string | null) => people.find((p) => p.id === id)?.name ?? null;
+  const [linked] = await tx.select({ id: schema.transferBatches.id }).from(schema.transferBatches).where(eq(schema.transferBatches.returnOfBatchId, batch.id)).limit(1);
   return {
     ...batch,
     step,
+    returnBatchId: linked?.id ?? null,
     createdByName: nameOf(batch.createdBy),
     dispatchedByName: nameOf(batch.dispatchedBy),
     receivedByName: nameOf(batch.receivedBy),
@@ -222,6 +239,133 @@ export async function logisticsRoutes(app: FastifyInstance) {
     return batch;
   });
 
+  /**
+   * One row per journey: a batch going out and the return batch that brings it back count as one.
+   * A return batch started by hand, with no batch going out, gets its own row.
+   */
+  app.get("/transfers/journeys", async (req) => {
+    const auth = requirePermission(req, "orders.read");
+    const q = z.object({ branchId: uuid.optional() }).parse(req.query);
+    if (q.branchId) assertBranchAccess(auth, q.branchId);
+    const branchFilter = q.branchId ? sql`and tb.branch_id = ${q.branchId}` : auth.branchIds.length ? sql`and tb.branch_id = any(${`{${auth.branchIds.join(",")}}`}::uuid[])` : sql``;
+    const rows = await db.execute<{
+      id: string; batchNumber: string; direction: string; facilityName: string; transportReference: string | null; status: string; createdAt: string; dispatchedAt: string | null; receivedAt: string | null; expectedBackAt: string | null;
+      bags: number; garments: number; scanned: number; arrived: number; atFacility: number; returnId: string | null; returnStatus: string | null; returnReceivedAt: string | null; back: number; missing: number;
+    }>(sql`
+      select tb.id, tb.batch_number as "batchNumber", tb.direction, tb.facility_name as "facilityName", tb.transport_reference as "transportReference", tb.status,
+             tb.created_at as "createdAt", tb.dispatched_at as "dispatchedAt", tb.received_at as "receivedAt", tb.expected_back_at as "expectedBackAt",
+             (select count(*)::int from transfer_batch_bags x where x.batch_id = tb.id) as bags,
+             (select count(*)::int from garments g join transfer_batch_bags x on x.bag_id = g.bag_id where x.batch_id = tb.id and g.current_status not in ('cancelled', 'delivered')) as garments,
+             (select count(*)::int from scan_events s where s.batch_id = tb.id and s.step = 'dispatch' and s.result = 'verified' and s.garment_id is not null) as scanned,
+             (select count(*)::int from scan_events s where s.batch_id = tb.id and s.step = 'receipt' and s.result = 'verified' and s.garment_id is not null) as arrived,
+             (select count(*)::int from garments g join transfer_batch_bags x on x.bag_id = g.bag_id where x.batch_id = tb.id and g.location = 'at_facility' and g.current_status not in ('cancelled', 'delivered')) as "atFacility",
+             r.id as "returnId", r.status as "returnStatus", r.received_at as "returnReceivedAt",
+             (select count(*)::int from scan_events s where s.batch_id = r.id and s.step = 'receipt' and s.result = 'verified' and s.garment_id is not null) as back,
+             (select count(*)::int from garment_exceptions e where e.status = 'open' and e.kind = 'missing' and (e.batch_id = tb.id or e.batch_id = r.id)) as missing
+      from transfer_batches tb
+      left join lateral (select * from transfer_batches x where x.return_of_batch_id = tb.id order by x.created_at desc limit 1) r on true
+      where tb.organization_id = ${auth.orgId} and tb.return_of_batch_id is null ${branchFilter}
+      order by tb.created_at desc limit 1000`);
+    return rows.map((b) => {
+      const closed = b.status === "received" || b.status === "received_with_exceptions";
+      if (b.direction === "to_shop") {
+        return { ...b, standalone: true, returnId: b.id, returnStatus: b.status, stage: closed ? "done" : "at_facility", doneAt: b.receivedAt, back: b.arrived, backExpected: b.garments };
+      }
+      const returned = b.returnStatus === "received" || b.returnStatus === "received_with_exceptions";
+      const stage = b.status === "draft" ? "packing" : b.status === "dispatched" ? "transit" : returned || (!b.returnId && b.atFacility === 0) ? "done" : "at_facility";
+      return { ...b, standalone: false, stage, doneAt: stage === "done" ? b.returnReceivedAt ?? b.receivedAt : null, backExpected: b.arrived };
+    });
+  });
+
+  /** Bags at the shop that are still to be cleaned and are not in any open batch. */
+  app.get("/transfers/waiting", async (req) => {
+    const auth = requirePermission(req, "orders.read");
+    const q = z.object({ branchId: uuid.optional() }).parse(req.query);
+    if (q.branchId) assertBranchAccess(auth, q.branchId);
+    const branchFilter = q.branchId ? sql`and b.branch_id = ${q.branchId}` : auth.branchIds.length ? sql`and b.branch_id = any(${`{${auth.branchIds.join(",")}}`}::uuid[])` : sql``;
+    return db.execute(sql`
+      select b.id, b.bag_code as "bagCode", o.order_number as "orderNumber", c.name as "customerName",
+             json_agg(json_build_object('tagCode', g.tag_code, 'garmentType', oi.garment_type_name) order by g.tag_code) as garments
+      from bags b join orders o on o.id = b.order_id join customers c on c.id = o.customer_id
+      join garments g on g.bag_id = b.id and g.current_status not in ('cancelled', 'delivered') join order_items oi on oi.id = g.order_item_id
+      where b.organization_id = ${auth.orgId} ${branchFilter}
+        and not exists (select 1 from transfer_batch_bags x join transfer_batches tb on tb.id = x.batch_id where x.bag_id = b.id and tb.status in ('draft', 'dispatched'))
+      group by b.id, b.bag_code, o.order_number, c.name, o.created_at
+      having bool_and(g.location = 'shop_counter') and bool_and(g.current_status not in ('ready', 'dispatched', 'exception'))
+      order by o.created_at limit 200`);
+  });
+
+  /** Adds a bag with no scan, for a shop without a scanner at hand. Its garments stay unverified, so dispatching them is an audited choice. */
+  app.post("/transfers/:batchId/bags", async (req) => {
+    const auth = requirePermission(req, "garments.process");
+    const { batchId } = z.object({ batchId: uuid }).parse(req.params);
+    const { bagId } = z.object({ bagId: uuid }).parse(req.body);
+    return db.transaction(async (tx) => {
+      const batch = await loadBatch(tx, auth, batchId, true);
+      if (batch.status !== "draft") throw unprocessable("Bags can only be added before dispatch", "BATCH_DISPATCHED");
+      const bag = await tx.query.bags.findFirst({ where: and(eq(schema.bags.id, bagId), eq(schema.bags.organizationId, auth.orgId)) });
+      if (!bag) throw notFound("Bag");
+      assertBranchAccess(auth, bag.branchId);
+      if (await tx.query.transferBatchBags.findFirst({ where: and(eq(schema.transferBatchBags.batchId, batchId), eq(schema.transferBatchBags.bagId, bagId)) })) throw conflict(`${bag.bagCode} is already in this batch.`, "BAG_ALREADY_IN_BATCH");
+      const check = await bagProblem(tx, batch, bag);
+      if (check.problem) throw unprocessable(check.problem, "BAG_NOT_ALLOWED");
+      await tx.insert(schema.transferBatchBags).values({ organizationId: auth.orgId, batchId, bagId, expectedCount: check.count, addedBy: auth.userId });
+      await audit(tx, req, { action: "transfer.bag_added_by_hand", resourceType: "transfer_batch", resourceId: batchId, after: { batchNumber: batch.batchNumber, bagCode: bag.bagCode, garments: check.count } });
+      return batchDetail(tx, auth, batchId);
+    });
+  });
+
+  /** Throws away a batch that has not left. Nothing has moved yet, so its bags are simply free again. */
+  app.delete("/transfers/:batchId", async (req) => {
+    const auth = requirePermission(req, "garments.process");
+    const { batchId } = z.object({ batchId: uuid }).parse(req.params);
+    return db.transaction(async (tx) => {
+      const batch = await loadBatch(tx, auth, batchId, true);
+      if (batch.status !== "draft") throw unprocessable("Only a batch that has not been dispatched can be discarded", "BATCH_DISPATCHED");
+      await tx.delete(schema.scanEvents).where(eq(schema.scanEvents.batchId, batchId));
+      await tx.delete(schema.transferBatchBags).where(eq(schema.transferBatchBags.batchId, batchId));
+      await tx.delete(schema.transferBatches).where(eq(schema.transferBatches.id, batchId));
+      await audit(tx, req, { action: "transfer.discarded", resourceType: "transfer_batch", resourceId: batchId, after: { batchNumber: batch.batchNumber } });
+      return { ok: true };
+    });
+  });
+
+  /**
+   * Starts bringing a batch back: a return batch with everything still at the facility, on its way to the shop.
+   * Bags holding a garment flagged missing come too, so it can be scanned back if it turns up. Asking twice gives the same batch.
+   */
+  app.post("/transfers/:batchId/start-return", async (req) => {
+    const auth = requirePermission(req, "garments.process");
+    const { batchId } = z.object({ batchId: uuid }).parse(req.params);
+    return db.transaction(async (tx) => {
+      const out = await loadBatch(tx, auth, batchId, true);
+      if (out.direction !== "to_facility") throw unprocessable("Only a batch sent to the facility can come back", "NOT_OUTBOUND");
+      if (out.status !== "received" && out.status !== "received_with_exceptions") throw unprocessable("Receive this batch at the facility first", "NOT_AT_FACILITY");
+      const [existing] = await tx.select().from(schema.transferBatches).where(eq(schema.transferBatches.returnOfBatchId, out.id)).limit(1);
+      if (existing) return batchDetail(tx, auth, existing.id);
+      const rows = await tx.execute<{ bagId: string; garmentId: string; location: string }>(sql`
+        select g.bag_id as "bagId", g.id as "garmentId", g.location from garments g join transfer_batch_bags x on x.bag_id = g.bag_id
+        where x.batch_id = ${out.id} and g.current_status not in ('cancelled', 'delivered') and g.location in ('at_facility', 'missing')
+          and not exists (select 1 from transfer_batch_bags y join transfer_batches t on t.id = y.batch_id where y.bag_id = g.bag_id and t.status in ('draft', 'dispatched'))`);
+      const coming = rows.filter((g) => g.location === "at_facility");
+      if (!coming.length) throw unprocessable("Nothing from this batch is at the facility", "NOTHING_AT_FACILITY");
+      const flow = TRANSFER_FLOW.to_shop;
+      const year = new Date().getFullYear();
+      const seq = await nextNumber(tx, auth.orgId, `transfer:${year}`);
+      const now = new Date();
+      const [ret] = await tx.insert(schema.transferBatches).values({
+        organizationId: auth.orgId, branchId: out.branchId, batchNumber: `RET-${year}-${pad(seq)}`, direction: "to_shop", facilityName: out.facilityName, transportReference: out.transportReference,
+        status: "dispatched", createdBy: auth.userId, dispatchedBy: auth.userId, dispatchedAt: now, returnOfBatchId: out.id,
+      }).returning();
+      const bagIds = [...new Set(rows.map((g) => g.bagId))];
+      await tx.insert(schema.transferBatchBags).values(bagIds.map((bagId) => ({ organizationId: auth.orgId, batchId: ret.id, bagId, expectedCount: coming.filter((g) => g.bagId === bagId).length, addedBy: auth.userId })));
+      await moveGarments(tx, auth, coming.map((g) => g.garmentId), flow.transit, "dispatch", ret.batchNumber, `Coming back from ${out.facilityName} in ${ret.batchNumber}`);
+      await tx.execute(sql`update bags set location = ${flow.transit}, updated_at = now() where id in (select bag_id from transfer_batch_bags where batch_id = ${ret.id})`);
+      await audit(tx, req, { action: "transfer.return_started", resourceType: "transfer_batch", resourceId: ret.id, after: { batchNumber: ret.batchNumber, returnOf: out.batchNumber, garments: coming.length } });
+      return batchDetail(tx, auth, ret.id);
+    });
+  });
+
   app.get("/transfers/:batchId", async (req) => {
     const auth = requirePermission(req, "orders.read");
     const { batchId } = z.object({ batchId: uuid }).parse(req.params);
@@ -241,7 +385,6 @@ export async function logisticsRoutes(app: FastifyInstance) {
       const batch = await loadBatch(tx, auth, batchId, true);
       if (batch.status !== "draft" && batch.status !== "dispatched") throw unprocessable("This batch is closed", "BATCH_CLOSED");
       const step = batch.status === "draft" ? "dispatch" : "receipt";
-      const flow = TRANSFER_FLOW[batch.direction as TransferDirection];
       const r = await scannedCode(tx, auth.orgId, code);
       const log = async (result: string, extra: { bagId?: string; garmentId?: string } = {}) => {
         await tx.insert(schema.scanEvents).values({ organizationId: auth.orgId, batchId, step, scannedCode: r.code, result, scannedBy: auth.userId, ...extra });
@@ -259,24 +402,15 @@ export async function logisticsRoutes(app: FastifyInstance) {
         const bag = r.kind === "bag" ? r.bag : await tx.query.bags.findFirst({ where: eq(schema.bags.id, bagId) });
         if (!bag) throw notFound("Bag");
         assertBranchAccess(auth, bag.branchId);
-        const gs = await tx.query.garments.findMany({ where: eq(schema.garments.bagId, bag.id) });
-        const active = gs.filter((g) => !["cancelled", "delivered"].includes(g.currentStatus));
-        const wrong = active.filter((g) => !flow.from.includes(g.location as GarmentLocation));
-        if (!active.length || wrong.length) {
+        const check = await bagProblem(tx, batch, bag);
+        if (check.problem) {
           await log("unexpected", { bagId: bag.id });
-          return { result: "unexpected", message: active.length ? `${bag.bagCode} cannot be added: ${wrong.length} garment(s) are not at the ${batch.direction === "to_facility" ? "shop" : "facility"}.` : `${bag.bagCode} has no garments to send.` };
+          return { result: "unexpected", message: check.problem };
         }
-        const open = await tx.execute(sql`
-          select tb.batch_number from transfer_batch_bags x join transfer_batches tb on tb.id = x.batch_id
-          where x.bag_id = ${bag.id} and tb.status in ('draft', 'dispatched') and tb.id <> ${batchId} limit 1`);
-        if (open.length) {
-          await log("unexpected", { bagId: bag.id });
-          return { result: "unexpected", message: `${bag.bagCode} is already in batch ${open[0].batch_number}.` };
-        }
-        await tx.insert(schema.transferBatchBags).values({ organizationId: auth.orgId, batchId, bagId: bag.id, expectedCount: active.length, addedBy: auth.userId });
+        await tx.insert(schema.transferBatchBags).values({ organizationId: auth.orgId, batchId, bagId: bag.id, expectedCount: check.count, addedBy: auth.userId });
         if (r.kind === "bag") {
           await log("verified", { bagId: bag.id });
-          return { result: "bag_added", message: `${bag.bagCode} added · ${active.length} garment${active.length === 1 ? "" : "s"} expected. Scan each garment tag to verify the contents.` };
+          return { result: "bag_added", message: `${bag.bagCode} added · ${check.count} garment${check.count === 1 ? "" : "s"} expected. Scan each garment tag to verify the contents.` };
         }
       }
 
@@ -327,7 +461,8 @@ export async function logisticsRoutes(app: FastifyInstance) {
   app.post("/transfers/:batchId/dispatch", async (req) => {
     const auth = requirePermission(req, "garments.process");
     const { batchId } = z.object({ batchId: uuid }).parse(req.params);
-    const body = z.object({ transportReference: z.string().trim().max(80).optional(), acceptUnverified: z.boolean().default(false) }).parse(req.body ?? {});
+    const body = z.object({ transportReference: z.string().trim().max(80).optional(), acceptUnverified: z.boolean().default(false), expectedBackAt: z.iso.datetime({ offset: true }).optional() }).parse(req.body ?? {});
+    if (body.expectedBackAt && Date.parse(body.expectedBackAt) <= Date.now()) throw unprocessable("Expected return must be in the future.", "EXPECTED_BACK_IN_PAST");
     return db.transaction(async (tx) => {
       const batch = await loadBatch(tx, auth, batchId, true);
       if (batch.status !== "draft") throw unprocessable("This batch has already been dispatched", "BATCH_DISPATCHED");
@@ -344,7 +479,7 @@ export async function logisticsRoutes(app: FastifyInstance) {
       await moveGarments(tx, auth, garments.map((g) => g.id), flow.transit, "dispatch", batch.batchNumber, `Dispatched in ${batch.batchNumber} to ${batch.direction === "to_facility" ? batch.facilityName : "shop"}`);
       await tx.execute(sql`update bags set location = ${flow.transit}, updated_at = now() where id in (select bag_id from transfer_batch_bags where batch_id = ${batchId})`);
       await tx.update(schema.transferBatches)
-        .set({ status: "dispatched", dispatchedBy: auth.userId, dispatchedAt: now, transportReference: body.transportReference || batch.transportReference, updatedAt: now })
+        .set({ status: "dispatched", dispatchedBy: auth.userId, dispatchedAt: now, transportReference: body.transportReference || batch.transportReference, expectedBackAt: body.expectedBackAt ? new Date(body.expectedBackAt) : null, updatedAt: now })
         .where(eq(schema.transferBatches.id, batchId));
       await audit(tx, req, { action: "transfer.dispatched", resourceType: "transfer_batch", resourceId: batchId, after: { batchNumber: batch.batchNumber, bags: detail.bags.length, garments: garments.length, unverified: unverified.map((g) => g.tagCode) } });
       return batchDetail(tx, auth, batchId);
@@ -364,11 +499,14 @@ export async function logisticsRoutes(app: FastifyInstance) {
       const batch = await loadBatch(tx, auth, batchId, true);
       if (batch.status !== "dispatched") throw unprocessable(batch.status === "draft" ? "Dispatch the batch before receiving it" : "This batch has already been received", "BATCH_NOT_IN_TRANSIT");
       const detail = await batchDetail(tx, auth, batchId);
-      const garments = detail.garments as unknown as { id: string; tagCode: string; bagId: string; receiptVerified: boolean }[];
+      const garments = detail.garments as unknown as { id: string; tagCode: string; bagId: string; location: string; receiptVerified: boolean }[];
+      const flowTo = TRANSFER_FLOW[batch.direction as TransferDirection];
       const present = garments.filter((g) => g.receiptVerified);
-      const missing = garments.filter((g) => !g.receiptVerified);
+      // Only what is on its way can be newly missing. A garment already flagged missing stays flagged, with its first exception.
+      const missing = garments.filter((g) => !g.receiptVerified && g.location === flowTo.transit);
+      const stillMissing = garments.filter((g) => !g.receiptVerified && g.location === "missing");
       if (missing.length && !body.partial) {
-        throw unprocessable(`${missing.length} of ${garments.length} garment(s) have not been scanned: ${missing.slice(0, 8).map((g) => g.tagCode).join(", ")}${missing.length > 8 ? "…" : ""}`, "GARMENTS_MISSING");
+        throw unprocessable(`${missing.length} of ${garments.length - stillMissing.length} garment(s) have not been scanned: ${missing.slice(0, 8).map((g) => g.tagCode).join(", ")}${missing.length > 8 ? "…" : ""}`, "GARMENTS_MISSING");
       }
       if (missing.length && !can(auth, "garments.override")) throw forbidden("A manager must confirm a partial receipt with missing garments");
       if (missing.length && !body.notes) throw badRequest("Add a note explaining the missing garments");
@@ -387,9 +525,9 @@ export async function logisticsRoutes(app: FastifyInstance) {
         update bags b set location = case when exists (select 1 from garments g where g.bag_id = b.id and g.location = 'missing') then 'missing' else ${flow.arrive} end, updated_at = now()
         where b.id in (select bag_id from transfer_batch_bags where batch_id = ${batchId})`);
       await tx.update(schema.transferBatches)
-        .set({ status: missing.length ? "received_with_exceptions" : "received", receivedBy: auth.userId, receivedAt: now, updatedAt: now })
+        .set({ status: missing.length || stillMissing.length ? "received_with_exceptions" : "received", receivedBy: auth.userId, receivedAt: now, updatedAt: now })
         .where(eq(schema.transferBatches.id, batchId));
-      await audit(tx, req, { action: missing.length ? "transfer.received_partial" : "transfer.received", resourceType: "transfer_batch", resourceId: batchId, after: { batchNumber: batch.batchNumber, received: present.length, missing: missing.map((g) => g.tagCode), notes: body.notes } });
+      await audit(tx, req, { action: missing.length ? "transfer.received_partial" : "transfer.received", resourceType: "transfer_batch", resourceId: batchId, after: { batchNumber: batch.batchNumber, received: present.length, missing: missing.map((g) => g.tagCode), stillMissing: stillMissing.map((g) => g.tagCode), notes: body.notes } });
       return batchDetail(tx, auth, batchId);
     });
   });

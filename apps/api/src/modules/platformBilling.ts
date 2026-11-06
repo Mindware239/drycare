@@ -189,13 +189,15 @@ export async function platformBillingRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ shop: plan & billing
   app.get("/commercial/billing", async (req) => {
     const auth = requirePermission(req, "org.manage");
-    const [org, seller, payments, plans, subscription] = await Promise.all([
+    const [org, seller, payments, allPlans, subscription] = await Promise.all([
       db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) }),
       getSellerBilling(db),
       getStoredPayments(db),
-      db.query.commercialPlans.findMany({ where: eq(schema.commercialPlans.published, true), orderBy: [schema.commercialPlans.sortOrder, schema.commercialPlans.pricePaise] }),
+      db.query.commercialPlans.findMany({ orderBy: [schema.commercialPlans.sortOrder, schema.commercialPlans.pricePaise] }),
       db.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, auth.orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)] }),
     ]);
+    // New plans on offer, plus the shop's own, which shows what it bought rather than what the plan has become.
+    const plans = allPlans.filter((p) => p.published || p.id === subscription?.planId).map((p) => (p.id === subscription?.planId && subscription.entitlementsSnapshot ? { ...p, entitlements: subscription.entitlementsSnapshot, branchLimit: subscription.branchLimitSnapshot ?? p.branchLimit } : p));
     const rate = seller.invoice.gstRateBps;
     const india = org ? planOffer({ pricePaise: 0, gstInclusive: false, currency: "INR" }, org, rate).india : true;
     const invoices = await db.execute(sql`select i.id, i.number, i.status, i.issued_at as "issuedAt", i.total_paise as "totalPaise", i.currency, pl.name as "planName", i.period_start as "periodStart", i.period_end as "periodEnd"
@@ -229,7 +231,7 @@ export async function platformBillingRoutes(app: FastifyInstance) {
     const { planId } = z.object({ planId: z.uuid() }).parse(req.query);
     const [seller, payments, plan, org] = await Promise.all([
       getSellerBilling(db), getStoredPayments(db),
-      db.query.commercialPlans.findFirst({ where: and(eq(schema.commercialPlans.id, planId), eq(schema.commercialPlans.published, true)) }),
+      payablePlan(planId, auth.orgId),
       db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) }),
     ]);
     if (!plan || !org || !payments.methods.upi || !seller.upiId) throw notFound("UPI payment option");
@@ -252,7 +254,7 @@ export async function platformBillingRoutes(app: FastifyInstance) {
       paidOn: z.string().trim().max(20).optional(),
       note: z.string().trim().max(300).optional(),
     }).parse(req.body);
-    const plan = await db.query.commercialPlans.findFirst({ where: and(eq(schema.commercialPlans.id, body.planId), eq(schema.commercialPlans.published, true)) });
+    const plan = await payablePlan(body.planId, auth.orgId);
     if (!plan) throw notFound("Plan");
     const reference = body.reference.replace(/\s+/g, "").toUpperCase();
     const [dup] = await db.execute(sql`select 1 from commercial_payments where upper(regexp_replace(provider_reference, '\\s+', '', 'g')) = ${reference} and status in ('pending','paid','verified') limit 1`);
@@ -275,7 +277,7 @@ export async function platformBillingRoutes(app: FastifyInstance) {
     const { planId } = z.object({ planId: z.uuid() }).parse(req.body);
     const creds = await razorpayCredentials(db);
     if (!creds) throw new AppError(503, "ONLINE_PAYMENT_OFF", "Online payment is not available right now. Pay by UPI or bank transfer instead.");
-    const plan = await db.query.commercialPlans.findFirst({ where: and(eq(schema.commercialPlans.id, planId), eq(schema.commercialPlans.published, true)) });
+    const plan = await payablePlan(planId, auth.orgId);
     if (!plan) throw notFound("Plan");
     const seller = await getSellerBilling(db);
     const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) });
@@ -343,6 +345,15 @@ export async function platformBillingRoutes(app: FastifyInstance) {
  * to the shop and plan in its notes, then activates the plan and issues the invoice. Safe to call from both the
  * checkout callback and the webhook. expectedOrgId (checkout) must match the order's shop.
  */
+/** A plan this shop may pay for: one on offer, or the one it already has, even if since hidden from new customers. */
+async function payablePlan(planId: string, orgId: string) {
+  const plan = await db.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.id, planId) });
+  if (!plan) return undefined;
+  if (plan.published) return plan;
+  const current = await db.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true } });
+  return current?.planId === planId ? plan : undefined;
+}
+
 async function recordRazorpayPayment(
   req: Parameters<typeof audit>[1],
   creds: NonNullable<Awaited<ReturnType<typeof razorpayCredentials>>>,

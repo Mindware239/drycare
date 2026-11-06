@@ -321,12 +321,12 @@ h1, h2 {
 /* Dashboard */
 .dcd {
   --dc-ink: #151514; --dc-sub: #4f4e4a; --dc-card: #fff; --dc-card2: #fcfbf9; --dc-soft: #f3f1ec; --dc-soft2: #faf8f4; --dc-line: #e4e1da; --dc-line2: #eeece6; --dc-solid: #151514; --dc-on-solid: #faf8f4;
-  --dc-green: #3cbf5a; --dc-green-bg: #dff3e4; --dc-green-fg: #1f6b34; --dc-red-bg: #fdebe3; --dc-red-fg: #9a3a12; --dc-blue: #3d6fb5; --dc-blue-bg: #e3ecf7; --dc-blue-fg: #2a4f86; --dc-grey: #8a8780;
+  --dc-green: #3cbf5a; --dc-green-bg: #dff3e4; --dc-green-fg: #1f6b34; --dc-red-bg: #fdebe3; --dc-red-fg: #9a3a12; --dc-blue: #3d6fb5; --dc-blue-bg: #e3ecf7; --dc-blue-fg: #2a4f86; --dc-grey: #8a8780; --dc-amber-bg: #fff3d6; --dc-amber-fg: #6b4a00;
   color: var(--dc-ink);
 }
 :root[data-theme="dark"] .dcd {
   --dc-ink: #f1f5f9; --dc-sub: #a8b3c4; --dc-card: #111827; --dc-card2: #111827; --dc-soft: #1f2937; --dc-soft2: #172033; --dc-line: #2b3648; --dc-line2: #243042; --dc-solid: #f1f5f9; --dc-on-solid: #111827;
-  --dc-green-bg: #143524; --dc-green-fg: #7fe09a; --dc-red-bg: #3b1f14; --dc-red-fg: #f5a585; --dc-blue-bg: #1c2d47; --dc-blue-fg: #a9c5ee;
+  --dc-green-bg: #143524; --dc-green-fg: #7fe09a; --dc-red-bg: #3b1f14; --dc-red-fg: #f5a585; --dc-blue-bg: #1c2d47; --dc-blue-fg: #a9c5ee; --dc-amber-bg: #3a2c0c; --dc-amber-fg: #f2cf7e;
 }
 .dcd-h { font-family: "Urbanist", ui-sans-serif, system-ui, sans-serif; font-weight: 700; letter-spacing: -.02em; }
 .dcd-card { background: var(--dc-card); border: 1px solid var(--dc-line); border-radius: 24px; transition: box-shadow .4s ease; }

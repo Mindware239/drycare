@@ -96,6 +96,9 @@ export const commercialSubscriptions = pgTable(
   "commercial_subscriptions",
   {
     id: id(),
+    /** What the plan included when this shop bought it. Later edits to the plan do not reach it. Null: follow the plan. */
+    entitlementsSnapshot: jsonb("entitlements_snapshot_json").$type<Record<string, boolean>>(),
+    branchLimitSnapshot: integer("branch_limit_snapshot"),
     organizationId: orgId(),
     planId: uuid("plan_id").notNull().references(() => commercialPlans.id),
     status: text("status").notNull().default("trial"), // trial | active | past_due | canceled | expired
@@ -346,8 +349,155 @@ export const desktopLicenses = pgTable(
     note: text("note"),
     issuedBy: uuid("issued_by").notNull(),
     issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    /** active | suspended | revoked. Reaches a PC at its next check-in. */
+    status: text("status").notNull().default("active"),
+    statusReason: text("status_reason"),
+    /** The key that replaced this one, by renewal or a change of terms. */
+    supersededBy: uuid("superseded_by"),
+    entitlementVersion: integer("entitlement_version").notNull().default(1),
+    /** What was bought, before this customer's exceptions, which the key has baked in. */
+    boughtFeatures: jsonb("bought_features_json").$type<Record<string, boolean>>(),
   },
   (t) => [index("desktop_licenses_org_idx").on(t.organizationId), index("desktop_licenses_issued_idx").on(t.issuedAt)],
+);
+
+/** Each PC seen by the licensing server. Written when a PC checks in or the owner changes it. */
+export const licenseInstallations = pgTable(
+  "license_installations",
+  {
+    installationId: uuid("installation_id").primaryKey(),
+    licenseId: uuid("license_id").notNull(),
+    organizationId: uuid("organization_id"),
+    customerName: text("customer_name"),
+    /** active | deactivated */
+    status: text("status").notNull().default("active"),
+    statusReason: text("status_reason"),
+    appVersion: text("app_version"),
+    pcName: text("pc_name"),
+    osVersion: text("os_version"),
+    arch: text("arch"),
+    licenseType: text("license_type"),
+    /** Which releases it may receive: stable | beta | preview */
+    channel: text("channel").notNull().default("stable"),
+    betaGroup: boolean("beta_group").notNull().default(false),
+    updateStatus: text("update_status"),
+    updateStatusAt: timestamp("update_status_at", { withTimezone: true }),
+    lastSuccessVersion: text("last_success_version"),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  },
+  (t) => [index("license_installations_license_idx").on(t.licenseId), index("license_installations_org_idx").on(t.organizationId)],
+);
+
+/** Every check-in, kept as the PC's history. */
+export const licenseSyncEvents = pgTable(
+  "license_sync_events",
+  {
+    id: id(),
+    installationId: uuid("installation_id").notNull(),
+    licenseId: uuid("license_id").notNull(),
+    result: text("result").notNull(),
+    appVersion: text("app_version"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("license_sync_events_license_idx").on(t.licenseId, t.createdAt), index("license_sync_events_device_idx").on(t.installationId, t.createdAt)],
+);
+
+/** How often each shop used each feature on each day. Only counts: no customer, order or staff details. */
+export const featureUsageDaily = pgTable(
+  "feature_usage_daily",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    feature: text("feature").notNull(),
+    day: date("day", { mode: "string" }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.feature, t.day] }), index("feature_usage_daily_day_idx").on(t.day)],
+);
+
+/** A version of the PC edition. Its file is kept in RELEASE_DIR. */
+export const desktopReleases = pgTable(
+  "desktop_releases",
+  {
+    id: id(),
+    version: text("version").notNull(),
+    notes: text("notes").notNull().default(""),
+    productName: text("product_name").notNull().default("Drycare for Windows"),
+    buildNumber: text("build_number"),
+    title: text("title"),
+    /** stable | beta | preview */
+    channel: text("channel").notNull().default("stable"),
+    releaseDate: date("release_date", { mode: "string" }),
+    /** draft | testing | staged | published | paused | withdrawn */
+    status: text("status").notNull().default("draft"),
+    pauseReason: text("pause_reason"),
+    /** exe | msi. Only an .exe can be delivered by the updater. */
+    packageType: text("package_type").notNull().default("exe"),
+    /** x64 | arm64 */
+    architecture: text("architecture").notNull().default("x64"),
+    sha256: text("sha256"),
+    /** valid | not_signed | present_unverified | invalid | unknown */
+    signatureStatus: text("signature_status"),
+    signaturePublisher: text("signature_publisher"),
+    /** The owner chose to release this without a verified signature. */
+    unsignedApproved: boolean("unsigned_approved").notNull().default(false),
+    automatic: boolean("automatic").notNull().default(false),
+    restartRequired: boolean("restart_required").notNull().default(true),
+    updateDeadline: timestamp("update_deadline", { withTimezone: true }),
+    maintenanceStart: integer("maintenance_start"),
+    maintenanceEnd: integer("maintenance_end"),
+    rollbackAvailable: boolean("rollback_available").notNull().default(true),
+    notificationMessage: text("notification_message"),
+    target: jsonb("target_json").$type<import("@drycare/shared").ReleaseTarget>().notNull().default(sql`'{"type":"all"}'::jsonb`),
+    stages: jsonb("stages_json").$type<number[]>().notNull().default(sql`'[10,25,50,100]'::jsonb`),
+    currentStage: integer("current_stage").notNull().default(0),
+    failureThresholdPct: integer("failure_threshold_pct").notNull().default(20),
+    failureMinCount: integer("failure_min_count").notNull().default(3),
+    recommended: boolean("recommended").notNull().default(false),
+    publishedBy: uuid("published_by"),
+    mandatory: boolean("mandatory").notNull().default(false),
+    /** A PC below this version must update before carrying on with new work. */
+    minSupportedVersion: text("min_supported_version"),
+    rolloutPercent: integer("rollout_percent").notNull().default(100),
+    fileName: text("file_name"),
+    sha512: text("sha512"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("desktop_releases_version_uq").on(t.version)],
+);
+
+/** The owner sending PCs on a bad version back to an earlier one. Only the program goes back, never the database. */
+export const desktopRollbacks = pgTable("desktop_rollbacks", {
+  id: id(),
+  fromVersion: text("from_version").notNull(),
+  toVersion: text("to_version").notNull(),
+  scope: jsonb("scope_json").$type<{ type: "all" } | { type: "installations"; ids: string[] }>().notNull(),
+  /** active | stopped */
+  status: text("status").notNull().default("active"),
+  reason: text("reason").notNull(),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: createdAt(),
+});
+
+/** What happened when a PC updated. */
+export const desktopUpdateReports = pgTable(
+  "desktop_update_reports",
+  {
+    id: id(),
+    installationId: uuid("installation_id").notNull(),
+    fromVersion: text("from_version"),
+    toVersion: text("to_version").notNull(),
+    /** downloading | downloaded | installing | succeeded | failed | rolled_back */
+    status: text("status").notNull(),
+    detail: text("detail"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("desktop_update_reports_version_idx").on(t.toVersion, t.createdAt), index("desktop_update_reports_device_idx").on(t.installationId, t.createdAt)],
 );
 
 export const branches = pgTable(
@@ -816,6 +966,10 @@ export const transferBatches = pgTable(
     dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
     receivedBy: uuid("received_by"),
     receivedAt: timestamp("received_at", { withTimezone: true }),
+    /** When the shop expects these garments back from the facility. */
+    expectedBackAt: timestamp("expected_back_at", { withTimezone: true }),
+    /** On a return batch: the batch that took these garments to the facility. */
+    returnOfBatchId: uuid("return_of_batch_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -8,10 +8,11 @@ Last updated: 29 Oct 2026 · Source documents: *DRYCARE-SRS-001 v1.0*, *Complete
 
 ## Feature control and PC updates (6 Nov 2026): not deployed
 
-- **Feature control** (`packages/shared/src/features.ts`, `apps/api/src/lib/entitlements.ts`, migration `0038`): access is worked out live, in this order: plan, then the customer's exception (with an optional end date), then what the feature depends on, then the owner's global switch, which nothing overrides. Nothing is copied per customer, so an upgrade, downgrade or exception applies at once and data is never removed. Super admin > Features & permissions has the registry, the global switch, upgrade wording and counts. Screens show why a feature is locked and offer an upgrade only where one would help. Test with `pnpm feature-access-test`. Feature keys live in code, because each one needs server rules behind it: adding a new one is a code change.
-- **Always on:** dashboard, orders, customers, services and prices, tags and scan station, cashier, invoices, settings and plan page, because orders cannot run without them.
-- **PC updates** (`apps/desktop/src/updates.ts`): the screens are packed into the installer, so web changes reach a PC only through a new version. Build with `DRYCARE_UPDATE_URL=https://…` set, then upload `latest.yml`, the `.exe` and the `.blockmap` from `apps/desktop/release` to that folder over HTTPS. PCs check at start and every six hours, ask before downloading, check the SHA-512, back up, then install. A PC with an older copy has no updater: it needs one manual install of 0.1.20 or later. The installer is not code-signed yet.
-- **PC licenses** are fixed once issued. Feature changes reach a PC when its key is renewed, and there is no online revocation yet.
+- **Feature control** (`packages/shared/src/features.ts`, `apps/api/src/lib/entitlements.ts`, migrations `0038` and `0039`): access is worked out in this order: what the shop bought, then its exception (with an optional end date), then what the feature depends on, then the owner's global switch, which nothing overrides. A subscription freezes the plan's features and branch limit when bought (`entitlements_snapshot_json`), so editing a plan reaches new customers only, unless the owner ticks "also change current customers" or moves one customer to the latest plan. Renewing keeps what was bought, and so does renewing a PC key on the same plan; changing plan takes the new plan. Hiding a plan removes it from new customers and the public page, while its current customers keep and can renew it. The public pricing page now reads saved plans, so its prices come only from Plans & pricing. Open screens refresh what they may use every minute and on returning to the window. Features the owner adds are "listed only": they appear on plans and the pricing page but open or lock no screen. `APP_MODULES` lists every menu screen and the test suite fails if one is missing. Super admin > Features & permissions has the registry, the global switch, upgrade wording and counts. Screens show why a feature is locked and offer an upgrade only where one would help. Test with `pnpm feature-access-test`. Feature keys live in code, because each one needs server rules behind it: adding a new one is a code change.
+- **Always on:** sign-in, license checks, business settings and the plan page. Business modules can all be switched off, with dependencies respected: orders need customers, services and cashier.
+- **PC updates, releases, rollback, code signing:** see `docs/DESKTOP_RELEASE.md`. The installer is not code-signed until a certificate is configured.
+- **Remote licensing** (`modules/licenseServer.ts`, `lib/licenseSync.ts`, migration `0040`): suspend, revoke, reactivate, remove a PC, change features and terms, all reaching a PC at its next check-in. Test with `pnpm license-remote-test` (needs the API running).
+- **Feature usage** (`feature_usage_daily`): counts per shop, feature and day only.
 
 ## Worldwide use: countries, taxes, formats and five languages (6 Nov 2026): not deployed
 
@@ -401,3 +402,20 @@ Follow the current prioritized plan in [COMMERCIAL_AUDIT.md](./COMMERCIAL_AUDIT.
 - Start = earliest of `demo.json` (next to `license.json` in the app's user-data folder, HMAC-sealed) and the oldest store record in the local database (set at start-up in `apps/desktop/src/server-entry.ts`). Deleting `demo.json` doesn't restart it; editing it or moving the clock back more than a day ends it. Reinstalling keeps app data, so the demo carries over.
 - Cloud signups keep their own 7-day trial + read-only rules (`subscriptionAccess.ts`); development builds of the desktop app are never limited.
 - `pnpm demo-test` (10 checks). Desktop version 0.1.5.
+
+## Enterprise release management (migration 0041)
+
+- Super admin > Software releases: eight cards from real records, Deployment table, PCs, Rollback and Release history tabs, Emergency stop.
+- Status: Draft, Testing, Staged, Published, Paused, Withdrawn. Stages with eligible and selected counts, targets, stable/beta/preview channels, auto-pause on failures.
+- Updates now go through signed, one-time answers (`POST /updates/check`, `DRYCARERELEASE2`) and expiring per-PC download links. The old open `/updates/:id/latest.yml` is gone, so **PCs on 0.1.21 or older cannot update through this and need 0.1.22 installed by hand.**
+- Desktop 0.1.22: nonce and SHA-256 checks, downgrade guard, signed rollbacks, maintenance window and quiet check, backup before install.
+- Tests: `pnpm release-test`.
+- Still needs a person: public HTTPS server address (`DRYCARE_CLOUD_URL`), code-signing certificate, object storage. A real install over an installed copy has not been run, because it would replace this PC's real install.
+
+## Facility transfers, to the owner's design (migration 0042)
+
+- One row per journey: Send, At facility, Back at shop, with packing, receiving, return and details in dialogs on the same page. `/transfers/view` now redirects there.
+- New: expected-back date, a return linked to its batch (`return_of_batch_id`), waiting-to-send list, adding a bag by hand (its garments stay unverified, so dispatching them is audited), discarding a draft. API: `GET /transfers/journeys`, `GET /transfers/waiting`, `POST /transfers/:id/bags`, `DELETE /transfers/:id`, `POST /transfers/:id/start-return`.
+- A return starts at its first scan or at Finish, so opening the dialog moves nothing. A garment already flagged missing keeps its first exception.
+- Differs from the design on purpose: bags come from orders with printed labels, so there is no "+ New bag", no removing one garment from a bag, and "Waiting to send" lists bags. Finishing with garments missing asks for a reason and needs a manager.
+- Tests: `pnpm transfer-test`.

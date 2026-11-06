@@ -3,7 +3,7 @@
  * block any of them for that one shop. These keys are stored in `commercial_plans.entitlements_json`, in shop
  * overrides and inside signed desktop licenses, so never rename one.
  */
-export const FEATURE_CATEGORIES = ["Garments", "Operations", "Customers", "Money", "Reports", "Administration"] as const;
+export const FEATURE_CATEGORIES = ["Core", "Garments", "Operations", "Customers", "Money", "Reports", "Administration"] as const;
 export type FeatureCategory = (typeof FEATURE_CATEGORIES)[number];
 export type FeatureDef = {
   label: string;
@@ -16,11 +16,20 @@ export type FeatureDef = {
 };
 
 const DEFS = {
+  dashboard: { label: "Dashboard", description: "The day's figures and shortcuts on the first screen.", category: "Core", whenUnset: true },
+  orders: { label: "Orders & new order", description: "Taking orders at the counter and managing them.", category: "Core", whenUnset: true, dependsOn: ["customers", "catalogue", "cashier"] },
+  customers: { label: "Customers", description: "Customer records and history.", category: "Core", whenUnset: true },
+  catalogue: { label: "Services & prices", description: "The garments, services and price lists orders are priced from.", category: "Core", whenUnset: true },
+  cashier: { label: "Cashier & shifts", description: "Opening and closing cash shifts. Payments at the counter are recorded against them.", category: "Core", whenUnset: true },
+  invoices: { label: "Invoices & receipts", description: "Viewing, printing and sending customer invoices.", category: "Core", whenUnset: true, dependsOn: ["orders"] },
+  garmentTags: { label: "Garment tags", description: "Printing garment and bag tags.", category: "Core", whenUnset: true, dependsOn: ["orders"] },
+  scanStation: { label: "Scan station", description: "Moving garments between stages by scanning their tags.", category: "Core", whenUnset: true, dependsOn: ["orders"] },
   labelDesigner: { label: "Tag designer", description: "Any tag size and layout, saved designs, and fine barcode adjustment. Without it, the shop prints the ready-made 38 × 30 mm taffeta tag.", category: "Garments", whenUnset: false },
   productionBoard: { label: "Production board", description: "The board showing every garment by stage, and overdue work. Garments can still be moved from the scan station without it.", category: "Garments", whenUnset: true },
   tagTracking: { label: "Tag tracking", description: "The complete history of any tag: every scan, stage and person.", category: "Garments", whenUnset: true },
   transfers: { label: "Facility transfers", description: "Sending garments between a store and a central plant, with checks at each end.", category: "Garments", whenUnset: true },
   garmentExceptions: { label: "Garment exceptions", description: "Recording missing, damaged and rework garments, and following them up.", category: "Garments", whenUnset: true },
+  cloudSync: { label: "Cloud sync for PCs", description: "Keeps a copy of a PC shop's data online, to view from anywhere.", category: "Administration", whenUnset: false },
   rfid: { label: "RFID module", description: "Link RFID tags to garments, track them and bill at handover with an RFID reader. Sold and invoiced separately from the plans.", category: "Garments", whenUnset: false },
   deliveries: { label: "Pickup & delivery", description: "Pickups, deliveries, drivers and the driver's screen.", category: "Operations", whenUnset: true },
   laundry: { label: "Self-service laundry", description: "Machines, self-service orders, the kiosk and laundry reports.", category: "Operations", whenUnset: true },
@@ -50,8 +59,8 @@ export const FEATURE_KEYS = Object.keys(FEATURES) as FeatureKey[];
 /** Set by a plan or a shop exception. The RFID module is not: it comes only from its own paid period. */
 export const PLAN_FEATURE_KEYS = FEATURE_KEYS.filter((key) => key !== "rfid");
 
-/** Included in every plan, because the software cannot run a shop without them. */
-export const CORE_FEATURE_LABELS = ["Dashboard", "Counter billing & orders", "Customers", "Services & prices", "Garment tags & scan station", "Cashier & shifts", "Invoices & receipts", "Business settings", "Plan & billing"] as const;
+/** The software's own workings, not sold features: a shop must always be able to sign in, stay secure and pay. */
+export const CORE_FEATURE_LABELS = ["Sign-in & security", "License checks", "Business settings", "Plan & billing"] as const;
 
 export const allFeatures = (): FeatureMap => Object.fromEntries(FEATURE_KEYS.map((key) => [key, true])) as FeatureMap;
 
@@ -80,7 +89,49 @@ export function resolveFeatures(plan: Record<string, boolean> | null | undefined
 }
 
 /** Why a shop cannot use a feature, so the screen can say the right thing. */
-export type FeatureLock = { reason: "plan" | "admin" | "global" | "license" | "addon"; plans: string[]; currentPlan: string | null; message: string | null };
+export type FeatureLock = { reason: "plan" | "admin" | "global" | "license" | "addon"; plans: string[]; currentPlan: string | null; message: string | null; label?: string; description?: string };
+
+/** What a plan is frozen to when a shop buys it. Later edits to the plan reach new customers, not this shop. */
+export function planSnapshot(entitlements: Record<string, boolean> | null | undefined): Record<string, boolean> {
+  return { ...(entitlements ?? {}), ...resolveFeatures(entitlements ?? {}) };
+}
+
+/**
+ * Every screen in the shop's menu, and what controls it. The test suite compares this with the real menu, so a new screen
+ * cannot be added without deciding this. A screen with no feature is in every plan, for the reason given.
+ */
+export const APP_MODULES: { path: string; label: string; feature?: FeatureKey; why?: string }[] = [
+  { path: "/dashboard", label: "Dashboard", feature: "dashboard" },
+  { path: "/pos", label: "New order", feature: "orders" },
+  { path: "/orders", label: "Orders", feature: "orders" },
+  { path: "/customers", label: "Customers", feature: "customers" },
+  { path: "/production", label: "Production board", feature: "productionBoard" },
+  { path: "/scan", label: "Scan station", feature: "scanStation" },
+  { path: "/tags", label: "Tag tracking", feature: "tagTracking" },
+  { path: "/rfid", label: "RFID", feature: "rfid" },
+  { path: "/transfers", label: "Facility transfers", feature: "transfers" },
+  { path: "/exceptions", label: "Garment exceptions", feature: "garmentExceptions" },
+  { path: "/laundry", label: "Machines & live status", feature: "laundry" },
+  { path: "/laundry/new", label: "New self-service order", feature: "laundry" },
+  { path: "/laundry/orders", label: "Self-service orders", feature: "laundry" },
+  { path: "/laundry/reports", label: "Laundry reports", feature: "laundry" },
+  { path: "/laundry/settings", label: "Laundry setup & pricing", feature: "laundry" },
+  { path: "/deliveries", label: "Pickups & deliveries", feature: "deliveries" },
+  { path: "/driver", label: "My deliveries", feature: "deliveries" },
+  { path: "/cashier", label: "Cashier & shifts", feature: "cashier" },
+  { path: "/expenses", label: "Expenses", feature: "expenses" },
+  { path: "/inventory", label: "Stock & purchasing", feature: "inventory" },
+  { path: "/reports", label: "Reports", feature: "reports" },
+  { path: "/memberships", label: "Memberships", feature: "customerMemberships" },
+  { path: "/claims", label: "Claims & complaints", feature: "claims" },
+  { path: "/campaigns", label: "Marketing campaigns", feature: "marketing" },
+  { path: "/catalogue", label: "Services & prices", feature: "catalogue" },
+  { path: "/integrations", label: "Integrations & notifications", feature: "integrations" },
+  { path: "/staff", label: "Staff & roles", feature: "staffManagement" },
+  { path: "/settings", label: "Business settings", why: "the shop's name, tax details and bills are set here" },
+  { path: "/billing", label: "Plan & billing", why: "a shop must always be able to pay" },
+  { path: "/audit", label: "Audit & messages", feature: "auditLog" },
+];
 
 /** GST included in a price: the tax is taken out of the amount, rounded to the paisa. */
 export function splitInclusiveTax(amount: number, taxBps: number) {

@@ -10,6 +10,8 @@ import { audit } from "../lib/audit";
 import { AppError } from "../lib/errors";
 import { createBackup, listBackups } from "../lib/backup";
 import { activateDesktopLicense, getLicenseStatus } from "../lib/license";
+import { syncLicenseNow } from "../lib/licenseSync";
+import { cloudUrlSetting } from "../sync/cloud";
 import { emailConfigured, emailFrom, emailProvider } from "../lib/mailer";
 
 /** Adapters that phones on the shop Wi-Fi can never reach (Docker/WSL/Hyper-V/VM/VPN). Listing them only confuses owners. */
@@ -48,6 +50,12 @@ export async function systemRoutes(app: FastifyInstance) {
   });
 
   app.get("/system/license/status", async () => getLicenseStatus());
+
+  /** Check in with the licensing server now. Only from this PC itself. */
+  app.post("/system/license/sync", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req) => {
+    if (!isDesktop || !env.LICENSE_ENFORCED || !isLoopbackAddress(req.raw.socket.remoteAddress)) throw new AppError(404, "NOT_FOUND", "This is only available on the DryCare PC");
+    return { result: await syncLicenseNow(cloudUrlSetting()), status: getLicenseStatus() };
+  });
 
   app.post(
     "/system/license/activate",

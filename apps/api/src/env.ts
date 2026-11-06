@@ -31,6 +31,8 @@ const schema = z.object({
   /** When set, the API also serves the statically exported web app from this folder. */
   WEB_DIST: z.string().optional(),
   BACKUP_DIR: z.string().optional(),
+  /** Where uploaded PC installers are kept. */
+  RELEASE_DIR: z.string().optional(),
   APP_VERSION: z.string().default("0.1.0"),
   LICENSE_ENFORCED: z.string().default("false").transform((v) => v === "true"),
   LICENSE_PUBLIC_KEY: z.string().optional(),

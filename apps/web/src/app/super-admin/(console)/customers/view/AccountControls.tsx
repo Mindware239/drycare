@@ -9,6 +9,7 @@ import { LoadingRows, Panel, dateLabel, useAdminData } from "../../admin-ui";
 type Entitlements = {
   expiry?: Partial<Record<FeatureKey, string>>;
   globallyOff?: string[];
+  olderPlanVersion?: boolean;
   plan: { id: string; name: string; status: string; endsAt: string | null } | null;
   planFeatures: FeatureMap;
   overrides: FeatureOverrides;
@@ -63,6 +64,26 @@ export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: 
       {!data || !choices ? <LoadingRows rows={5} /> : (
         <form onSubmit={save} className="space-y-4">
           {saveError && <Alert>{saveError}</Alert>}
+          {data.olderPlanVersion && (
+            <Alert tone="blue">
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span>This shop keeps what it bought. {data.plan?.name} has changed since then.</span>
+                <Button type="button" size="sm" variant="secondary" disabled={reason.trim().length < 8} onClick={async () => {
+                  setSaveError("");
+                  try {
+                    await api(`/platform-admin/organizations/${orgId}/subscription/latest-features`, { body: { reason } });
+                    setReason("");
+                    setNotice("This shop now has what the plan includes today.");
+                    await reload();
+                    onChanged();
+                  } catch (cause) {
+                    setSaveError(cause instanceof Error ? cause.message : "Could not save.");
+                  }
+                }}>Move to the latest plan</Button>
+              </span>
+              <label className="mt-2 block"><span className="sr-only">Reason</span><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, at least 8 characters" /></label>
+            </Alert>
+          )}
           {notice && <Alert tone="green" onClose={() => setNotice("")}>{notice}</Alert>}
           <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
             {FEATURE_KEYS.map((key) => {
@@ -71,7 +92,7 @@ export function FeaturesPanel({ orgId, onChanged }: { orgId: string; onChanged: 
               return (
                 <div key={key} className="flex flex-wrap items-center justify-between gap-3 p-3">
                   <div className="min-w-48 flex-1">
-                    <p className="flex items-center gap-2 text-sm font-medium text-slate-900">{FEATURES[key].label}<Badge color={effective ? "green" : "slate"}>{effective ? "On" : "Off"}</Badge>{off && <Badge color="red">Off for everyone</Badge>}{choices[key] !== "plan" && <Badge color="amber">Exception</Badge>}<span className="text-xs font-normal text-slate-500">{data.planFeatures[key] ? "In plan" : "Not in plan"}</span></p>
+                    <p className="flex items-center gap-2 text-sm font-medium text-slate-900">{FEATURES[key].label}<Badge color={effective ? "green" : "slate"}>{effective ? "On" : "Off"}</Badge>{off && <Badge color="red">Off for everyone</Badge>}{choices[key] !== "plan" && <Badge color="amber">Exception</Badge>}<span className="text-xs font-normal text-slate-500">{data.planFeatures[key] ? "Bought" : "Not bought"}</span></p>
                     <p className="text-xs text-slate-500">{FEATURES[key].description}</p>
                   </div>
                   {choices[key] !== "plan" && <label className="flex items-center gap-1.5 text-xs text-slate-600">Until<Input type="date" value={ends[key] ?? ""} onChange={(e) => setEnds({ ...ends, [key]: e.target.value })} className="w-36" aria-label={`${FEATURES[key].label} exception ends`} /></label>}

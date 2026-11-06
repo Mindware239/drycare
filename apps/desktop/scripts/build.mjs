@@ -33,8 +33,11 @@ cpSync(path.join(repo, "apps/web/out"), path.join(stage, "resources/web"), { rec
 cpSync(path.join(repo, "apps/api/drizzle"), path.join(stage, "resources/drizzle"), { recursive: true });
 cpSync(path.join(root, "build/icon.ico"), path.join(stage, "resources/icon.ico"));
 cpSync(licensePublicKey, path.join(stage, "resources/license-public.pem"));
-// Where installed copies look for new versions. Without it they still run, and say updates are not set up.
-writeFileSync(path.join(stage, "resources/update.json"), JSON.stringify({ url: process.env.DRYCARE_UPDATE_URL ?? "" }));
+// Where installed copies check in and look for new versions. Without it they still run offline, and say updates are not set up.
+const cloudUrl = process.env.DRYCARE_CLOUD_URL ?? process.env.DRYCARE_UPDATE_URL ?? "";
+writeFileSync(path.join(stage, "resources/update.json"), JSON.stringify({ url: cloudUrl, requireSigned: process.env.DRYCARE_REQUIRE_SIGNED === "true", publisher: process.env.DRYCARE_SIGNING_PUBLISHER ?? "" }));
+console.log(cloudUrl ? `› Server address: ${cloudUrl}` : "› No server address set (DRYCARE_CLOUD_URL): this build cannot check in or update itself.");
+console.log(process.env.CSC_LINK || process.env.WIN_CSC_LINK ? "› Code signing certificate configured." : "› No code signing certificate: this build will NOT be code-signed.");
 
 console.log("› Bundling main process + API…");
 await build({

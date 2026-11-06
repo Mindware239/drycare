@@ -22,6 +22,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   Store,
+  BarChart3,
+  PackageCheck,
   ToggleRight,
   X,
   type LucideIcon,
@@ -55,7 +57,9 @@ const NAV: { section: string; items: { href: string; label: string; icon: Lucide
   {
     section: "Software",
     items: [
-      { href: "/super-admin/licenses", label: "Licenses & releases", icon: KeyRound },
+      { href: "/super-admin/licenses", label: "Licenses", icon: KeyRound },
+      { href: "/super-admin/software-releases", label: "Software releases", icon: PackageCheck },
+      { href: "/super-admin/feature-usage", label: "Feature usage", icon: BarChart3 },
       { href: "/super-admin/hardware", label: "Printers & scanners", icon: Printer },
     ],
   },

@@ -16,5 +16,8 @@
   "/ month",
   "/ year",
   "scanner",
-  "printer"
+  "printer",
+  "1 bag",
+  "1 garment",
+  "{0} of {1}"
 ]

@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { resolveFeatures, signedLicenseSchema } from "@drycare/shared";
+import { resolveFeatures, signedLicenseSchema, type SignedLicense } from "@drycare/shared";
 import { hardwarePolicy, rfidModuleActive, featureRegistry } from "../lib/entitlements";
 import { soldPrintersFor } from "./printerRegistry";
 import { db, schema } from "../db/client";
@@ -22,7 +22,7 @@ import { verifySignedLicense } from "../lib/license";
 
 type StoredSigningKey = { publicKeyPem: string; privateKeySealed: string; fingerprint: string; createdAt: string; createdBy: string };
 
-async function signingKey(): Promise<StoredSigningKey | null> {
+export async function signingKey(): Promise<StoredSigningKey | null> {
   const row = await db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, "license_signing") });
   return row?.value && (row.value as StoredSigningKey).publicKeyPem ? (row.value as StoredSigningKey) : null;
 }
@@ -86,7 +86,7 @@ export async function platformLicenseRoutes(app: FastifyInstance) {
     const rows = await db.select({
       id: schema.desktopLicenses.id, organizationId: schema.desktopLicenses.organizationId, customerName: schema.desktopLicenses.customerName,
       plan: schema.desktopLicenses.plan, installationIds: schema.desktopLicenses.installationIds, expiresAt: schema.desktopLicenses.expiresAt,
-      key: schema.desktopLicenses.key, note: schema.desktopLicenses.note, issuedAt: schema.desktopLicenses.issuedAt, issuedBy: schema.users.name,
+      status: schema.desktopLicenses.status, supersededBy: schema.desktopLicenses.supersededBy, entitlementVersion: schema.desktopLicenses.entitlementVersion, key: schema.desktopLicenses.key, note: schema.desktopLicenses.note, issuedAt: schema.desktopLicenses.issuedAt, issuedBy: schema.users.name,
     }).from(schema.desktopLicenses).leftJoin(schema.users, eq(schema.users.id, schema.desktopLicenses.issuedBy)).orderBy(desc(schema.desktopLicenses.issuedAt)).limit(500);
     return rows;
   });
@@ -132,8 +132,9 @@ export async function platformLicenseRoutes(app: FastifyInstance) {
     const expiresAt = expiryOf(body.expiresOn);
     const plan = body.plan ?? old.plan;
     // A plan that is not in the list (such as a one-off "Standard") keeps what the old key already allowed.
-    const grants = await grantsFor(plan, old.organizationId);
     const previous = verifySignedLicense(old.key, k.publicKeyPem);
+    // The same plan keeps what this customer bought. A different plan brings that plan's features.
+    const grants = await grantsFor(plan, old.organizationId, plan === old.plan ? old.boughtFeatures ?? previous?.features : null);
     if (!body.allowExtraPcs) await assertPcLimit(grants, old.organizationId, old.installationIds);
     const issued = await issueKey(req, k, auth.userId, { organizationId: old.organizationId ?? undefined, customerName: old.customerName, plan, expiresAt, installationIds: old.installationIds, note: body.note ?? old.note ?? undefined, features: grants ? { ...grants.features, rfid: previous?.features?.rfid === true || await rfidFor(old.organizationId) } : previous?.features, limits: grants?.limits ?? previous?.limits, renewalOf: old.id });
     reply.code(201);
@@ -153,13 +154,13 @@ function expiryOf(expiresOn: string | null) {
 }
 
 /** What the named plan gives this customer, with their own exceptions, or null when no plan has that name. */
-async function grantsFor(planName: string, organizationId?: string | null) {
+async function grantsFor(planName: string, organizationId?: string | null, bought?: Record<string, boolean> | null) {
   const [plan] = await db.select({ entitlements: schema.commercialPlans.entitlements, deviceLimit: schema.commercialPlans.deviceLimit, branchLimit: schema.commercialPlans.branchLimit }).from(schema.commercialPlans)
     .where(eq(schema.commercialPlans.name, planName)).orderBy(desc(schema.commercialPlans.published)).limit(1);
   if (!plan) return null;
   const org = organizationId ? await db.query.organizations.findFirst({ where: eq(schema.organizations.id, organizationId), columns: { featureOverrides: true, featureOverrideExpiry: true, branchLimitOverride: true } }) : undefined;
   const { globallyOff } = await featureRegistry();
-  return { planName, deviceLimit: plan.deviceLimit, features: resolveFeatures(plan.entitlements, org?.featureOverrides, { expiry: org?.featureOverrideExpiry, globallyOff }), limits: { branches: org?.branchLimitOverride ?? plan.branchLimit } };
+  return { planName, deviceLimit: plan.deviceLimit, features: resolveFeatures(bought ?? plan.entitlements, org?.featureOverrides, { expiry: org?.featureOverrideExpiry, globallyOff }), limits: { branches: org?.branchLimitOverride ?? plan.branchLimit } };
 }
 
 /** Counts this key's PCs together with the customer's other keys still in force. A renewal repeats the same PCs, so they count once. */
@@ -173,17 +174,32 @@ async function assertPcLimit(grants: Awaited<ReturnType<typeof grantsFor>>, orga
   if (pcs.size > grants.deviceLimit) throw conflict(`${grants.planName} includes ${grants.deviceLimit} PC${grants.deviceLimit === 1 ? "" : "s"}, and this would make ${pcs.size}. Choose a higher plan, or tick "Allow more PCs than the plan includes".`, "PC_LIMIT_EXCEEDED");
 }
 
-async function issueKey(req: FastifyRequest, k: StoredSigningKey, userId: string, input: {
-  organizationId?: string; customerName: string; plan: string; expiresAt: string | null; installationIds: string[]; note?: string; features?: Record<string, boolean>; limits?: { branches: number | null }; renewalOf: string | null;
+export async function issueKey(req: FastifyRequest, k: StoredSigningKey, userId: string, input: {
+  organizationId?: string; customerName: string; plan: string; expiresAt: string | null; installationIds: string[]; note?: string; features?: Record<string, boolean> | null; limits?: { branches: number | null } | null; hardware?: SignedLicense["hardware"]; renewalOf: string | null; bought?: Record<string, boolean> | null;
+  licenseType?: SignedLicense["licenseType"]; offlineGraceDays?: number | null; expiryPolicy?: SignedLicense["expiryPolicy"]; automatic?: boolean;
 }) {
-  const payload = signedLicenseSchema.parse({ version: 1, licenseId: randomUUID(), plan: input.plan, issuedAt: new Date().toISOString(), expiresAt: input.expiresAt, installationIds: input.installationIds, features: input.features, limits: input.limits, hardware: { ...(await hardwarePolicy()), soldPrinters: await soldPrintersFor(input.organizationId, input.customerName) } });
+  // A new key carries on the terms of the one it replaces, unless told otherwise.
+  const previousRow = input.renewalOf ? await db.query.desktopLicenses.findFirst({ where: eq(schema.desktopLicenses.id, input.renewalOf) }) : undefined;
+  const previous = previousRow ? verifySignedLicense(previousRow.key, k.publicKeyPem) : null;
+  const terms = {
+    organizationId: input.organizationId,
+    customerName: input.customerName,
+    licenseType: input.licenseType ?? previous?.licenseType ?? (input.expiresAt ? "annual" : "lifetime"),
+    entitlementVersion: (previous?.entitlementVersion ?? 0) + 1,
+    offlineGraceDays: input.offlineGraceDays === undefined ? previous?.offlineGraceDays ?? null : input.offlineGraceDays,
+    expiryPolicy: input.expiryPolicy ?? previous?.expiryPolicy ?? "read_only",
+  };
+  const payload = signedLicenseSchema.parse({ ...terms, version: 1, licenseId: randomUUID(), plan: input.plan, issuedAt: new Date().toISOString(), expiresAt: input.expiresAt, installationIds: input.installationIds, features: input.features ?? undefined, limits: input.limits ?? undefined, hardware: { ...(await hardwarePolicy()), soldPrinters: await soldPrintersFor(input.organizationId, input.customerName) } });
   const bytes = Buffer.from(JSON.stringify(payload));
   const signature = sign(null, bytes, createPrivateKey(openSecret(k.privateKeySealed)));
   const key = `DRYCARE1.${bytes.toString("base64url")}.${signature.toString("base64url")}`;
   // Self-check with the public key exactly as the desktop app will.
   if (!verifySignedLicense(key, k.publicKeyPem)) throw new Error("Signed key failed verification");
   await db.transaction(async (tx) => {
+    if (input.renewalOf) await tx.update(schema.desktopLicenses).set({ supersededBy: payload.licenseId }).where(eq(schema.desktopLicenses.id, input.renewalOf));
     await tx.insert(schema.desktopLicenses).values({
+      status: previousRow?.status ?? "active", statusReason: previousRow?.statusReason, entitlementVersion: terms.entitlementVersion,
+      boughtFeatures: input.bought ?? previousRow?.boughtFeatures ?? input.features ?? null,
       id: payload.licenseId, organizationId: input.organizationId, customerName: input.customerName, plan: payload.plan,
       installationIds: payload.installationIds, expiresAt: input.expiresAt ? new Date(input.expiresAt) : null, key, note: input.note, issuedBy: userId,
     });

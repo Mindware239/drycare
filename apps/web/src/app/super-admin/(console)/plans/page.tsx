@@ -94,6 +94,7 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: (message: string) 
       </div>
       <div className="space-y-5 p-5">
         {error && <Alert>{error}</Alert>}
+        <p className="text-xs text-slate-500">{plan.published ? "Offered to new customers." : "Hidden from new customers."} Changes to features and limits apply to new customers. Customers who already bought this plan keep what they bought and can still renew it.</p>
         {priceChanged && plan.published && <Alert tone="amber">The new price applies to new subscriptions only. Shops already paying keep their current price until their next renewal is recorded.</Alert>}
         {published && Number(price) <= 0 && <Alert tone="red">A published plan needs a price above ₹0.</Alert>}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -12,7 +12,8 @@ type LicenseStatus = {
   requestCode: string | null;
   plan: string | null;
   expiresAt: string | null;
-  error: "not_activated" | "invalid" | "expired" | "demo_ended" | null;
+  error: "not_activated" | "invalid" | "expired" | "demo_ended" | "suspended" | "revoked" | "deactivated" | "sync_required" | "clock" | "tampered" | null;
+  readOnly?: boolean;
   demo: { startedAt: string; endsAt: string; daysLeft: number; ended: boolean } | null;
 };
 
@@ -21,6 +22,15 @@ const steps = [
   "Send this PC's request code (below) with your payment reference to Drycare.",
   "Paste the activation key you receive. It works offline.",
 ];
+
+const STOPPED: Record<string, string> = {
+  suspended: "This license has been suspended. Please contact Drycare support.",
+  revoked: "This license has been cancelled. Please contact Drycare support.",
+  deactivated: "This PC has been removed from the license. Please contact Drycare support.",
+  sync_required: "This PC has been offline too long. Connect it to the internet and restart Drycare to carry on working.",
+  clock: "This PC's date is earlier than when Drycare last ran. Correct the date and restart Drycare.",
+  tampered: "This PC's license record has been changed. Connect it to the internet and restart Drycare, or contact Drycare support.",
+};
 
 export default function ActivatePage() {
   const [status, setStatus] = useState<LicenseStatus | null>(null);
@@ -84,6 +94,15 @@ export default function ActivatePage() {
         <h1 className="dc-auth-h1">{title}</h1>
       </div>
 
+      {status && STOPPED[status.error ?? ""] && (
+        <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 12, background: "#fdf3e1", color: "#6e4b0b", fontSize: 14, lineHeight: 1.5 }}>
+          {STOPPED[status.error ?? ""]}{" "}Your data is safe.
+          {status.readOnly && <>{" "}<a href="/login" style={{ fontWeight: 600, textDecoration: "underline" }}>Open your records (read-only)</a></>}
+        </div>
+      )}
+      {status?.error === "expired" && status.readOnly && (
+        <p style={{ marginBottom: 16, fontSize: 14 }}><a href="/login" style={{ fontWeight: 600, textDecoration: "underline" }}>Open your records (read-only)</a></p>
+      )}
       {status?.error === "demo_ended" && (
         <div style={{ borderRadius: 12, padding: "14px 16px", background: "#fdeedd", color: "#5c3209", fontSize: 15, lineHeight: 1.5 }}>
           Thank you for trying Drycare. <strong>Upgrade to keep using it</strong>: everything you entered during the demo (customers, orders, garments, payments) is kept and will be there as soon as you activate.

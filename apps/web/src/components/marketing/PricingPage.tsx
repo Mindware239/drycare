@@ -7,29 +7,10 @@ import { SlideGroup } from "@/components/SlideGroup";
 import { chooseVisitorCountry, cleanMoney, ELSEWHERE, visitor, visitorCountry, visitorPrice } from "@/lib/visitor";
 import { Accordion, EnquiryForm, useVw } from "./parts";
 
-const PLANS = [
-  { id: "starter", name: "Starter Plan", tagline: "Everything you need to run a single laundry or dry cleaning store.", monthly: 1499, annual: 14999, cta: "Choose Starter →", features: ["Order booking and GST invoices", "Garment tagging with barcode labels", "Service and price list (wash, dry clean, iron, steam press)", "Order status: received, in process, ready, delivered", "Due dates and ready-for-pickup tracking", "Customer records and order history", "Advance payments, discounts and multiple payment modes", "Basic daily sales and order reports", "Basic staff access and permissions", "Email and phone support"] },
-  { id: "growth", name: "Growth Plan", tagline: "Advanced control for growing laundries, dry cleaners and pickup-delivery services.", monthly: 2499, annual: 24999, cta: "Get Growth Plan →", badge: "RECOMMENDED", lead: "Everything in Starter, plus:", features: ["Pickup and delivery scheduling", "Delivery staff assignment and route lists", "Customer order updates by SMS or WhatsApp", "Packages, memberships and prepaid plans", "Customer wallet, credit and dues tracking", "Stain and damage notes with garment photos", "Rack and bin locations for ready garments", "Consumables inventory (detergents, hangers, packaging)", "Advanced sales, service and customer reports", "Staff shifts, permissions and activity logs", "Priority onboarding and staff training"] },
-  { id: "enterprise", name: "Enterprise Plan", tagline: "Centralised management for laundry chains, franchises and central processing plants.", custom: true, cta: "Contact Us for Pricing →", note: "Tailored pricing based on store count, processing plants, integrations and business requirements.", features: ["Everything in Growth", "Centralised multi-store dashboard", "Store-to-plant garment transfer and tracking", "Central workshop and processing management", "Consolidated sales, order and garment reports", "Central price list and service control", "Store and franchise-specific roles and permissions", "Central consumables purchasing", "Custom reports and business integrations", "Dedicated onboarding and priority support"] },
-];
 const BUNDLES: [string, string[]][] = [
   ["Basic Store Bundle", ["Drycare Starter software", "Compatible receipt printer", "Garment tag / barcode label printer", "Installation assistance"]],
   ["Laundry Growth Bundle", ["Drycare Growth software", "Receipt printer", "Tag printer and barcode scanner", "Setup and staff training"]],
   ["Multi-Store & Plant Bundle", ["Drycare Growth or Enterprise software", "Printers for each store and plant", "Barcode scanners for garment tracking", "Deployment assistance"]],
-];
-const COMPARE: [string, string, string, string][] = [
-  ["Order booking and GST invoices", "Y", "Y", "Y"],
-  ["Garment tagging and barcodes", "Y", "Y", "Y"],
-  ["Order status tracking", "Y", "Y", "Y"],
-  ["Pickup and delivery management", "N", "Y", "Y"],
-  ["Customer SMS / WhatsApp updates", "N", "Y", "Y"],
-  ["Packages and memberships", "N", "Y", "Y"],
-  ["Customer wallet and dues", "N", "Y", "Y"],
-  ["Consumables inventory", "N", "Y", "Central"],
-  ["Advanced reporting", "Basic", "Y", "Custom"],
-  ["Multi-store and central plant", "N", "N", "Y"],
-  ["Custom integrations", "N", "N", "Custom"],
-  ["Support and onboarding", "Email & phone", "Priority", "Dedicated"],
 ];
 const FAQS: [string, string][] = [
   ["Which plan is suitable for my laundry?", "Starter suits a single store that needs order booking, garment tagging and billing. Growth adds pickup and delivery, customer updates, memberships and advanced reports. Enterprise is for chains, franchises and central processing plants. Our team can help you decide."],
@@ -42,20 +23,29 @@ const FAQS: [string, string][] = [
   ["Can I request a custom Enterprise quotation?", "Yes. Share your store count, plant setup and integration needs through the enquiry form, and our team will prepare a quotation."],
 ];
 const DEFAULT_INTEREST = "Not sure yet — help me choose";
-const interestOptions = [DEFAULT_INTEREST, "Talk to sales", ...PLANS.map((p) => p.name), ...BUNDLES.map((b) => b[0])];
+type PublicPlan = { id: string; code: string; name: string; description: string | null; pricePaise: number; interval: string; branchLimit: number; deviceLimit: number; included: string[] };
+type PublicPlans = { features: { key: string; label: string }[]; plans: PublicPlan[] };
+/** Sold by quotation, so it always appears, unless a plan called Enterprise is on offer. */
+const CONTACT_PLAN = { id: "contact", name: "Enterprise", tagline: "Centralised management for laundry chains, franchises and central processing plants.", note: "Custom pricing by stores, plants, integrations and support." };
 
 export function PricingPage() {
   const vw = useVw();
   const cw = Math.min(vw, 1180) - 64;
   const [annual, setAnnual] = useState(false);
+  const [offer, setOffer] = useState<PublicPlans | null>(null);
+  useEffect(() => { void fetch("/api/v1/commercial/public-plans").then((r) => (r.ok ? r.json() : null)).then(setOffer).catch(() => setOffer({ features: [], plans: [] })); }, []);
+  const hasYearly = !!offer?.plans.some((p) => p.interval === "year");
+  const shownPlans = offer?.plans.filter((p) => (annual && hasYearly ? p.interval === "year" : p.interval !== "year")) ?? [];
+  const showContact = !offer?.plans.some((p) => p.name.toLowerCase().startsWith("enterprise"));
+  const interestOptions = [DEFAULT_INTEREST, "Talk to sales", ...shownPlans.map((p) => p.name), ...(showContact ? [CONTACT_PLAN.name] : []), ...BUNDLES.map((b) => b[0])];
   // Prices follow the visitor's country, and start in rupees until the browser has told us where that is.
   const [country, setCountry] = useState("IN");
   useEffect(() => setCountry(visitorCountry()), []);
   const place = visitor(country);
-  /** A rupee list price (in whole rupees) as this visitor pays it, in hundredths of their currency. */
-  const local = (rupees: number) => visitorPrice(rupees * 100, place);
+  /** A rupee list price as this visitor pays it, in hundredths of their currency. */
+  const local = (rupeeMinor: number) => visitorPrice(rupeeMinor, place);
   const show = (minor: number) => cleanMoney(minor, place.currency);
-  const [cmp, setCmp] = useState(1);
+  const [cmp, setCmp] = useState(0);
   const [interest, setInterest] = useState(DEFAULT_INTEREST);
   const enquiry = useRef<HTMLElement>(null);
   const goEnquiry = (value: string) => {
@@ -63,8 +53,11 @@ export function PricingPage() {
     if (enquiry.current) window.scrollTo({ top: enquiry.current.getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" });
   };
   const narrow = cw < 640;
-  const cols = narrow ? [cmp] : [0, 1, 2];
-  const cmpCols = narrow ? "minmax(0,1.6fr) minmax(0,1fr)" : "minmax(0,2fr) repeat(3,minmax(0,1fr))";
+  const safeCmp = Math.min(cmp, Math.max(shownPlans.length - 1, 0));
+  const cols = narrow ? (shownPlans.length ? [safeCmp] : []) : shownPlans.map((_, i) => i);
+  const cmpCols = narrow ? "minmax(0,1.6fr) minmax(0,1fr)" : `minmax(0,2fr) repeat(${Math.max(shownPlans.length, 1)},minmax(0,1fr))`;
+  const featuresInAny = offer?.features.filter((f) => shownPlans.some((p) => p.included.includes(f.key))) ?? [];
+  const popular = shownPlans.length > 1 ? 1 : -1;
 
   return (
     <>
@@ -74,8 +67,8 @@ export function PricingPage() {
             <span className="dc-eyebrow">Drycare · Laundry &amp; Dry Cleaning Software</span>
             <h1 className="dc-h1" style={{ fontSize: "clamp(38px, 5vw, 60px)" }}>The Right Plan for Your Laundry Business</h1>
             <p className="dc-lead">From single-store dry cleaners to multi-branch laundry chains, choose a plan that simplifies order booking, garment tracking, pickups, deliveries and payments.</p>
-            <SlideGroup label="Billing period" color="#151514" style={{ display: "flex", gap: 4, padding: 5, borderRadius: 999, background: "#f3f1ec", border: "1px solid #e4e1d9", marginTop: 10 }}>
-              {([["Monthly", false, null], ["Annual", true, "Save up to 17%"]] as const).map(([label, value, tag]) => {
+            {hasYearly && <SlideGroup label="Billing period" color="#151514" style={{ display: "flex", gap: 4, padding: 5, borderRadius: 999, background: "#f3f1ec", border: "1px solid #e4e1d9", marginTop: 10 }}>
+              {([["Monthly", false, null], ["Annual", true, null]] as const).map(([label, value, tag]) => {
                 const on = annual === value;
                 return (
                   <button key={label} type="button" role="radio" aria-checked={on} onClick={() => setAnnual(value)} style={{ font: "inherit", fontSize: 15, fontWeight: 600, minHeight: 44, padding: "10px 24px", borderRadius: 999, border: 0, background: "transparent", color: on ? "#faf8f4" : "#151514", display: "flex", alignItems: "center", gap: 8 }}>
@@ -83,7 +76,7 @@ export function PricingPage() {
                   </button>
                 );
               })}
-            </SlideGroup>
+            </SlideGroup>}
             <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, color: "#4f4e4a" }}>
               Prices for
               <select aria-label="Prices for" data-i18n-skip="" value={country} onChange={(event) => chooseVisitorCountry(event.target.value)} style={{ font: "inherit", fontWeight: 600, color: "#151514", background: "#fff", border: "1px solid #e4e1d9", borderRadius: 10, padding: "6px 10px", maxWidth: 240 }}>
@@ -95,47 +88,55 @@ export function PricingPage() {
           </div>
 
           <div className="dc-g-plans">
-            {PLANS.map((p) => {
-              const hi = p.id === "growth";
+            {!offer && <p style={{ gridColumn: "1 / -1", textAlign: "center", color: "#6b6963" }}>Loading plans…</p>}
+            {shownPlans.map((p, index) => {
+              const hi = index === popular;
               const sub = hi ? "#cfccc4" : "#4f4e4a";
-              let price: string, per: string, billing: string, save = "";
-              if (p.custom) { price = "Custom Pricing"; per = ""; billing = p.note ?? ""; }
-              else if (annual) {
-                const year = local(p.annual!), yearly = local(p.monthly!) * 12, diff = yearly - year;
-                price = show(year); per = "/ year";
-                billing = `Billed ${show(year)} upfront each year · about ${show(Math.round(year / 1200) * 100)}/month`;
-                if (diff > 0) save = `Save ${show(diff)} vs monthly (${Math.round((diff / yearly) * 100)}%)`;
-              } else { price = show(local(p.monthly!)); per = "/ month"; billing = `Billed monthly · or ${show(local(p.annual!))} when billed annually`; }
+              const yearly = p.interval === "year";
+              const amount = local(p.pricePaise);
+              const price = show(amount);
+              const per = yearly ? "/ year" : "/ month";
+              const billing = yearly ? `Billed ${price} upfront each year · about ${show(Math.round(amount / 1200) * 100)}/month` : "Billed monthly";
+              const list = [`${p.branchLimit} branch${p.branchLimit === 1 ? "" : "es"} · ${p.deviceLimit} device${p.deviceLimit === 1 ? "" : "s"}`, ...offer?.features.filter((f) => p.included.includes(f.key)).map((f) => f.label) ?? []];
               return (
                 <article key={p.id} className={`dc-plan${hi ? " dc-plan-hi" : ""}`}>
-                  {p.badge && <span style={{ position: "absolute", top: -13, left: 28, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", padding: "5px 12px", borderRadius: 999, background: "#3cbf5a", color: "#151514" }}>{p.badge}</span>}
+                  {hi && <span style={{ position: "absolute", top: -13, left: 28, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", padding: "5px 12px", borderRadius: 999, background: "#3cbf5a", color: "#151514" }}>RECOMMENDED</span>}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <h2 className="dc-t" style={{ margin: 0, fontSize: 24 }}>{p.name}</h2>
-                    <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5, color: sub, minHeight: 45 }}>{p.tagline}</p>
+                    <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5, color: sub, minHeight: 45 }}>{p.description}</p>
                   </div>
                   <div className="dc-plan-price" style={{ borderBottom: `1px solid ${hi ? "#33332f" : "#eeece6"}` }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: '"Urbanist", sans-serif', fontSize: p.custom ? 32 : 44, fontWeight: 700, letterSpacing: "-.03em", lineHeight: 1 }}>{price}</span>
+                      <span style={{ fontFamily: '"Urbanist", sans-serif', fontSize: 44, fontWeight: 700, letterSpacing: "-.03em", lineHeight: 1 }}>{price}</span>
                       <span style={{ fontSize: 15, color: sub }}>{per}</span>
                     </div>
                     <span style={{ fontSize: 14, lineHeight: 1.5, color: sub }}>{billing}</span>
-                    {save && <span style={{ alignSelf: "flex-start", fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, background: hi ? "#3cbf5a" : "#dff3e4", color: hi ? "#151514" : "#1f6b34" }}>{save}</span>}
                   </div>
-                  <button type="button" onClick={() => goEnquiry(p.name)} style={{ font: "inherit", textAlign: "center", fontSize: 15, fontWeight: 600, padding: "14px 16px", whiteSpace: "nowrap", borderRadius: 999, background: hi ? "#3cbf5a" : p.custom ? "#151514" : "transparent", color: hi ? "#151514" : p.custom ? "#faf8f4" : "#151514", border: `1.5px solid ${hi ? "#3cbf5a" : "#151514"}` }}>{p.cta}</button>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    {p.lead && <span style={{ fontSize: 14, fontWeight: 600 }}>{p.lead}</span>}
-                    <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 11 }}>
-                      {p.features.map((feature) => (
-                        <li key={feature} style={{ display: "grid", gridTemplateColumns: "20px minmax(0,1fr)", gap: 10, fontSize: 14, lineHeight: 1.45, color: hi ? "#faf8f4" : "#33332f" }}>
-                          <span aria-hidden="true" className="dc-tick" style={{ width: 20, height: 20, fontSize: 11, marginTop: 1, background: hi ? "#3cbf5a" : "#dff3e4", color: hi ? "#151514" : "#1f6b34" }}>✓</span>
-                          <span>{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  <button type="button" onClick={() => goEnquiry(p.name)} className={`dc-btn ${hi ? "dc-btn-green" : "dc-btn-outline"}`} style={{ justifyContent: "center", whiteSpace: "nowrap" }}>{`Choose ${p.name} →`}</button>
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 11 }}>
+                    {list.map((feature) => (
+                      <li key={feature} style={{ display: "grid", gridTemplateColumns: "20px minmax(0,1fr)", gap: 10, fontSize: 14, lineHeight: 1.45, color: hi ? "#faf8f4" : "#333330" }}>
+                        <span aria-hidden="true" className="dc-tick" style={{ width: 20, height: 20, fontSize: 11, marginTop: 1, background: hi ? "#3cbf5a" : "#dff3e4", color: "#151514" }}>✓</span>
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </article>
               );
             })}
+            {offer && showContact && (
+              <article className="dc-plan">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <h2 className="dc-t" style={{ margin: 0, fontSize: 24 }}>{CONTACT_PLAN.name}</h2>
+                  <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5, color: "#4f4e4a", minHeight: 45 }}>{CONTACT_PLAN.tagline}</p>
+                </div>
+                <div className="dc-plan-price" style={{ borderBottom: "1px solid #eeece6" }}>
+                  <span style={{ fontFamily: '"Urbanist", sans-serif', fontSize: 32, fontWeight: 700, letterSpacing: "-.03em", lineHeight: 1 }}>Custom Pricing</span>
+                  <span style={{ fontSize: 14, lineHeight: 1.5, color: "#4f4e4a" }}>{CONTACT_PLAN.note}</span>
+                </div>
+                <button type="button" onClick={() => goEnquiry(CONTACT_PLAN.name)} className="dc-btn dc-btn-outline" style={{ justifyContent: "center", whiteSpace: "nowrap" }}>Contact Us for Pricing →</button>
+              </article>
+            )}
           </div>
           <p style={{ margin: "28px 0 0", textAlign: "center", fontSize: 14, color: "#6b6963" }}>Software prices shown are for one store. Hardware is charged separately.</p>
         </div>
@@ -173,24 +174,22 @@ export function PricingPage() {
         </div>
         {narrow && (
           <div role="tablist" aria-label="Choose a plan to compare" style={{ display: "flex", gap: 6, padding: 5, borderRadius: 999, background: "#f3f1ec", alignSelf: "flex-start", flexWrap: "wrap" }}>
-            {PLANS.map((p, i) => <button key={p.id} type="button" role="tab" aria-selected={i === cmp} onClick={() => setCmp(i)} style={{ font: "inherit", fontSize: 15, fontWeight: 600, minHeight: 44, padding: "10px 20px", borderRadius: 999, border: 0, background: i === cmp ? "#151514" : "transparent", color: i === cmp ? "#faf8f4" : "#151514" }}>{p.name.replace(" Plan", "")}</button>)}
+            {shownPlans.map((p, i) => <button key={p.id} type="button" role="tab" aria-selected={i === safeCmp} onClick={() => setCmp(i)} style={{ font: "inherit", fontSize: 15, fontWeight: 600, minHeight: 44, padding: "10px 20px", borderRadius: 999, border: 0, background: i === safeCmp ? "#151514" : "transparent", color: i === safeCmp ? "#faf8f4" : "#151514" }}>{p.name.replace(" Plan", "")}</button>)}
           </div>
         )}
         <div style={{ border: "1.5px solid #151514", borderRadius: 18, overflow: "hidden" }}>
           <div role="table" aria-label="Plan feature comparison" style={{ display: "flex", flexDirection: "column", fontSize: 15 }}>
             <div role="row" style={{ display: "grid", gridTemplateColumns: cmpCols, background: "#f7f7f5" }}>
               <span role="columnheader" style={{ padding: "16px 20px", fontWeight: 600, fontSize: 14, color: "#4f4e4a" }}>Feature</span>
-              {cols.map((i) => <span key={i} role="columnheader" className="dc-t" style={{ textAlign: "center", padding: "16px 12px", fontSize: 17, letterSpacing: "normal", background: i === 1 ? "#d8e7fa" : "transparent" }}>{PLANS[i].name.replace(" Plan", "")}</span>)}
+              {cols.map((i) => <span key={i} role="columnheader" className="dc-t" style={{ textAlign: "center", padding: "16px 12px", fontSize: 17, letterSpacing: "normal", background: i === popular ? "#d8e7fa" : "transparent" }}>{shownPlans[i].name}</span>)}
             </div>
-            {COMPARE.map(([label, ...values]) => (
-              <div key={label} role="row" style={{ display: "grid", gridTemplateColumns: cmpCols, borderTop: "1px solid #eeece6", alignItems: "stretch" }}>
-                <span role="rowheader" style={{ padding: "14px 20px", fontWeight: 500, display: "flex", alignItems: "center" }}>{label}</span>
+            {featuresInAny.map((f) => (
+              <div key={f.key} role="row" style={{ display: "grid", gridTemplateColumns: cmpCols, borderTop: "1px solid #eeece6", alignItems: "stretch" }}>
+                <span role="rowheader" style={{ padding: "14px 20px", fontWeight: 500, display: "flex", alignItems: "center" }}>{f.label}</span>
                 {cols.map((i) => (
                   <Fragment key={i}>
-                    <span role="cell" style={{ display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "14px 12px", background: i === 1 ? "#eef4fc" : "transparent" }}>
-                      {values[i] === "Y" ? <span role="img" aria-label="Included" className="dc-tick" style={{ width: 24, height: 24 }}>✓</span>
-                        : values[i] === "N" ? <span role="img" aria-label="Not included" style={{ color: "#9a988f" }}>—</span>
-                        : <span style={{ fontSize: 13, fontWeight: 600, color: "#2a4f86" }}>{values[i]}</span>}
+                    <span role="cell" style={{ display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "14px 12px", background: i === popular ? "#eef4fc" : "transparent" }}>
+                      {shownPlans[i].included.includes(f.key) ? <span role="img" aria-label="Included" className="dc-tick" style={{ width: 24, height: 24 }}>✓</span> : <span role="img" aria-label="Not included" style={{ color: "#9a988f" }}>—</span>}
                     </span>
                   </Fragment>
                 ))}

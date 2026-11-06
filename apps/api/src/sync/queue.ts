@@ -13,6 +13,9 @@ import { SyncHold } from "./httpTransport";
 
 /** Tables that are never synchronised (security, device-local state, platform billing). */
 export const LOCAL_ONLY_TABLES = [
+  // Licensing, releases and usage counts belong to the licensing server or this PC, not to shop data.
+  "desktop_releases", "desktop_rollbacks", "desktop_update_reports", "feature_usage_daily", "license_installations", "license_sync_events",
+ 
   "organization_addons", "sold_printers", "audit_logs", "auth_tokens", "sessions", "idempotency_records", "number_sequences", "outbox_events", "notification_jobs",
   "label_print_jobs", "desktop_licenses", "platform_settings", "public_leads", "commercial_invoices", "commercial_payments",
   "commercial_plans", "commercial_subscriptions", "sync_config", "sync_entities", "sync_outbox", "sync_conflicts",

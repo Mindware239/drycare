@@ -8,7 +8,9 @@ import { Alert, Button, Field, Input, Modal, Select, Textarea, cx } from "@/comp
 import { ConsoleHeader, CsvButton, DataTable, EmptyState, LoadingRows, Panel, dateLabel, exportCsv, useAdminData } from "../admin-ui";
 
 type SigningKey = { exists: boolean; fingerprint?: string; createdAt?: string; publicKeyPem?: string; desktopFile?: string | null };
-type License = { id: string; organizationId: string | null; customerName: string; plan: string; installationIds: string[]; expiresAt: string | null; key: string; note: string | null; issuedAt: string; issuedBy: string | null };
+type License = {
+  status?: string;
+  supersededBy?: string | null; id: string; organizationId: string | null; customerName: string; plan: string; installationIds: string[]; expiresAt: string | null; key: string; note: string | null; issuedAt: string; issuedBy: string | null };
 type Plan = { id: string; name: string; published: boolean; code: string; entitlements: Record<string, boolean> };
 type Customer = { id: string; name: string; ownerEmail: string | null };
 type System = { appVersion: string; licensing: { enforced: boolean; publicKeyConfigured: boolean } };
@@ -28,7 +30,7 @@ export default function LicensesPage() {
   const sys = useAdminData<System>("/platform-admin/system");
   return (
     <>
-      <ConsoleHeader title="Licenses & releases" description="Drycare for Windows works offline with an activation key bound to each PC. Create the signing key once, then issue keys here after the customer has paid." />
+      <ConsoleHeader title="Licenses" description="Drycare for Windows works offline with an activation key bound to each PC. Create the signing key once, then issue keys here after the customer has paid." />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] [&>*]:min-w-0">
         <div className="space-y-6">
           {key.data?.exists ? <IssueKey onIssued={() => void licenses.reload()} /> : (
@@ -306,16 +308,16 @@ function Register({ licenses, error, canRenew, onRenewed }: { licenses: License[
       {!licenses ? <LoadingRows /> : (
         <DataTable minWidth={760} head={["Customer", "Plan", "PCs", "Validity", "Issued", ""]}
           empty={!licenses.length && <EmptyState icon={KeyRound} title="No keys issued yet">Keys you issue appear here so you can copy them again or plan renewals.</EmptyState>}>
-          {licenses.map((l) => {
+          {licenses.filter((row) => !row.supersededBy).map((l) => {
             const st = status(l);
             return (
               <tr key={l.id} className="hover:bg-slate-50/60">
                 <td className="px-5 py-3">{l.organizationId ? <Link href={`/super-admin/customers/view?id=${l.organizationId}`} className="font-medium text-slate-900 hover:text-brand-700">{l.customerName}</Link> : <span className="font-medium text-slate-900">{l.customerName}</span>}{l.note && <p className="text-xs text-slate-500">{l.note}</p>}</td>
-                <td className="px-5 py-3 text-slate-700">{l.plan}</td>
+                <td className="px-5 py-3 text-slate-700">{l.plan}{l.status && l.status !== "active" && <span className="ms-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">{l.status === "revoked" ? "Revoked" : "Suspended"}</span>}</td>
                 <td className="px-5 py-3 tabular-nums" title={l.installationIds.join("\n")}>{l.installationIds.length}</td>
                 <td className={cx("px-5 py-3 text-sm font-medium", st.tone)}>{st.text}</td>
                 <td className="px-5 py-3 text-xs text-slate-500">{dateLabel(l.issuedAt)}<br />{l.issuedBy ?? ""}</td>
-                <td className="px-5 py-3"><div className="flex flex-wrap gap-2">
+                <td className="px-5 py-3"><div className="flex flex-wrap gap-2"><Link href={`/super-admin/licenses/view?id=${l.id}`}><Button size="sm" variant="secondary">Manage</Button></Link>
                   {canRenew && <Button size="sm" onClick={() => setRenewing(l)}><RefreshCw className="h-4 w-4" />Renew</Button>}
                   <Button size="sm" variant="secondary" onClick={() => { void navigator.clipboard.writeText(l.key); setCopied(l.id); setTimeout(() => setCopied(null), 2000); }}><Copy className="h-4 w-4" />{copied === l.id ? "Copied" : "Copy key"}</Button>
                 </div></td>

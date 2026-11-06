@@ -37,6 +37,7 @@ export function memoryCredentialStore(): CredentialStore {
 let urlOverride: string | null | undefined;
 /** Tests and the desktop shell can set the URL at runtime (e.g. from config.json). */
 export const setCloudUrl = (u: string | null | undefined) => { urlOverride = u; };
+export const cloudUrlSetting = () => urlOverride ?? null;
 
 /** Validated cloud base URL, or null when cloud sync is not configured. HTTPS only (except local tests). */
 export function cloudBaseUrl(): string | null {

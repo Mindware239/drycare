@@ -70,12 +70,12 @@ const NAV_GROUPS: { id: NavGroupId; label: string; icon: LucideIcon }[] = [
 ];
 
 const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; group: NavGroupId; feature?: FeatureKey }[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: "reports.view", group: "store" },
-  { href: "/pos", label: "New order", icon: ShoppingBag, perm: "orders.create", group: "store" },
-  { href: "/orders", label: "Orders", icon: ClipboardList, perm: "orders.read", group: "store" },
-  { href: "/customers", label: "Customers", icon: Users, perm: "customers.read", group: "store" },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: "reports.view", group: "store", feature: "dashboard" },
+  { href: "/pos", label: "New order", icon: ShoppingBag, perm: "orders.create", group: "store", feature: "orders" },
+  { href: "/orders", label: "Orders", icon: ClipboardList, perm: "orders.read", group: "store", feature: "orders" },
+  { href: "/customers", label: "Customers", icon: Users, perm: "customers.read", group: "store", feature: "customers" },
   { href: "/production", label: "Production board", icon: Factory, perm: "orders.read", group: "garments", feature: "productionBoard" },
-  { href: "/scan", label: "Scan station", icon: ScanLine, perm: "garments.process", group: "garments" },
+  { href: "/scan", label: "Scan station", icon: ScanLine, perm: "garments.process", group: "garments", feature: "scanStation" },
   { href: "/tags", label: "Tag tracking", icon: Barcode, perm: "orders.read", group: "garments", feature: "tagTracking" },
   { href: "/rfid", label: "RFID", icon: Radio, perm: "orders.read", group: "garments", feature: "rfid" },
   { href: "/transfers", label: "Facility transfers", icon: Truck, perm: "orders.read", group: "garments", feature: "transfers" },
@@ -87,14 +87,14 @@ const NAV: { href: string; label: string; icon: LucideIcon; perm?: Permission; g
   { href: "/laundry/settings", label: "Laundry setup & pricing", icon: SlidersHorizontal, perm: "laundry.manage", group: "laundry", feature: "laundry" },
   { href: "/deliveries", label: "Pickups & deliveries", icon: Truck, perm: "deliveries.manage", group: "logistics", feature: "deliveries" },
   { href: "/driver", label: "My deliveries", icon: Bike, perm: "deliveries.drive", group: "logistics", feature: "deliveries" },
-  { href: "/cashier", label: "Cashier & shifts", icon: Wallet, perm: "payments.collect", group: "finance" },
+  { href: "/cashier", label: "Cashier & shifts", icon: Wallet, perm: "payments.collect", group: "finance", feature: "cashier" },
   { href: "/expenses", label: "Expenses", icon: Receipt, perm: "expenses.manage", group: "finance", feature: "expenses" },
   { href: "/inventory", label: "Stock & purchasing", icon: Boxes, perm: "inventory.manage", group: "finance", feature: "inventory" },
   { href: "/reports", label: "Reports", icon: ChartColumn, perm: "reports.view", group: "finance", feature: "reports" },
   { href: "/memberships", label: "Memberships", icon: Crown, perm: "customers.read", group: "engagement", feature: "customerMemberships" },
   { href: "/claims", label: "Claims & complaints", icon: ShieldAlert, perm: "complaints.manage", group: "engagement", feature: "claims" },
   { href: "/campaigns", label: "Marketing campaigns", icon: Megaphone, perm: "org.manage", group: "engagement", feature: "marketing" },
-  { href: "/catalogue", label: "Services & prices", icon: Tags, perm: "catalogue.manage", group: "admin" },
+  { href: "/catalogue", label: "Services & prices", icon: Tags, perm: "catalogue.manage", group: "admin", feature: "catalogue" },
   { href: "/integrations", label: "Integrations & notifications", icon: Mail, perm: "org.manage", group: "admin", feature: "integrations" },
   { href: "/staff", label: "Staff & roles", icon: UserCog, perm: "staff.manage", group: "admin", feature: "staffManagement" },
   { href: "/settings", label: "Business settings", icon: Settings, perm: "branches.manage", group: "admin" },
@@ -400,6 +400,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         setSession(next);
       })
       .catch(() => (window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`));
+  }, []);
+  // What a shop may use changes in the owner's console. Open screens pick it up by themselves, within a minute or on returning to the window.
+  useEffect(() => {
+    const refresh = () => {
+      api<Session>("/auth/session")
+        .then((next) => setSession((current) => (current && JSON.stringify([current.features, current.featureLocks, current.organization.status]) === JSON.stringify([next.features, next.featureLocks, next.organization.status]) ? current : next)))
+        .catch(() => {});
+    };
+    const timer = setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
   if (!session) return <Spinner label="Opening Drycare…" />;
   return <SessionProvider session={session}><Shell>{children}</Shell></SessionProvider>;

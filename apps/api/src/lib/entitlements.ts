@@ -5,7 +5,7 @@
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
-import { activeOverride, allFeatures, FEATURE_KEYS, resolveFeatures, type FeatureKey, type FeatureLock, type FeatureMap, FEATURES } from "@drycare/shared";
+import { activeOverride, allFeatures, FEATURE_KEYS, planSnapshot, resolveFeatures, type FeatureCategory, type FeatureKey, type FeatureLock, type FeatureMap, FEATURES } from "@drycare/shared";
 import { db, schema, type DbOrTx } from "../db/client";
 import { isDesktop } from "../env";
 import { AppError } from "./errors";
@@ -15,13 +15,18 @@ export type SoldPrinter = { serial: string; bill: string; model: string; kind?: 
 export type HardwarePolicy = { printers: string[]; scanners: string[]; rfidReaders: string[]; driverUrl: string | null; soldPrinters?: SoldPrinter[]; /** Paying shops must connect a registered printer and scanner. On unless switched off. */ requireDevices?: boolean };
 export const HARDWARE_POLICY_KEY = "hardware_policy";
 export const FEATURE_REGISTRY_KEY = "feature_registry";
-export type FeatureRegistry = { globallyOff: string[]; upgradeMessages: Record<string, string> };
+export type CustomFeature = { key: string; label: string; description: string; category: FeatureCategory };
+export type FeatureEdit = Partial<Pick<CustomFeature, "label" | "description" | "category">>;
+export type FeatureRegistry = { globallyOff: string[]; upgradeMessages: Record<string, string>; custom: CustomFeature[]; edits: Record<string, FeatureEdit> };
+
+/** What a plan is frozen to when a shop buys it. */
+export const subscriptionSnapshot = (plan: { entitlements: Record<string, boolean>; branchLimit: number }) => ({ entitlementsSnapshot: planSnapshot(plan.entitlements), branchLimitSnapshot: plan.branchLimit });
 
 /** The software owner's settings over all customers: features switched off everywhere, and their upgrade wording. */
 export async function featureRegistry(tx: DbOrTx = db): Promise<FeatureRegistry> {
   const row = await tx.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, FEATURE_REGISTRY_KEY) });
   const value = (row?.value ?? {}) as Partial<FeatureRegistry>;
-  return { globallyOff: value.globallyOff ?? [], upgradeMessages: value.upgradeMessages ?? {} };
+  return { globallyOff: value.globallyOff ?? [], upgradeMessages: value.upgradeMessages ?? {}, custom: value.custom ?? [], edits: value.edits ?? {} };
 }
 
 /** Whether this shop has a paid period of the RFID module running now. */
@@ -53,8 +58,10 @@ async function planFeatures(orgId: string, tx: DbOrTx): Promise<FeatureMap> {
   const rules = { expiry: org.featureOverrideExpiry, globallyOff: (await featureRegistry(tx)).globallyOff };
   // A trial shows everything, so a shop can judge the higher plans before choosing one.
   if (org.status === "trial") return resolveFeatures(null, org.featureOverrides, rules);
-  const sub = await tx.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true } });
+  const sub = await tx.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true, entitlementsSnapshot: true } });
   if (!sub) return resolveFeatures(null, org.featureOverrides, rules);
+  // What this shop bought, whatever the plan has become since.
+  if (sub.entitlementsSnapshot) return resolveFeatures(sub.entitlementsSnapshot, org.featureOverrides, rules);
   const plan = await tx.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.id, sub.planId), columns: { entitlements: true } });
   return resolveFeatures(plan?.entitlements ?? null, org.featureOverrides, rules);
 }
@@ -87,18 +94,48 @@ export async function featureLocks(orgId: string, tx: DbOrTx = db): Promise<Part
     tx.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true } }),
   ]);
   // A retired plan is no longer offered, but a shop still on it should see its name.
+  const label = (key: FeatureKey) => ({ label: registry.edits[key]?.label, description: registry.edits[key]?.description });
   const currentPlan = sub ? (await tx.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.id, sub.planId), columns: { name: true } }))?.name ?? null : null;
   return Object.fromEntries(off.map((key): [FeatureKey, FeatureLock] => {
     const message = registry.upgradeMessages[key] ?? null;
-    if (registry.globallyOff.includes(key)) return [key, { reason: "global", plans: [], currentPlan, message: null }];
-    if (key === "rfid") return [key, { reason: "addon", plans: [], currentPlan, message }];
-    if (activeOverride(key, org?.featureOverrides, { expiry: org?.featureOverrideExpiry }) === false) return [key, { reason: "admin", plans: [], currentPlan, message: null }];
-    return [key, { reason: "plan", plans: plans.filter((p) => resolveFeatures(p.entitlements)[key]).map((p) => p.name), currentPlan, message }];
+    if (registry.globallyOff.includes(key)) return [key, { reason: "global", plans: [], currentPlan, message: null, ...label(key) }];
+    if (key === "rfid") return [key, { reason: "addon", plans: [], currentPlan, message, ...label(key) }];
+    if (activeOverride(key, org?.featureOverrides, { expiry: org?.featureOverrideExpiry }) === false) return [key, { reason: "admin", plans: [], currentPlan, message: null, ...label(key) }];
+    return [key, { reason: "plan", plans: plans.filter((p) => resolveFeatures(p.entitlements)[key]).map((p) => p.name), currentPlan, message, ...label(key) }];
   }));
 }
 
+/**
+ * Counts of use per shop, feature and day, and nothing else: no customer, order, staff or screen details. Held briefly in
+ * memory and written in batches, so counting never slows a request or fails it.
+ */
+const usagePending = new Map<string, number>();
+function noteFeatureUse(orgId: string, feature: string) {
+  const key = `${orgId}|${feature}|${new Date().toISOString().slice(0, 10)}`;
+  usagePending.set(key, (usagePending.get(key) ?? 0) + 1);
+}
+export async function flushFeatureUsage() {
+  const rows = [...usagePending];
+  usagePending.clear();
+  for (const [key, count] of rows) {
+    const [organizationId, feature, day] = key.split("|");
+    await db.insert(schema.featureUsageDaily).values({ organizationId, feature, day, count })
+      .onConflictDoUpdate({ target: [schema.featureUsageDaily.organizationId, schema.featureUsageDaily.feature, schema.featureUsageDaily.day], set: { count: sql`${schema.featureUsageDaily.count} + ${count}` } })
+      .catch(() => {});
+  }
+}
+setInterval(() => void flushFeatureUsage(), 60_000).unref();
+
 /** Whole screens that belong to one feature. The tag designer is checked where tags are saved and printed. */
 const FEATURE_ROUTES: [RegExp, FeatureKey][] = [
+  [/^\/api\/v1\/dashboard(\/|$)/, "dashboard"],
+  [/^\/api\/v1\/orders(\/|$)/, "orders"],
+  [/^\/api\/v1\/(services|garment-types|price-lists|branch-prices|catalogue)(\/|$)/, "catalogue"],
+  [/^\/api\/v1\/cashier-shifts(\/|$)/, "cashier"],
+  [/^\/api\/v1\/invoices(\/|$)/, "invoices"],
+  [/^\/api\/v1\/(print-jobs|garments\/barcode|labels\/print)(\/|$)/, "garmentTags"],
+  [/^\/api\/v1\/(garments\/by-tag|tags\/scans)(\/|$)/, "scanStation"],
+  [/^\/api\/v1\/garments\/[^/]+\/transitions$/, "scanStation"],
   [/^\/api\/v1\/(deliveries|drivers)(\/|$)/, "deliveries"],
   [/^\/api\/v1\/(inventory|purchase-orders|suppliers)(\/|$)/, "inventory"],
   [/^\/api\/v1\/laundry(\/|$)/, "laundry"],
@@ -106,6 +143,7 @@ const FEATURE_ROUTES: [RegExp, FeatureKey][] = [
   [/^\/api\/v1\/booking(\/|$)/, "onlineBooking"],
   [/^\/api\/v1\/(membership-plans|customer-memberships)(\/|$)/, "customerMemberships"],
   [/^\/api\/v1\/customers\/[^/]+\/memberships(\/|$)/, "customerMemberships"],
+  [/^\/api\/v1\/customers(\/|$)/, "customers"],
   [/^\/api\/v1\/rfid(\/|$)/, "rfid"],
   [/^\/api\/v1\/reports(\/|$)/, "reports"],
   [/^\/api\/v1\/expenses(\/|$)/, "expenses"],
@@ -126,6 +164,7 @@ export async function assertFeatureAllowed(req: FastifyRequest) {
   const feature = FEATURE_ROUTES.find(([route]) => route.test(path))?.[1] ?? (req.method !== "GET" && STAFF_CHANGE.test(path) ? "staffManagement" : undefined);
   if (!feature || !req.auth?.orgId || req.auth.isPlatformAdmin) return;
   await requireFeature(req.auth.orgId, feature);
+  noteFeatureUse(req.auth.orgId, feature);
 }
 
 /** Without SMS / WhatsApp on the plan, a customer who has an email address still hears about their order. */
@@ -141,8 +180,9 @@ export async function branchLimit(orgId: string, tx: DbOrTx = db): Promise<numbe
   if (!org || org.settings.platformInternal || org.settings.syncSource === "device") return null;
   if (org.branchLimitOverride !== null) return org.branchLimitOverride;
   if (org.status === "trial") return null;
-  const sub = await tx.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true } });
+  const sub = await tx.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, orgId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true, branchLimitSnapshot: true } });
   if (!sub) return null;
+  if (sub.branchLimitSnapshot !== null) return sub.branchLimitSnapshot;
   const plan = await tx.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.id, sub.planId), columns: { branchLimit: true } });
   return plan?.branchLimit ?? null;
 }

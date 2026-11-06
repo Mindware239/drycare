@@ -9,7 +9,7 @@ const ts = require(path.join(ROOT, "node_modules/.pnpm", tsPath, "node_modules/t
 
 const SOURCES = ["apps/web/src", "packages/shared/src", "apps/api/src/modules", "apps/api/src/lib"];
 // The owner's console and invoices to shops stay in English; legal text needs a lawyer's translation.
-const SKIP = /(super-admin|\.test\.|SubscriptionInvoice|\/i18n|lib\/(mailer|license|razorpay|machineControl|backup|productionChecks|commercialInvoice)|modules\/platform|marketing\/(Legal|Privacy|Terms)|countries\.ts)/;
+const SKIP = /(super-admin|\.test\.|SubscriptionInvoice|\/i18n|lib\/(mailer|license|razorpay|machineControl|backup|productionChecks|commercialInvoice)|modules\/platform|modules\/(licenseServer|releases)|marketing\/(Legal|Privacy|Terms)|countries\.ts)/;
 const API = /apps[\\/]api/;
 const MARKETING = /components\/marketing\//;
 const ERROR_CALL = /^(badRequest|unprocessable|conflict|forbidden|notFound|unauthorized|AppError)$/;
@@ -28,7 +28,7 @@ const clean = (s) => decode(s).replace(/\s+/g, " ").trim();
 const keys = new Set();
 const add = (s) => {
   s = clean(s);
-  if (s && isWords(s) && s.length < 900) keys.add(s);
+  if (s && isWords(s) && s.length < 900 && !/minmax\(/.test(s)) keys.add(s);
 };
 /** `${n} garments for ${name}` becomes "{0} garments for {1}". Words inside the slots are collected on their own. */
 function template(node) {

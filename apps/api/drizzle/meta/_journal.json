@@ -274,6 +274,34 @@
       "when": 1793948788441,
       "tag": "0038_feature_override_expiry",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793950290987,
+      "tag": "0039_subscription_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793951304860,
+      "tag": "0040_remote_licensing",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793954191679,
+      "tag": "0041_release_management",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793956129201,
+      "tag": "0042_sharp_mandarin",
+      "breakpoints": true
     }
   ]
 }

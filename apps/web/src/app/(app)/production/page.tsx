@@ -1,28 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, CheckSquare, Clock3, Factory, RefreshCw, Search, Shirt, Square, Timer, Truck, UserRound, X } from "lucide-react";
-import { LOCATION_LABELS, STAGE_LABELS, allowedTransitions, type GarmentLocation, type GarmentStage } from "@drycare/shared";
+import { ArrowLeftRight, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, LayoutGrid, RefreshCw, Search, X } from "lucide-react";
+import { STAGE_LABELS, allowedTransitions, type GarmentStage } from "@drycare/shared";
+import { SlideGroup } from "@/components/SlideGroup";
 import { api, ApiError, useApi } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { dateTime } from "@/lib/format";
-import { Alert, Badge, Button, PageHeader, Select, Spinner, cx } from "@/components/ui";
-
-const COLUMNS: GarmentStage[] = ["received", "inspection", "sorting", "cleaning", "drying", "finishing", "quality_control", "rework", "packing", "ready", "exception"];
-
-const stageAccent: Partial<Record<GarmentStage, string>> = {
-  received: "border-t-sky-400",
-  inspection: "border-t-blue-400",
-  sorting: "border-t-indigo-400",
-  cleaning: "border-t-cyan-500",
-  drying: "border-t-teal-500",
-  finishing: "border-t-violet-400",
-  quality_control: "border-t-purple-400",
-  rework: "border-t-amber-500",
-  packing: "border-t-blue-500",
-  ready: "border-t-emerald-500",
-  exception: "border-t-red-500",
-};
+import { appLocale, appZone } from "@/lib/format";
+import { Alert, Spinner, cx } from "@/components/ui";
 
 type Row = {
   id: string; tag_code: string; current_status: GarmentStage; version: number; workflow_stages: GarmentStage[]; location: string;
@@ -30,235 +15,332 @@ type Row = {
   express: boolean; customer_name: string; garment_type_name: string; service_name: string; colour: string | null;
   storage_code: string | null; assigned_to: string | null; overdue: boolean; stage_since: string | null;
 };
+type Staff = { userId: string; name: string; role?: string };
+type Rack = { id: string; code: string; name?: string };
+type Kpi = "production" | "overdue" | "ready" | "attention" | "away";
+type Flag = "overdue" | "express" | "rework" | "issue" | "away";
 
-/** The single next production step for a garment, if it can be taken from the board. */
+/** Each service follows its own steps. The board groups them into five lanes, so every shop reads it the same way. */
+const LANES: { label: string; stages: GarmentStage[]; dot: string }[] = [
+  { label: "Received", stages: ["received", "inspection", "sorting"], dot: "#8a8780" },
+  { label: "Cleaning", stages: ["cleaning", "drying"], dot: "#3d6fb5" },
+  { label: "Finishing", stages: ["finishing", "rework"], dot: "#3d6fb5" },
+  { label: "Quality check", stages: ["quality_control", "exception"], dot: "#b8860b" },
+  { label: "Ready", stages: ["packing", "ready"], dot: "var(--dc-green)" },
+];
+const laneOf = (s: GarmentStage) => LANES.findIndex((l) => l.stages.includes(s));
+const PER_LANE = 3;
+const PER_LANE_NARROW = 6;
+const isAway = (g: Row) => Boolean(g.location) && !["shop_counter", "shop_storage"].includes(g.location);
+const isDoneStage = (s: GarmentStage) => s === "ready";
+const isLate = (g: Row) => g.overdue && !isDoneStage(g.current_status);
+
+/** The next production step that can be taken right from the board. */
 function nextStep(g: Row): GarmentStage | null {
   return allowedTransitions(g.workflow_stages, g.current_status).find((t) => t.kind === "advance" || t.kind === "rework_return")?.to ?? null;
 }
 
-function timeIn(since: string | null) {
-  if (!since) return "";
-  const mins = Math.max(0, Math.round((Date.now() - new Date(since).getTime()) / 60_000));
+function since(iso: string | null) {
+  if (!iso) return "";
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
   if (mins < 60) return `${mins}m`;
   if (mins < 48 * 60) return `${Math.floor(mins / 60)}h ${mins % 60}m`;
   return `${Math.floor(mins / 1440)}d`;
 }
 
+function dueText(g: Row) {
+  const due = new Date(g.promised_at);
+  const when = due.toLocaleString(appLocale(), { timeZone: appZone(), day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  if (!isLate(g)) return g.current_status === "ready" ? `Ready · was due ${when}` : when;
+  const mins = Math.round((Date.now() - due.getTime()) / 60_000);
+  const late = mins >= 1440 ? `${Math.floor(mins / 1440)} day${mins >= 2880 ? "s" : ""} late` : mins >= 60 ? `${Math.floor(mins / 60)}h late` : `${mins}m late`;
+  return `${late} · ${when}`;
+}
+
+const sameDay = (iso: string, offset: number) => {
+  const zone = appZone();
+  const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: zone });
+  return day(new Date(iso)) === day(new Date(Date.now() + offset * 86_400_000));
+};
+
 export default function ProductionPage() {
   const { branchId, branch, session, can } = useSession();
   const { data, error, loading, reload } = useApi<Row[]>(`/production/queues?branchId=${branchId}`);
-  const staff = useApi<{ userId: string; name: string }[]>(can("garments.process") ? `/production/staff?branchId=${branchId}` : null);
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const [expressOnly, setExpressOnly] = useState(false);
-  const [service, setService] = useState("");
-  const [assignee, setAssignee] = useState("");
-  const [search, setSearch] = useState("");
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const canWork = can("garments.process");
+  const staff = useApi<Staff[]>(canWork ? `/production/staff?branchId=${branchId}` : null);
+  const racks = useApi<Rack[]>(canWork ? `/storage-locations?branchId=${branchId}` : null);
+  const [query, setQuery] = useState("");
+  const [lane, setLane] = useState("all");
+  const [service, setService] = useState("all");
+  const [person, setPerson] = useState("all");
+  const [due, setDue] = useState("any");
+  const [kpi, setKpi] = useState<Kpi | null>(null);
+  const [flags, setFlags] = useState<Partial<Record<Flag, boolean>>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pages, setPages] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "green" | "amber" | "red"; text: string } | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [tab, setTab] = useState(0);
+  const [narrow, setNarrow] = useState(false);
 
-  // Keep the board current for screens left open on the shop floor.
   useEffect(() => {
-    if (!autoRefresh) return;
-    const t = setInterval(() => { if (!busy) reload(); }, 30_000);
-    return () => clearInterval(t);
-  }, [autoRefresh, busy, reload]);
+    const check = () => setNarrow(window.innerWidth < 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  // Screens are left open on the shop floor, so the board keeps itself current.
+  useEffect(() => {
+    const timer = setInterval(() => { if (!busy) reload(); }, 30_000);
+    return () => clearInterval(timer);
+  }, [busy, reload]);
+  useEffect(() => { if (data) setUpdatedAt(new Date()); }, [data]);
 
-  const allRows = data ?? [];
-  const services = useMemo(() => [...new Set(allRows.map((g) => g.service_name))].sort(), [allRows]);
-  const overdueCount = allRows.filter((g) => g.overdue && g.current_status !== "ready").length;
-  const readyCount = allRows.filter((g) => g.current_status === "ready").length;
-  const attentionCount = allRows.filter((g) => ["rework", "exception"].includes(g.current_status)).length;
-  const awayCount = allRows.filter((g) => g.location && !["shop_counter", "shop_storage"].includes(g.location)).length;
-  const rows = allRows.filter((g) => {
-    const query = search.trim().toLocaleLowerCase();
-    return (!overdueOnly || (g.overdue && g.current_status !== "ready"))
-      && (!expressOnly || g.express)
-      && (!service || g.service_name === service)
-      && (!assignee || (assignee === "me" ? g.assigned_user_id === session.user.id : assignee === "none" ? !g.assigned_user_id : g.assigned_user_id === assignee))
-      && (!query || [g.tag_code, g.order_number, g.garment_type_name, g.colour, g.service_name, g.customer_name, g.storage_code].some((v) => String(v ?? "").toLocaleLowerCase().includes(query)));
+  const all = useMemo(() => data ?? [], [data]);
+  const count = {
+    production: all.filter((g) => g.current_status !== "ready").length,
+    overdue: all.filter(isLate).length,
+    ready: all.filter((g) => g.current_status === "ready").length,
+    attention: all.filter((g) => g.current_status === "rework" || g.current_status === "exception").length,
+    away: all.filter(isAway).length,
+  };
+  const services = useMemo(() => [...new Set(all.map((g) => g.service_name))].sort(), [all]);
+  const q = query.trim().toLocaleLowerCase();
+  const rows = all.filter((g) => {
+    if (q && ![g.tag_code, g.order_number, g.garment_type_name, g.colour, g.service_name, g.customer_name, g.storage_code, g.assigned_to].some((v) => String(v ?? "").toLocaleLowerCase().includes(q))) return false;
+    if (lane !== "all" && laneOf(g.current_status) !== Number(lane)) return false;
+    if (service !== "all" && g.service_name !== service) return false;
+    if (person === "me" && g.assigned_user_id !== session.user.id) return false;
+    if (person === "none" && g.assigned_user_id) return false;
+    if (!["all", "me", "none"].includes(person) && g.assigned_user_id !== person) return false;
+    if (due === "overdue" && !isLate(g)) return false;
+    if (due === "today" && !sameDay(g.promised_at, 0)) return false;
+    if (due === "tomorrow" && !sameDay(g.promised_at, 1)) return false;
+    if (kpi === "production" && g.current_status === "ready") return false;
+    if (kpi === "overdue" && !isLate(g)) return false;
+    if (kpi === "ready" && g.current_status !== "ready") return false;
+    if (kpi === "attention" && !["rework", "exception"].includes(g.current_status)) return false;
+    if (kpi === "away" && !isAway(g)) return false;
+    if (flags.overdue && !isLate(g)) return false;
+    if (flags.express && !g.express) return false;
+    if (flags.rework && g.current_status !== "rework") return false;
+    if (flags.issue && g.current_status !== "exception") return false;
+    if (flags.away && !isAway(g)) return false;
+    return true;
   });
-  const byStage = (s: string) => rows.filter((g) => g.current_status === s);
-  const visibleCols = COLUMNS.filter((c) => byStage(c).length > 0 || ["received", "cleaning", "quality_control", "packing", "ready"].includes(c));
-  const filtersOn = Boolean(search || overdueOnly || expressOnly || service || assignee);
+  const filtered = Boolean(q || lane !== "all" || service !== "all" || person !== "all" || due !== "any" || kpi || Object.values(flags).some(Boolean));
+  const clearAll = () => { setQuery(""); setLane("all"); setService("all"); setPerson("all"); setDue("any"); setKpi(null); setFlags({}); setPages({}); };
 
-  const picked = allRows.filter((g) => selected.has(g.id));
-  const targets = [...new Set(picked.map(nextStep))];
-  const commonNext = targets.length === 1 ? targets[0] : null;
+  const flagChips: { key: Flag; label: string; n: number; tone: string }[] = [
+    { key: "overdue", label: "Overdue", n: count.overdue, tone: "var(--dc-red-bg)" },
+    { key: "express", label: "Express", n: all.filter((g) => g.express).length, tone: "var(--dc-amber-bg, #fdf3e1)" },
+    { key: "rework", label: "Rework", n: all.filter((g) => g.current_status === "rework").length, tone: "var(--dc-amber-bg, #fdf3e1)" },
+    { key: "issue", label: "Issue", n: all.filter((g) => g.current_status === "exception").length, tone: "var(--dc-red-bg)" },
+    { key: "away", label: "Away", n: count.away, tone: "var(--dc-soft)" },
+  ];
+  const active: { label: string; clear: () => void }[] = [
+    ...(lane !== "all" ? [{ label: `Stage: ${LANES[Number(lane)].label}`, clear: () => setLane("all") }] : []),
+    ...(service !== "all" ? [{ label: `Service: ${service}`, clear: () => setService("all") }] : []),
+    ...(person !== "all" ? [{ label: person === "me" ? "My work" : person === "none" ? "Unassigned" : `Staff: ${staff.data?.find((s) => s.userId === person)?.name ?? ""}`, clear: () => setPerson("all") }] : []),
+    ...(due !== "any" ? [{ label: due === "overdue" ? "Due: overdue" : due === "today" ? "Due: today" : "Due: tomorrow", clear: () => setDue("any") }] : []),
+    ...(q ? [{ label: `Search: ${query.trim()}`, clear: () => setQuery("") }] : []),
+  ];
+
+  // Shift insights, from what is on the board now.
+  const queues = LANES.slice(0, 4).map((l, i) => {
+    const inLane = all.filter((g) => laneOf(g.current_status) === i);
+    const avg = inLane.length ? inLane.reduce((n, g) => n + (g.stage_since ? Date.now() - new Date(g.stage_since).getTime() : 0), 0) / inLane.length : 0;
+    return { label: l.label, n: inLane.length, avg };
+  });
+  const bottleneck = [...queues].sort((a, b) => b.n - a.n)[0];
+  const workload = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const g of all) if (g.current_status !== "ready" && g.assigned_to) map.set(g.assigned_to, (map.get(g.assigned_to) ?? 0) + 1);
+    return [...map].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [all]);
+  const unassigned = all.filter((g) => g.current_status !== "ready" && !g.assigned_to).length;
+  const rackUse = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const g of all) if (g.storage_code) map.set(g.storage_code, (map.get(g.storage_code) ?? 0) + 1);
+    return [...map].sort(([a], [b]) => a.localeCompare(b));
+  }, [all]);
+  const readyToday = all.filter((g) => g.current_status === "ready" && g.stage_since && sameDay(g.stage_since, 0)).length;
+
+  const picked = all.filter((g) => selected.has(g.id));
+  const pickedMovable = picked.filter((g) => nextStep(g));
   const toggle = (id: string) => setSelected((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const toggleColumn = (items: Row[]) => setSelected((cur) => {
+  const toggleLane = (items: Row[]) => setSelected((cur) => {
     const n = new Set(cur);
-    const all = items.every((g) => n.has(g.id));
-    for (const g of items) if (all) n.delete(g.id); else n.add(g.id);
+    const everyOne = items.every((g) => n.has(g.id));
+    for (const g of items) if (everyOne) n.delete(g.id); else n.add(g.id);
     return n;
   });
 
-  async function moveSelected() {
+  /** Runs one change per garment, and says which ones it could not do. */
+  async function forEach(list: Row[], change: (g: Row) => Promise<unknown>, done: (n: number) => string) {
     setBusy(true);
     setResult(null);
     let moved = 0;
     const problems: string[] = [];
-    for (const g of picked) {
-      const to = nextStep(g);
-      if (!to) { problems.push(`${g.tag_code}: ${g.current_status === "quality_control" ? "needs a QC inspection at the scan station" : "no next step from the board"}`); continue; }
+    for (const g of list) {
       try {
-        await api(`/garments/${g.id}/transitions`, { body: { to, version: g.version } });
+        await change(g);
         moved++;
       } catch (e) {
         problems.push(`${g.tag_code}: ${(e as ApiError).message}`);
       }
     }
     setSelected(new Set());
-    setResult({ tone: problems.length ? (moved ? "amber" : "red") : "green", text: `${moved} garment${moved === 1 ? "" : "s"} moved.${problems.length ? ` ${problems.length} not moved — ${problems.slice(0, 3).join("; ")}${problems.length > 3 ? "…" : ""}` : ""}` });
+    setResult({ tone: problems.length ? (moved ? "amber" : "red") : "green", text: `${done(moved)}${problems.length ? ` ${problems.slice(0, 3).join("; ")}` : ""}` });
     setBusy(false);
     reload();
   }
+  const advance = (g: Row) => { const to = nextStep(g); if (to) return api(`/garments/${g.id}/transitions`, { body: { to, version: g.version } }); return Promise.reject(new Error("needs the scan station")); };
+  const moveOne = (g: Row) => void forEach([g], advance, () => `${g.tag_code} moved to ${STAGE_LABELS[nextStep(g)!]}.`);
+  const moveSelected = () => void forEach(pickedMovable, advance, (n) => `${n} garment${n === 1 ? "" : "s"} moved.`);
+  const assignSelected = (userId: string) => void forEach(picked, (g) => api(`/garments/${g.id}/assignments`, { body: { userId: userId === "none" ? null : userId, version: g.version } }), (n) => `${n} garment${n === 1 ? "" : "s"} ${userId === "none" ? "unassigned" : `assigned to ${staff.data?.find((s) => s.userId === userId)?.name ?? "staff"}`}.`);
+  const rackSelected = (id: string) => void forEach(picked, (g) => api(`/garments/${g.id}/storage-location`, { body: { storageLocationId: id } }), (n) => `${n} garment${n === 1 ? "" : "s"} moved to rack ${racks.data?.find((r) => r.id === id)?.code ?? ""}.`);
 
-  async function assignSelected(userId: string) {
-    setBusy(true);
-    setResult(null);
-    let done = 0;
-    const problems: string[] = [];
-    for (const g of picked) {
-      try {
-        await api(`/garments/${g.id}/assignments`, { body: { userId: userId === "none" ? null : userId, version: g.version } });
-        done++;
-      } catch (e) {
-        problems.push(`${g.tag_code}: ${(e as ApiError).message}`);
-      }
-    }
-    setSelected(new Set());
-    const who = userId === "none" ? "unassigned" : `assigned to ${staff.data?.find((s) => s.userId === userId)?.name ?? "staff"}`;
-    setResult({ tone: problems.length ? "amber" : "green", text: `${done} garment${done === 1 ? "" : "s"} ${who}.${problems.length ? ` ${problems.length} skipped — ${problems.slice(0, 2).join("; ")}` : ""}` });
-    setBusy(false);
-    reload();
-  }
+  const kpis: { key: Kpi; label: string; value: number; hint: string; icon: React.ReactNode; bg: string; fg: string; danger?: boolean }[] = [
+    { key: "production", label: "In production", value: count.production, hint: "Not yet ready", icon: <LayoutGrid className="h-3.5 w-3.5" />, bg: "#d8e7fa", fg: "#2a4f86" },
+    { key: "overdue", label: "Overdue", value: count.overdue, hint: "Past promised time", icon: <Clock3 className="h-3.5 w-3.5" />, bg: "var(--dc-red-bg)", fg: "var(--dc-red-fg)", danger: count.overdue > 0 },
+    { key: "ready", label: "Ready for pickup", value: count.ready, hint: "Awaiting handover", icon: <Check className="h-3.5 w-3.5" />, bg: "var(--dc-green-bg)", fg: "var(--dc-green-fg)" },
+    { key: "attention", label: "Needs attention", value: count.attention, hint: "Rework or exception", icon: <CircleAlert className="h-3.5 w-3.5" />, bg: "#fdf3e1", fg: "#8a5a00" },
+    { key: "away", label: "Away from shop", value: count.away, hint: "At an external facility", icon: <ArrowLeftRight className="h-3.5 w-3.5" />, bg: "var(--dc-soft)", fg: "var(--dc-ink)" },
+  ];
+  const lanesShown = narrow ? [tab] : LANES.map((_, i) => i);
+  const perLane = narrow ? PER_LANE_NARROW : PER_LANE;
+  const selectClass = "h-11 rounded-xl border bg-[var(--dc-card)] px-3 text-sm";
+  const selectStyle = { borderColor: "var(--dc-line)", color: "var(--dc-ink)" };
 
   return (
-    <div className="space-y-5 pb-24">
-      <PageHeader
-        title="Production board"
-        subtitle={`Every garment in work at ${branch?.name ?? "your branch"}. Tick garments to move them to the next step or assign them to staff; open one for QC, rack or exceptions.`}
-        actions={
-          <>
-            <Button variant="secondary" onClick={reload} loading={loading && Boolean(data)}><RefreshCw className="h-4 w-4" />Refresh</Button>
-            {can("garments.process") && <Link href="/scan"><Button>Open scan station</Button></Link>}
-          </>
-        }
-      />
+    <div className="dcd flex flex-col gap-[18px] pb-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex max-w-3xl flex-col gap-1">
+          <h1 className="dcd-h text-[34px] leading-tight">Production board</h1>
+          <p className="text-[15px]" style={{ color: "var(--dc-sub)" }}>{`Every garment in work at ${branch?.name ?? "your branch"}, by stage. Each service follows its own steps.`}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-sm font-semibold">{`Working as ${session.user.name}`}</span>
+          <span className="rounded-full px-2.5 py-1 text-[13px] font-semibold" style={{ background: "var(--dc-soft)" }}>{session.role.name}</span>
+          <button type="button" onClick={reload} disabled={loading && Boolean(data)} className="dc-press inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-4 text-sm font-semibold" style={{ borderColor: "var(--dc-solid)" }}>
+            <RefreshCw className={cx("h-4 w-4", loading && data && "animate-spin")} />Refresh
+          </button>
+          {canWork && <Link href="/scan" className="dc-press inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold" style={{ background: "var(--dc-green)", color: "#151514" }}>Open scan station</Link>}
+        </div>
+      </div>
+      <p role="status" className="-mt-2 text-[13px]" style={{ color: "var(--dc-sub)" }}>{updatedAt ? `Updated ${updatedAt.toLocaleTimeString(appLocale(), { timeZone: appZone(), hour: "numeric", minute: "2-digit" })} · refreshes by itself every 30 seconds` : "Loading production board…"}</p>
+
       {error && <Alert>{error.message}</Alert>}
       {result && <Alert tone={result.tone} onClose={() => setResult(null)}>{result.text}</Alert>}
       {loading && !data ? <Spinner /> : (
         <>
-          <section aria-label="Production summary" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            {[
-              { label: "In production", value: allRows.length - readyCount, note: "Not yet ready", icon: Factory, tone: "text-brand-700 bg-brand-50 border-brand-100", onClick: () => { setOverdueOnly(false); setExpressOnly(false); } },
-              { label: "Overdue", value: overdueCount, note: "Past promised time", icon: Clock3, tone: overdueCount ? "text-red-700 bg-red-50 border-red-100" : "text-slate-500 bg-slate-50 border-slate-200", onClick: () => setOverdueOnly(true) },
-              { label: "Ready for pickup", value: readyCount, note: "Awaiting handover", icon: CheckCircle2, tone: "text-emerald-700 bg-emerald-50 border-emerald-100" },
-              { label: "Needs attention", value: attentionCount, note: "Rework or exception", icon: AlertTriangle, tone: attentionCount ? "text-amber-700 bg-amber-50 border-amber-100" : "text-slate-500 bg-slate-50 border-slate-200" },
-              { label: "Away from shop", value: awayCount, note: "At facility or in transit", icon: Truck, tone: awayCount ? "text-violet-700 bg-violet-50 border-violet-100" : "text-slate-500 bg-slate-50 border-slate-200", href: "/transfers" },
-            ].map(({ label, value, note, icon: Icon, tone, onClick, href }) => {
-              const inner = (
-                <>
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-medium text-slate-500">{label}</p>
-                    <span className={cx("flex h-9 w-9 items-center justify-center rounded-xl border", tone)}><Icon className="h-[18px] w-[18px]" /></span>
-                  </div>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 tabular-nums">{value}</p>
-                  <p className="mt-1 text-xs text-slate-500">{note}</p>
-                </>
-              );
-              const cls = "rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-sm";
-              return href ? <Link key={label} href={href} className={cx(cls, "hover:border-brand-300")}>{inner}</Link>
-                : onClick ? <button key={label} type="button" onClick={onClick} className={cx(cls, "hover:border-brand-300")}>{inner}</button>
-                : <div key={label} className={cls}>{inner}</div>;
-            })}
-          </section>
+          <div role="group" aria-label="Production summary" className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(176px,1fr))" }}>
+            {kpis.map((k) => (
+              <button key={k.key} type="button" aria-pressed={kpi === k.key} onClick={() => setKpi(kpi === k.key ? null : k.key)} className="dc-press flex cursor-pointer flex-col gap-1.5 rounded-2xl border-[1.5px] px-[18px] py-4 text-start transition-colors" style={{ borderColor: kpi === k.key ? "var(--dc-solid)" : "var(--dc-line)", background: kpi === k.key ? "var(--dc-solid)" : "var(--dc-card)", color: kpi === k.key ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>
+                <span className="flex items-center justify-between gap-2 text-sm font-semibold">{k.label}<span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-lg" style={{ background: k.bg, color: k.fg }}>{k.icon}</span></span>
+                <span className="dcd-h text-[34px] leading-none tabular-nums" style={{ color: k.danger && kpi !== k.key ? "var(--dc-red-fg)" : undefined }}>{k.value}</span>
+                <span className="text-[13px] opacity-80">{k.hint}</span>
+              </button>
+            ))}
+          </div>
 
-          <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm" aria-label="Production board filters">
-            <label className="relative min-w-0 flex-1 basis-60">
-              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tag, order, garment, customer, rack…" aria-label="Search garments"
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 ps-9 pe-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100" />
-            </label>
-            <Select value={service} onChange={(e) => setService(e.target.value)} className="h-10 w-auto" aria-label="Service">
-              <option value="">All services</option>
-              {services.map((s) => <option key={s}>{s}</option>)}
-            </Select>
-            <Select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="h-10 w-auto" aria-label="Assigned to">
-              <option value="">Everyone&apos;s work</option>
-              <option value="me">My work</option>
-              <option value="none">Unassigned</option>
-              {(staff.data ?? []).map((s) => <option key={s.userId} value={s.userId}>{s.name}</option>)}
-            </Select>
-            <FilterChip on={overdueOnly} onChange={setOverdueOnly} tone="red">Overdue <span className="tabular-nums">{overdueCount}</span></FilterChip>
-            <FilterChip on={expressOnly} onChange={setExpressOnly} tone="amber">Express</FilterChip>
-            <label className="ms-auto flex items-center gap-1.5 text-xs text-slate-500"><input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="h-3.5 w-3.5 accent-brand-700" />Auto-refresh</label>
-            <span className="text-xs tabular-nums text-slate-500">{rows.length} of {allRows.length}</span>
-          </section>
+          <details className="dcd-card rounded-2xl px-4 py-1" style={{ borderRadius: 16 }}>
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-[15px] font-bold"><span>Shift insights</span><span className="text-[13px] font-medium" style={{ color: "var(--dc-sub)" }}>{`${readyToday} ready today · ${all.filter((g) => g.current_status === "rework").length} in rework`}</span></summary>
+            <div className="grid gap-4 pb-3.5 pt-2" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+              <div className="flex flex-col gap-1.5"><span className="text-[13px] font-semibold" style={{ color: "var(--dc-sub)" }}>Bottleneck</span><span className="text-[15px] font-semibold">{bottleneck?.n ? bottleneck.label : "No queue"}</span><span className="text-[13px]" style={{ color: "var(--dc-sub)" }}>{bottleneck?.n ? `${bottleneck.n} garments · about ${since(new Date(Date.now() - bottleneck.avg).toISOString())} at this stage` : "Nothing waiting"}</span></div>
+              <div className="flex flex-col gap-1.5"><span className="text-[13px] font-semibold" style={{ color: "var(--dc-sub)" }}>Staff workload (open garments)</span>
+                {workload.map(([name, n]) => <div key={name} className="grid items-center gap-2 text-[13px]" style={{ gridTemplateColumns: "88px 1fr 28px" }}><span className="truncate">{name}</span><span aria-hidden="true" className="h-2 overflow-hidden rounded" style={{ background: "var(--dc-soft)" }}><span className="block h-full rounded" style={{ width: `${Math.round((n / workload[0][1]) * 100)}%`, background: "var(--dc-solid)" }} /></span><span className="text-end tabular-nums">{n}</span></div>)}
+                <span className="text-[13px]" style={{ color: "var(--dc-sub)" }}>{`${unassigned} unassigned`}</span>
+              </div>
+              <div className="flex flex-col gap-1.5"><span className="text-[13px] font-semibold" style={{ color: "var(--dc-sub)" }}>Racks in use</span>
+                <div className="flex flex-wrap gap-1.5">{rackUse.length ? rackUse.map(([code, n]) => <span key={code} className="rounded-lg px-2.5 py-1 text-[13px]" style={{ background: "var(--dc-soft)" }}><strong>{code}</strong> {n}</span>) : <span className="text-[13px]" style={{ color: "var(--dc-sub)" }}>No garments on racks</span>}</div>
+              </div>
+              <div className="flex flex-col gap-1.5"><span className="text-[13px] font-semibold" style={{ color: "var(--dc-sub)" }}>Queues</span><span className="text-sm">{queues.map((x) => `${x.label} ${x.n}`).join(" · ")}</span></div>
+            </div>
+          </details>
+
+          <div className="flex flex-col gap-2.5 rounded-2xl border bg-[var(--dc-card)] p-3" style={{ borderColor: "var(--dc-line)" }}>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <label className="relative min-w-60 flex-1">
+                <Search aria-hidden="true" className="pointer-events-none absolute start-3.5 top-3.5 h-4 w-4" style={{ color: "var(--dc-sub)" }} />
+                <span className="sr-only">Search garments</span>
+                <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tag, order, garment, customer, rack or staff" autoComplete="off" className="h-11 w-full rounded-xl border bg-[var(--dc-card)] pe-3 ps-10 text-sm outline-none" style={selectStyle} />
+              </label>
+              <select aria-label="Stage" value={lane} onChange={(e) => setLane(e.target.value)} className={selectClass} style={selectStyle}><option value="all">All stages</option>{LANES.map((l, i) => <option key={l.label} value={i}>{l.label}</option>)}</select>
+              <select aria-label="Service" value={service} onChange={(e) => setService(e.target.value)} className={selectClass} style={selectStyle}><option value="all">All services</option>{services.map((s) => <option key={s}>{s}</option>)}</select>
+              <select aria-label="Assigned staff" value={person} onChange={(e) => setPerson(e.target.value)} className={selectClass} style={selectStyle}><option value="all">Everyone&apos;s work</option><option value="me">My work</option><option value="none">Unassigned</option>{(staff.data ?? []).map((s) => <option key={s.userId} value={s.userId}>{s.name}</option>)}</select>
+              <select aria-label="Due" value={due} onChange={(e) => setDue(e.target.value)} className={selectClass} style={selectStyle}><option value="any">Any due date</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="tomorrow">Due tomorrow</option></select>
+            </div>
+            <div role="group" aria-label="Status filters" className="flex flex-wrap items-center gap-2">
+              {flagChips.map((f) => (
+                <button key={f.key} type="button" aria-pressed={!!flags[f.key]} onClick={() => setFlags({ ...flags, [f.key]: !flags[f.key] })} className="dcd-pill min-h-10 cursor-pointer rounded-full border-[1.5px] px-3.5 text-sm font-medium" style={{ borderColor: flags[f.key] ? "var(--dc-solid)" : "var(--dc-line)", background: flags[f.key] ? "var(--dc-solid)" : f.n ? f.tone : "transparent", color: flags[f.key] ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{`${f.label} · ${f.n}`}</button>
+              ))}
+              <span role="status" className="ms-auto text-sm" style={{ color: "var(--dc-sub)" }}>{`${rows.length} of ${all.length} garments`}</span>
+            </div>
+            {active.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 border-t pt-2" style={{ borderColor: "var(--dc-line)" }}>
+                <span className="text-[13px] font-semibold" style={{ color: "var(--dc-sub)" }}>Active:</span>
+                {active.map((a) => <button key={a.label} type="button" onClick={a.clear} aria-label={`Remove filter ${a.label}`} className="dcd-pill inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[13px]" style={{ background: "var(--dc-soft)" }}>{a.label}<X aria-hidden="true" className="h-3 w-3" /></button>)}
+                <button type="button" onClick={clearAll} className="cursor-pointer text-[13px] font-semibold underline">Clear all</button>
+              </div>
+            )}
+          </div>
+
+          {picked.length > 0 && (
+            <div role="region" aria-label="Bulk actions" className="sticky top-2 z-20 flex flex-wrap items-center gap-3 rounded-2xl border-[1.5px] bg-[var(--dc-card)] p-3 shadow-lg" style={{ borderColor: "var(--dc-solid)" }}>
+              <strong className="text-[15px]">{`${picked.length} selected`}</strong>
+              <button type="button" onClick={moveSelected} disabled={busy || !pickedMovable.length} className="dc-press min-h-10 cursor-pointer rounded-full px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" style={{ background: "var(--dc-solid)", color: "var(--dc-on-solid)" }}>Move to next step</button>
+              <label className="flex items-center gap-2 text-sm">Assign<select value="" disabled={busy} onChange={(e) => e.target.value && assignSelected(e.target.value)} className="h-10 rounded-xl border bg-[var(--dc-card)] px-2 text-sm" style={selectStyle}><option value="">Choose staff…</option>{(staff.data ?? []).map((s) => <option key={s.userId} value={s.userId}>{s.name}</option>)}<option value="none">Remove assignment</option></select></label>
+              {!!racks.data?.length && <label className="flex items-center gap-2 text-sm">Rack<select value="" disabled={busy} onChange={(e) => e.target.value && rackSelected(e.target.value)} className="h-10 rounded-xl border bg-[var(--dc-card)] px-2 text-sm" style={selectStyle}><option value="">Choose rack…</option>{racks.data.map((r) => <option key={r.id} value={r.id}>{r.code}</option>)}</select></label>}
+              {pickedMovable.length < picked.length && <span className="text-[13px]" style={{ color: "#8a5a00" }}>{`${picked.length - pickedMovable.length} need the scan station`}</span>}
+              <button type="button" onClick={() => setSelected(new Set())} className="ms-auto cursor-pointer text-sm font-medium underline">Clear selection</button>
+            </div>
+          )}
+
+          {narrow && (
+            <SlideGroup role="tablist" label="Stage" className="flex gap-1 overflow-x-auto rounded-full p-1" style={{ background: "var(--dc-soft)" }}>
+              {LANES.map((l, i) => <button key={l.label} type="button" role="tab" aria-selected={tab === i} aria-checked={tab === i} onClick={() => setTab(i)} className="min-h-10 shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3.5 text-sm font-semibold" style={{ color: tab === i ? "var(--dc-on-solid)" : "var(--dc-ink)" }}>{`${l.label} · ${rows.filter((g) => laneOf(g.current_status) === i).length}`}</button>)}
+            </SlideGroup>
+          )}
 
           {rows.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
-              <Search className="mx-auto h-7 w-7 text-slate-300" />
-              <p className="mt-3 text-sm font-semibold text-slate-800">{allRows.length ? "No garments match these filters" : "Your production queue is clear"}</p>
-              <p className="mt-1 text-sm text-slate-500">{allRows.length ? "Try a different search or clear the filters." : "New orders will appear here as garments enter production."}</p>
-              {filtersOn && <button type="button" onClick={() => { setSearch(""); setOverdueOnly(false); setExpressOnly(false); setService(""); setAssignee(""); }} className="mt-3 text-sm font-semibold text-brand-700">Clear filters</button>}
+            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed bg-[var(--dc-card)] px-4 py-14 text-center" style={{ borderColor: "var(--dc-line)" }}>
+              <span className="text-[17px] font-semibold">{all.length ? "No garments match these filters" : "Your production queue is clear"}</span>
+              <span className="text-sm" style={{ color: "var(--dc-sub)" }}>{all.length ? "Try a different search or clear the filters." : "New orders appear here as garments are received."}</span>
+              {filtered && <button type="button" onClick={clearAll} className="dc-press mt-2 min-h-10 cursor-pointer rounded-full border-[1.5px] px-4 text-sm font-semibold" style={{ borderColor: "var(--dc-solid)" }}>Clear all filters</button>}
             </div>
           ) : (
-            <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4">
-              {visibleCols.map((stage) => {
-                const items = byStage(stage);
-                const urgent = stage === "rework" || stage === "exception";
-                const allPicked = items.length > 0 && items.every((g) => selected.has(g.id));
+            <div className="grid gap-3 overflow-x-auto pb-1.5" style={{ gridTemplateColumns: narrow ? "minmax(0,1fr)" : "repeat(5,minmax(252px,1fr))" }}>
+              {lanesShown.map((i) => {
+                const l = LANES[i];
+                const items = rows.filter((g) => laneOf(g.current_status) === i).sort((a, b) => Date.parse(a.promised_at) - Date.parse(b.promised_at));
+                const everyOne = items.length > 0 && items.every((g) => selected.has(g.id));
+                const total = Math.max(1, Math.ceil(items.length / perLane));
+                const page = Math.min(pages[i] ?? 0, total - 1);
+                const shown = items.slice(page * perLane, page * perLane + perLane);
+                const steps = l.stages.filter((s) => s !== "exception" && s !== "rework").map((s) => STAGE_LABELS[s]).join(" · ");
                 return (
-                  <section key={stage} className={cx("flex max-h-[70vh] w-[min(82vw,300px)] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-slate-200 border-t-4 bg-slate-50/80 shadow-sm sm:w-[280px]", stageAccent[stage] ?? "border-t-slate-300")}>
-                    <header className="flex items-center justify-between gap-2 border-b border-slate-200/80 px-3 py-2.5">
-                      <div className="flex min-w-0 items-center gap-2">
-                        {can("garments.process") && items.length > 0 && (
-                          <button type="button" onClick={() => toggleColumn(items)} aria-label={`Select all in ${STAGE_LABELS[stage]}`} className="text-slate-400 hover:text-brand-700">
-                            {allPicked ? <CheckSquare className="h-4 w-4 text-brand-700" /> : <Square className="h-4 w-4" />}
-                          </button>
-                        )}
-                        <h3 className={cx("truncate text-sm font-semibold", urgent ? "text-red-700" : "text-slate-800")}>{STAGE_LABELS[stage]}</h3>
+                  <section key={l.label} aria-label={l.label} className="flex min-h-60 min-w-0 flex-col gap-2.5 rounded-[18px] border p-3" style={{ borderColor: "var(--dc-line)", background: i === 4 ? "var(--dc-green-bg)" : "var(--dc-soft2, var(--dc-soft))" }}>
+                    <div className="flex items-start gap-2 px-0.5 pb-1 pt-0.5">
+                      {canWork && <input type="checkbox" checked={everyOne} disabled={!items.length} onChange={() => toggleLane(items)} aria-label={`Select all in ${l.label}`} className="mt-0.5 h-5 w-5 flex-none cursor-pointer" style={{ accentColor: "var(--dc-solid)" }} />}
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <h2 className="m-0 flex items-center gap-2 text-[15px] font-bold"><span aria-hidden="true" className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: l.dot }} />{l.label}<span className="ms-auto rounded-full border px-2 text-xs font-semibold tabular-nums" style={{ borderColor: "var(--dc-line)", background: "var(--dc-card)" }}>{items.length}</span></h2>
+                        <span className="text-xs" style={{ color: "var(--dc-sub)" }}>{steps}</span>
                       </div>
-                      <span className={cx("flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold tabular-nums", urgent ? "bg-red-50 text-red-700" : stage === "ready" ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-600 ring-1 ring-slate-200")}>{items.length}</span>
-                    </header>
-                    <div className="flex min-h-28 flex-col gap-2 overflow-y-auto p-2">
-                      {items.map((g) => {
-                        const isOverdue = g.overdue && stage !== "ready";
-                        const isPicked = selected.has(g.id);
-                        const away = g.location && !["shop_counter", "shop_storage"].includes(g.location);
-                        const stuck = g.stage_since && Date.now() - new Date(g.stage_since).getTime() > 24 * 3600_000 && stage !== "ready";
-                        return (
-                          <div key={g.id} className={cx("group relative rounded-xl border bg-white text-sm shadow-sm transition hover:border-brand-300 hover:shadow-md", isPicked ? "border-brand-500 ring-2 ring-brand-500/20" : isOverdue ? "border-red-200" : "border-slate-200")}>
-                            {can("garments.process") && (
-                              <button type="button" onClick={() => toggle(g.id)} aria-label={`Select ${g.tag_code}`} className="absolute start-2 top-2.5 z-10 text-slate-300 hover:text-brand-700">
-                                {isPicked ? <CheckSquare className="h-4 w-4 text-brand-700" /> : <Square className="h-4 w-4" />}
-                              </button>
-                            )}
-                            <Link href={`/scan?tag=${g.tag_code}`} className="block p-3 ps-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-                              <div className="flex items-start justify-between gap-2">
-                                <span className="break-all font-mono text-[11px] font-medium text-slate-500">{g.tag_code}</span>
-                                {g.express && <Badge color="amber">Express</Badge>}
-                              </div>
-                              <p className="mt-1.5 font-semibold text-slate-900">{g.garment_type_name}{g.colour && <span className="font-normal text-slate-500"> · {g.colour}</span>}</p>
-                              <p className="mt-0.5 text-xs text-slate-500">{g.service_name} <span className="text-slate-300">·</span> {g.customer_name}</p>
-                              <div className="mt-1.5 flex flex-wrap gap-1">
-                                {g.assigned_to && <span className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-800"><UserRound className="h-3 w-3" />{g.assigned_to}</span>}
-                                {away && <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-800"><Truck className="h-3 w-3" />{LOCATION_LABELS[g.location as GarmentLocation] ?? g.location}</span>}
-                                {g.storage_code && <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">Rack {g.storage_code}</span>}
-                              </div>
-                              <div className="mt-2 flex items-end justify-between gap-2 border-t border-slate-100 pt-2 text-[11px]">
-                                <span className={cx(isOverdue ? "font-semibold text-red-600" : "text-slate-500")}>{isOverdue && "Overdue · "}Due {dateTime(g.promised_at)}</span>
-                                {g.stage_since && <span className={cx("inline-flex shrink-0 items-center gap-0.5", stuck ? "font-semibold text-amber-700" : "text-slate-400")} title="Time in this stage"><Timer className="h-3 w-3" />{timeIn(g.stage_since)}</span>}
-                              </div>
-                            </Link>
-                          </div>
-                        );
-                      })}
-                      {items.length === 0 && <p className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/70 py-5 text-xs text-slate-400">No garments in this stage</p>}
                     </div>
+                    <div className="flex flex-col gap-2.5">
+                      {shown.map((g) => <GarmentCard key={g.id} g={g} canWork={canWork} picked={selected.has(g.id)} busy={busy} onPick={() => toggle(g.id)} onMove={() => moveOne(g)} />)}
+                    </div>
+                    {total > 1 && (
+                      <nav aria-label={`${l.label} pages`} className="mt-auto flex items-center justify-between gap-2 pt-1">
+                        <button type="button" onClick={() => setPages({ ...pages, [i]: page - 1 })} disabled={page === 0} aria-label={`Previous garments in ${l.label}`} className="dc-press grid h-9 w-9 cursor-pointer place-items-center rounded-full border bg-[var(--dc-card)] disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: "var(--dc-line)" }}><ChevronLeft aria-hidden="true" className="h-[18px] w-[18px] rtl:rotate-180" /></button>
+                        <span role="status" className="text-[13px] font-semibold tabular-nums">{`${page * perLane + 1}–${Math.min((page + 1) * perLane, items.length)} of ${items.length}`}</span>
+                        <button type="button" onClick={() => setPages({ ...pages, [i]: page + 1 })} disabled={page >= total - 1} aria-label={`More garments in ${l.label}`} className="dc-press grid h-9 w-9 cursor-pointer place-items-center rounded-full border bg-[var(--dc-card)] disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: "var(--dc-line)" }}><ChevronRight aria-hidden="true" className="h-[18px] w-[18px] rtl:rotate-180" /></button>
+                      </nav>
+                    )}
+                    {items.length === 0 && <span className="px-1 py-3 text-center text-[13px]" style={{ color: "var(--dc-sub)" }}>No garments at this stage</span>}
                   </section>
                 );
               })}
@@ -266,33 +348,51 @@ export default function ProductionPage() {
           )}
         </>
       )}
-
-      {picked.length > 0 && (
-        <div className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
-          <div className="flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-900/15">
-            <span className="flex items-center gap-2 ps-1 text-sm font-semibold text-slate-900"><Shirt className="h-4 w-4 text-brand-700" />{picked.length} selected</span>
-            <Button onClick={moveSelected} loading={busy} disabled={!targets.some(Boolean)}>
-              {commonNext ? <>Move to {STAGE_LABELS[commonNext]}</> : "Move each to its next step"}<ArrowRight className="h-4 w-4" />
-            </Button>
-            <Select value="" onChange={(e) => e.target.value && assignSelected(e.target.value)} disabled={busy} className="h-9 w-auto" aria-label="Assign selected">
-              <option value="">Assign to…</option>
-              {(staff.data ?? []).map((s) => <option key={s.userId} value={s.userId}>{s.name}</option>)}
-              <option value="none">Remove assignment</option>
-            </Select>
-            {targets.includes(null) && <span className="text-xs text-amber-700">Some need QC or a rack at the scan station</span>}
-            <button type="button" onClick={() => setSelected(new Set())} className="ms-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Clear selection"><X className="h-4 w-4" /></button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function FilterChip({ on, onChange, tone, children }: { on: boolean; onChange: (v: boolean) => void; tone: "red" | "amber"; children: React.ReactNode }) {
-  const active = tone === "red" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-800";
+function GarmentCard({ g, canWork, picked, busy, onPick, onMove }: { g: Row; canWork: boolean; picked: boolean; busy: boolean; onPick: () => void; onMove: () => void }) {
+  const late = isLate(g);
+  const away = isAway(g);
+  const next = nextStep(g);
+  const atQc = g.current_status === "quality_control";
+  const stuck = g.current_status === "exception";
+  const scan = `/scan?tag=${encodeURIComponent(g.tag_code)}`;
+  const chips: { t: string; bg: string; fg: string }[] = [
+    ...(late ? [{ t: "Overdue", bg: "var(--dc-red-bg)", fg: "var(--dc-red-fg)" }] : []),
+    ...(g.express ? [{ t: "Express", bg: "#fdf3e1", fg: "#8a5a00" }] : []),
+    ...(g.current_status === "rework" ? [{ t: "Rework", bg: "#fdf3e1", fg: "#8a5a00" }] : []),
+    ...(stuck ? [{ t: "Issue", bg: "var(--dc-red-bg)", fg: "var(--dc-red-fg)" }] : []),
+    ...(away ? [{ t: "Away", bg: "var(--dc-soft)", fg: "var(--dc-ink)" }] : []),
+  ];
+  const where = away ? g.location.replaceAll("_", " ").replace(/^./, (x) => x.toUpperCase()) : g.storage_code ? `Rack ${g.storage_code}` : "In shop";
+  const primary = !away && (atQc || Boolean(next));
+  const actionClass = "dc-press flex min-h-9 w-full cursor-pointer items-center justify-center rounded-full border-[1.5px] px-3 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50";
+  const actionStyle = primary ? { borderColor: "var(--dc-solid)", background: "var(--dc-solid)", color: "var(--dc-on-solid)" } : { borderColor: "var(--dc-line)", background: "var(--dc-card)", color: "var(--dc-ink)" };
   return (
-    <button type="button" aria-pressed={on} onClick={() => onChange(!on)} className={cx("inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition", on ? active : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>
-      {children}
-    </button>
+    <article aria-label={`${g.tag_code}, ${g.garment_type_name}, ${g.customer_name}${late ? ", overdue" : ""}`} className="relative flex flex-col gap-2 rounded-[14px] border-[1.5px] bg-[var(--dc-card)] p-3 ps-3.5 transition-colors hover:border-[#8a8780]" style={{ borderColor: picked ? "var(--dc-solid)" : late ? "var(--dc-red-fg)" : "var(--dc-line)" }}>
+      <span aria-hidden="true" className="absolute bottom-3 start-0 top-3 w-[3px] rounded-e" style={{ background: late ? "var(--dc-red-fg)" : g.express ? "#b8860b" : "transparent" }} />
+      <div className="flex items-center gap-2">
+        {canWork && <input type="checkbox" checked={picked} onChange={onPick} aria-label={`Select ${g.tag_code}`} className="h-5 w-5 flex-none cursor-pointer" style={{ accentColor: "var(--dc-solid)" }} />}
+        <Link href={scan} className="flex min-w-0 flex-wrap items-baseline gap-x-2 hover:underline"><strong className="text-[13px] tabular-nums [overflow-wrap:anywhere]">{g.tag_code}</strong><span className="text-xs" style={{ color: "var(--dc-sub)" }}>{`Order #${g.order_number}`}</span></Link>
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[15px] font-semibold leading-snug">{g.garment_type_name}{g.colour ? ` · ${g.colour}` : ""}</span>
+        <span className="text-[13px]" style={{ color: "var(--dc-sub)" }}>{`${g.service_name} · ${g.customer_name}`}</span>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        <span className="rounded-md px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--dc-soft)" }}>{`${STAGE_LABELS[g.current_status]}${g.stage_since ? ` · ${since(g.stage_since)}` : ""}`}</span>
+        {chips.map((c) => <span key={c.t} className="rounded-md px-2 py-0.5 text-xs font-semibold" style={{ background: c.bg, color: c.fg }}>{c.t}</span>)}
+      </div>
+      <dl className="m-0 grid gap-x-2.5 gap-y-0.5 text-xs" style={{ gridTemplateColumns: "auto 1fr" }}>
+        <dt style={{ color: "var(--dc-sub)" }}>Due</dt><dd className="m-0 font-semibold" style={{ color: late ? "var(--dc-red-fg)" : undefined }}>{dueText(g)}</dd>
+        <dt style={{ color: "var(--dc-sub)" }}>Staff</dt><dd className="m-0">{g.assigned_to ?? "Unassigned"}</dd>
+        <dt style={{ color: "var(--dc-sub)" }}>Where</dt><dd className="m-0">{where}</dd>
+      </dl>
+      {canWork && !away && !atQc && next
+        ? <button type="button" onClick={onMove} disabled={busy} className={actionClass} style={actionStyle}>{`Move to ${STAGE_LABELS[next]}`}</button>
+        : <Link href={scan} className={actionClass} style={actionStyle}>{canWork && atQc ? "Inspect" : "View details"}</Link>}
+    </article>
   );
 }

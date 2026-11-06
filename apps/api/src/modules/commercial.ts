@@ -4,6 +4,8 @@ import { z } from "zod";
 import { db, schema } from "../db/client";
 import { requirePermission } from "../lib/context";
 import { audit } from "../lib/audit";
+import { subscriptionSnapshot, featureRegistry } from "../lib/entitlements";
+import { FEATURES, FEATURE_KEYS, resolveFeatures } from "@drycare/shared";
 import { conflict, notFound } from "../lib/errors";
 
 export async function commercialRoutes(app: FastifyInstance) {
@@ -13,6 +15,28 @@ export async function commercialRoutes(app: FastifyInstance) {
       orderBy: [schema.commercialPlans.sortOrder, schema.commercialPlans.pricePaise],
     });
     return plans.map(({ entitlements, ...plan }) => ({ ...plan, entitlements }));
+  });
+
+  /** What the public pricing page shows: only the plans offered to new customers, with the features they include. */
+  app.get("/commercial/public-plans", async () => {
+    const [plans, registry] = await Promise.all([
+      db.query.commercialPlans.findMany({ where: eq(schema.commercialPlans.published, true), orderBy: [schema.commercialPlans.sortOrder, schema.commercialPlans.pricePaise] }),
+      featureRegistry(),
+    ]);
+    const list = [
+      ...FEATURE_KEYS.filter((key) => key !== "rfid" && !registry.globallyOff.includes(key)).map((key) => ({ key, label: registry.edits[key]?.label ?? FEATURES[key].label })),
+      ...registry.custom.filter((c) => !registry.globallyOff.includes(c.key)).map((c) => ({ key: c.key, label: c.label })),
+    ];
+    return {
+      features: list,
+      plans: plans.filter((p) => !/^(smoke|billtest)-/.test(p.code)).map((p) => {
+        const known = resolveFeatures(p.entitlements) as Record<string, boolean>;
+        return {
+          id: p.id, code: p.code, name: p.name, description: p.description, pricePaise: p.pricePaise, interval: p.interval, gstInclusive: p.gstInclusive, branchLimit: p.branchLimit, deviceLimit: p.deviceLimit,
+          included: list.filter((f) => known[f.key] ?? p.entitlements[f.key] === true).map((f) => f.key),
+        };
+      }),
+    };
   });
 
   app.get("/commercial/subscription", async (req) => {
@@ -50,6 +74,7 @@ export async function commercialRoutes(app: FastifyInstance) {
         provider: plan.pricePaise === 0 ? "manual" : "pending",
         startsAt: now,
         endsAt,
+        ...subscriptionSnapshot(plan),
       }).returning();
       await audit(tx, req, { action: "subscription.requested", resourceType: "subscription", resourceId: row.id, orgId: auth.orgId, before: existing, after: row });
       return [row];

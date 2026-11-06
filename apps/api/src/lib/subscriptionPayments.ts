@@ -3,6 +3,7 @@ import { and, desc, eq, gt } from "drizzle-orm";
 import { schema, type DbOrTx } from "../db/client";
 import { conflict } from "./errors";
 import { issueCommercialInvoice } from "./commercialInvoice";
+import { subscriptionSnapshot } from "./entitlements";
 
 type Plan = typeof schema.commercialPlans.$inferSelect;
 
@@ -46,9 +47,9 @@ export async function applySubscriptionPayment(tx: DbOrTx, input: {
     ? await tx.update(schema.commercialSubscriptions).set({ provider: input.provider, providerReference: input.reference, endsAt, cancelAt: null, updatedAt: now })
       .where(eq(schema.commercialSubscriptions.id, existing.id)).returning()
     : pending
-    ? await tx.update(schema.commercialSubscriptions).set({ status: "active", provider: input.provider, providerReference: input.reference, startsAt: now, endsAt, updatedAt: now })
+    ? await tx.update(schema.commercialSubscriptions).set({ status: "active", provider: input.provider, providerReference: input.reference, startsAt: now, endsAt, ...subscriptionSnapshot(plan), updatedAt: now })
       .where(eq(schema.commercialSubscriptions.id, pending.id)).returning()
-    : await tx.insert(schema.commercialSubscriptions).values({ organizationId, planId: plan.id, status: "active", provider: input.provider, providerReference: input.reference, startsAt: now, endsAt }).returning();
+    : await tx.insert(schema.commercialSubscriptions).values({ organizationId, planId: plan.id, status: "active", provider: input.provider, providerReference: input.reference, startsAt: now, endsAt, ...subscriptionSnapshot(plan) }).returning();
 
   const [payment] = await tx.insert(schema.commercialPayments).values({
     organizationId,

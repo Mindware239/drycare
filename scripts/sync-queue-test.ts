@@ -54,7 +54,8 @@ rmSync(before0027, { recursive: true, force: true });
 // Today's code creates the "existing" business data below, and it expects what later migrations add, so that is
 // put in place for now and removed before migrating, leaving the real migrations to add it.
 await sqlClient.unsafe(`
-  alter table organizations add column feature_overrides_json jsonb not null default '{}'::jsonb, add column branch_limit_override integer;
+  alter table organizations add column feature_overrides_json jsonb not null default '{}'::jsonb, add column branch_limit_override integer, add column feature_override_expiry_json jsonb not null default '{}'::jsonb;
+  alter table commercial_subscriptions add column entitlements_snapshot_json jsonb, add column branch_limit_snapshot integer;
   alter table orders add column customer_membership_id uuid;
   create table organization_addons (id uuid, organization_id uuid, addon text, status text, starts_at timestamptz, ends_at timestamptz, price_paise integer, payment_id uuid, note text, created_by uuid, created_at timestamptz, updated_at timestamptz);
   alter table order_items add column stain_charge integer not null default 0;
@@ -79,7 +80,8 @@ class Client {
 }
 const run = randomUUID().slice(0, 6);
 const owner = new Client();
-await owner.req("POST", "/organizations", { businessName: `Sync Shop ${run}`, ownerName: "Sync Owner", email: `owner-sync-${run}@test.local`, password: `Owner-${run}-Password1`, acceptedTerms: true });
+const signedUp = await owner.req("POST", "/organizations", { businessName: `Sync Shop ${run}`, ownerName: "Sync Owner", email: `owner-sync-${run}@test.local`, password: `Owner-${run}-Password1`, acceptedTerms: true });
+if (signedUp.status >= 300) throw new Error(`signup: ${JSON.stringify(signedUp.json)}`);
 const session = (await owner.req("GET", "/auth/session")).json;
 const branchId = session.branches[0].id;
 await owner.req("POST", "/cashier-shifts", { branchId, openingCash: 500_000 });
@@ -103,7 +105,8 @@ const beforeFp = await fingerprint();
 check("business data exists before the sync migration", Number(beforeFp.orders.split(":")[0]) === 1 && Number(beforeFp.payments.split(":")[0]) === 1, beforeFp);
 
 await sqlClient.unsafe(`
-  alter table organizations drop column feature_overrides_json, drop column branch_limit_override;
+  alter table organizations drop column feature_overrides_json, drop column branch_limit_override, drop column feature_override_expiry_json;
+  alter table commercial_subscriptions drop column entitlements_snapshot_json, drop column branch_limit_snapshot;
   alter table orders drop column customer_membership_id;
   drop table organization_addons;
   alter table order_items drop column stain_charge;

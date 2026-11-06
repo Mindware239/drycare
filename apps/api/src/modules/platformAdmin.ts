@@ -225,10 +225,12 @@ export async function platformAdminRoutes(app: FastifyInstance) {
     }).parse(req.body);
     const organization = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, organizationId) });
     if (!organization || organization.settings.platformInternal) throw notFound("Customer organization");
-    const plan = await db.query.commercialPlans.findFirst({
-      where: and(eq(schema.commercialPlans.id, body.planId), eq(schema.commercialPlans.published, true)),
-    });
-    if (!plan) throw notFound("Published plan");
+    const plan = await db.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.id, body.planId) });
+    if (!plan) throw notFound("Plan");
+    if (!plan.published) {
+      const current = await db.query.commercialSubscriptions.findFirst({ where: eq(schema.commercialSubscriptions.organizationId, organizationId), orderBy: [desc(schema.commercialSubscriptions.createdAt)], columns: { planId: true } });
+      if (current?.planId !== plan.id) throw notFound("Published plan");
+    }
     const seller = await getSellerBilling(db);
     const offer = planOffer(plan, organization, seller.invoice.gstRateBps);
     if (body.amountPaise < offer.payablePaise) throw conflict(`The verified amount cannot be lower than what this shop owes for the plan (${formatMoney(offer.payablePaise, offer.currency)}).`, "PAYMENT_AMOUNT_TOO_LOW");

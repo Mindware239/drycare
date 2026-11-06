@@ -192,11 +192,19 @@ async function startApp() {
 
   showSplash("Preparing Drycare…");
   serverMod = await import("./server-entry");
-  serverMod.setCloudUrl(process.env.DRYCARE_CLOUD_URL || config.cloudUrl || null);
+  serverMod.setCloudUrl(process.env.DRYCARE_CLOUD_URL || config.cloudUrl || builtInCloudUrl() || null);
   serverMod.setCredentialStore(dpapiCredentialStore());
   const urls = await serverMod.startServer({ migrationsDir: path.join(resources, "drizzle"), host, port: config.appPort });
   appUrl = urls.localUrl;
   log("DryCare running at", appUrl, urls.lanUrls.length ? `LAN: ${urls.lanUrls.join(", ")}` : "(this PC only)");
+
+  const licenseCheckIn = () => {
+    const mod = serverMod;
+    if (!mod) return;
+    void mod.syncLicenseNow(mod.cloudUrlSetting(), app.getVersion()).then((r) => log("License check-in:", JSON.stringify(r))).catch((e: Error) => log("License check-in failed", e.message));
+  };
+  setTimeout(licenseCheckIn, 15_000);
+  setInterval(licenseCheckIn, 6 * 60 * 60 * 1000);
 
   serverMod
     .autoBackupIfDue(config.backupDir, app.getVersion(), 20)
@@ -302,7 +310,7 @@ function buildMenu() {
     {
       label: "Help",
       submenu: [
-        { label: "Check for updates…", click: () => checkForUpdates() },
+        { label: "Check for updates…", click: () => updates?.checkNow() },
         { type: "separator" },
         {
           label: "About Drycare",
@@ -390,7 +398,15 @@ function relaunch() {
 
 // ---------------------------------------------------------------- lifecycle
 
-let checkForUpdates: () => void = () => {};
+let updates: ReturnType<typeof setupUpdates> | null = null;
+/** The server address set when this version was built. */
+function builtInCloudUrl() {
+  try {
+    return (JSON.parse(readFileSync(path.join(resources, "update.json"), "utf8")) as { url?: string }).url || null;
+  } catch {
+    return null;
+  }
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -402,12 +418,23 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   app.whenReady().then(() => {
-    checkForUpdates = setupUpdates({
+    updates = setupUpdates({
       window: () => win ?? null,
       log,
       backup: () => (serverMod ? serverMod.backupNow(config.backupDir, app.getVersion()) : Promise.reject(new Error("Drycare has not finished starting."))),
+      cloudUrl: () => serverMod?.cloudUrlSetting() ?? null,
+      installationId: () => config.installationId,
+      licenseKey: () => serverMod?.readInstalledKey() ?? null,
+      secondsSinceWork: () => serverMod?.secondsSinceWork() ?? Number.MAX_SAFE_INTEGER,
+      publicKey: () => readFileSync(path.join(resources, "license-public.pem"), "utf8"),
+      userData,
     });
-    return startApp().catch(async (e) => {
+    return startApp().then(async () => {
+      // Healthy means the server answers, not merely that the window opened. Otherwise the watchdog takes over.
+      const answered = await fetch(`${appUrl}/api/v1/system/info`, { signal: AbortSignal.timeout(30_000) }).then((r) => r.ok).catch(() => false);
+      if (answered) updates?.markHealthy();
+      else log("update: the server did not answer after starting");
+    }).catch(async (e) => {
       log("Startup failed", e);
       splash?.destroy();
       dialog.showErrorBox("Drycare could not start", `${(e as Error).message}\n\nDetails are in ${logFile}`);

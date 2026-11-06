@@ -14,6 +14,10 @@ import { setCloudUrl, setCredentialStore, type CredentialStore } from "../../api
 import { startSyncWorker, stopSyncWorker } from "../../api/src/sync/worker";
 
 export { setCloudUrl, setCredentialStore, type CredentialStore };
+export { syncLicenseNow } from "../../api/src/lib/licenseSync";
+export { cloudUrlSetting } from "../../api/src/sync/cloud";
+export { secondsSinceWork } from "../../api/src/lib/activity";
+export { readInstalledKey } from "../../api/src/lib/license";
 
 type Server = Awaited<ReturnType<typeof buildServer>>;
 let server: Server | undefined;

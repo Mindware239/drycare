@@ -10,7 +10,7 @@
  * Run `pnpm i18n:extract` after adding screens, to list new text for translation.
  */
 import { isLanguage, LANGUAGES, type LanguageCode, type Region } from "@drycare/shared";
-import { cleanMoney, currencySign, visitor, visitorPrice } from "./visitor";
+import { currencySign, visitor } from "./visitor";
 
 const CHOICE_KEY = "drycare.lang";
 const SHOP_KEY = "drycare.lang.shop";
@@ -126,7 +126,7 @@ function lookup(text: string): string | undefined {
     return to.replace(/\{(\d+)\}/g, (_, n) => {
       if (plural.has(Number(n))) return "";
       const value = m[slots.indexOf(Number(n)) + 1] ?? "";
-      return exact.get(value) ?? value;
+      return lookup(value) ?? value;
     });
   }
   return undefined;
@@ -196,9 +196,7 @@ function buildSiteWords() {
   const sign = currencySign(v.currency);
   const taxId = localTax(v.taxIdLabel);
   const tax = localTax(v.taxName);
-  const starter = cleanMoney(visitorPrice(149900, v), v.currency);
   siteWords = (text) => text
-    .replace(/₹1,499/g, starter)
     .replace(/₹(\d+(?:\.\d+)?)L\b/g, (_, lakh) => `${sign}${Math.round(Number(lakh) * 100)},000`)
     .replace(/₹/g, sign)
     .replace(/\bGSTIN\b/g, taxId)

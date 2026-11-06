@@ -26,6 +26,8 @@ import { platformAdminRoutes } from "./modules/platformAdmin";
 import { platformConsoleRoutes } from "./modules/platformConsole";
 import { platformBillingRoutes } from "./modules/platformBilling";
 import { platformLicenseRoutes } from "./modules/platformLicenses";
+import { licenseServerRoutes } from "./modules/licenseServer";
+import { releaseRoutes } from "./modules/releases";
 import { reportsCenterRoutes } from "./modules/reportsCenter";
 import { bookingRoutes } from "./modules/booking";
 import { walletRoutes } from "./modules/wallet";
@@ -45,6 +47,7 @@ import { claimRoutes } from "./modules/claims";
 import { labelPrintRoutes } from "./modules/labelPrint";
 import { syncRoutes } from "./modules/sync";
 import { syncCloudRoutes } from "./modules/syncCloud";
+import { noteWork } from "./lib/activity";
 import { assertDesktopLicense, isLicenseActivationRequest } from "./lib/license";
 
 export async function buildServer() {
@@ -58,6 +61,7 @@ export async function buildServer() {
     // Fastify accepts a boolean, hop count or address list; the cast only keeps its overloads apart.
     trustProxy: env.TRUST_PROXY as unknown as boolean,
     bodyLimit: 1_000_000,
+    routerOptions: { maxParamLength: 400 }, // A signed update link is about 170 characters.
   });
 
   await app.register(cookie);
@@ -84,7 +88,8 @@ export async function buildServer() {
   app.addHook("preHandler", async (req) => {
     // The lock is on features, not on opening the app. Web screens are served by the not-found handler
     // (see serveWebApp) and hold no data, so they must always load, or the upgrade screen itself would be locked.
-    if (!req.is404 && !isLicenseActivationRequest(req.method, req.url)) assertDesktopLicense();
+    if (req.method !== "GET" && req.method !== "HEAD") noteWork();
+    if (!req.is404 && !isLicenseActivationRequest(req.method, req.url)) assertDesktopLicense(req.method, req.url);
     req.auth = await loadAuth(req);
     // Lapsed trial / expired plan: the shop stays signed in and can read and pay, but cannot change data.
     await assertWritable(req);
@@ -147,6 +152,8 @@ export async function buildServer() {
       await api.register(platformConsoleRoutes);
       await api.register(platformBillingRoutes);
       await api.register(platformLicenseRoutes);
+      await api.register(licenseServerRoutes);
+      await api.register(releaseRoutes);
       await api.register(platformEntitlementRoutes);
       await api.register(membershipRoutes);
       await api.register(trackingRoutes);
