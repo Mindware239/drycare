@@ -52,7 +52,7 @@ export async function fetchRazorpayPayment(creds: Creds, paymentId: string) {
 }
 
 export async function fetchRazorpayOrder(creds: Creds, orderId: string) {
-  const r = await call<{ id: string; amount: number; currency: string; status: string; notes?: { organizationId?: string; planId?: string } }>(creds, "GET", `/orders/${encodeURIComponent(orderId)}`);
+  const r = await call<{ id: string; amount: number; currency: string; status: string; notes?: { organizationId?: string; planId?: string; referralCode?: string; referralPercent?: string } }>(creds, "GET", `/orders/${encodeURIComponent(orderId)}`);
   if (!r.ok) throw new Error(r.json.error?.description ?? `Razorpay order lookup failed (${r.status})`);
   return r.json;
 }

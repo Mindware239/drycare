@@ -138,6 +138,14 @@ function Shell({ children }: { children: ReactNode }) {
   const activeGroup = currentItem?.group;
 
   useEffect(() => setMobileNavOpen(false), [pathname]);
+  // A plan chosen on the pricing page before signing up or signing in: carry on to paying for it.
+  useEffect(() => {
+    let wanted: string | null = null;
+    try { wanted = localStorage.getItem("drycare.wantPlan"); } catch {}
+    if (!wanted) return;
+    try { localStorage.removeItem("drycare.wantPlan"); } catch {}
+    if (/^[a-z0-9-]{1,60}$/.test(wanted) && can("org.manage") && pathname !== "/billing") router.replace(`/billing?plan=${wanted}`);
+  }, [can, pathname, router]);
   useEffect(() => {
     let saved: string | null = null;
     try {

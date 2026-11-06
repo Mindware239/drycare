@@ -13,6 +13,8 @@ export default function LeadsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const { data, error, reload } = useAdminData<Lead[]>(`/platform-admin/leads?status=${filter}`);
   const [updateError, setUpdateError] = useState("");
+  const [kind, setKind] = useState<"all" | "hardware" | "partner">("all");
+  const shown = (data ?? []).filter((l) => kind === "all" || (kind === "hardware" ? l.message.includes("Hardware:") : l.message.includes("Partner programme")));
 
   async function setStatus(lead: Lead, status: string) {
     setUpdateError("");
@@ -29,11 +31,11 @@ export default function LeadsPage() {
       <ConsoleHeader title="Website enquiries" description="Demo, sales and support requests sent from the public website contact forms. Move each enquiry through the pipeline as you follow up." />
       <Panel padded={false}
         title={<SegmentedTabs value={filter} onChange={setFilter} options={[{ value: "all", label: "All" }, ...STATUSES.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))]} />}
-        actions={<CsvButton disabled={!data?.length} onClick={() => exportCsv("drycare-enquiries.csv", (data ?? []).map((l) => ({ Received: l.createdAt.slice(0, 16).replace("T", " "), Type: l.type, Name: l.name, Business: l.businessName, Email: l.email, Phone: l.phone, City: l.city, Message: l.message, Status: l.status })))} />}>
+        actions={<><Select aria-label="Type of enquiry" className="h-9 w-auto" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}><option value="all">All enquiries</option><option value="hardware">Hardware</option><option value="partner">Partners</option></Select><CsvButton disabled={!data?.length} onClick={() => exportCsv("drycare-enquiries.csv", (data ?? []).map((l) => ({ Received: l.createdAt.slice(0, 16).replace("T", " "), Type: l.type, Name: l.name, Business: l.businessName, Email: l.email, Phone: l.phone, City: l.city, Message: l.message, Status: l.status })))} /></>}>
         {(error || updateError) && <div className="p-4"><Alert>{error || updateError}</Alert></div>}
-        {!data ? <LoadingRows /> : !data.length ? <EmptyState icon={Inbox} title="No enquiries in this view">Messages from the website contact and demo forms will appear here.</EmptyState> : (
+        {!data ? <LoadingRows /> : !shown.length ? <EmptyState icon={Inbox} title="No enquiries in this view">Messages from the website contact and demo forms will appear here.</EmptyState> : (
           <ul className="divide-y divide-slate-100">
-            {data.map((l) => (
+            {shown.map((l) => (
               <li key={l.id} className="grid grid-cols-1 gap-3 px-5 py-4 lg:grid-cols-[1fr_180px]">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">

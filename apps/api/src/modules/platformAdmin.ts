@@ -17,7 +17,7 @@ const planUpdateSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
   description: z.string().trim().max(500).nullable().optional(),
   pricePaise: z.number().int().min(0).max(2_000_000_000).optional(),
-  interval: z.enum(["month", "year"]).optional(),
+  interval: z.enum(["month", "quarter", "year"]).optional(),
   gstInclusive: z.boolean().optional(),
   trialEligible: z.boolean().optional(),
   deviceLimit: z.number().int().min(1).max(1000).optional(),
@@ -233,7 +233,12 @@ export async function platformAdminRoutes(app: FastifyInstance) {
     }
     const seller = await getSellerBilling(db);
     const offer = planOffer(plan, organization, seller.invoice.gstRateBps);
-    if (body.amountPaise < offer.payablePaise) throw conflict(`The verified amount cannot be lower than what this shop owes for the plan (${formatMoney(offer.payablePaise, offer.currency)}).`, "PAYMENT_AMOUNT_TOO_LOW");
+    // A shop that reported a payment with a referral code owes what the server worked out when it reported it.
+    const reported = body.claimId ? await db.query.commercialPayments.findFirst({ where: and(eq(schema.commercialPayments.id, body.claimId), eq(schema.commercialPayments.organizationId, organizationId)) }) : undefined;
+    const referral = (reported?.providerPayload as { planId?: string; referral?: { code: string; percent: number; payablePaise: number } } | undefined);
+    const referralUsed = referral?.planId === plan.id ? referral.referral : undefined;
+    const owed = referralUsed?.payablePaise ?? offer.payablePaise;
+    if (body.amountPaise < owed) throw conflict(`The verified amount cannot be lower than what this shop owes for the plan (${formatMoney(owed, offer.currency)}).`, "PAYMENT_AMOUNT_TOO_LOW");
     // A bank UTR / UPI reference identifies one incoming transfer; it can never pay for two things.
     const reference = body.reference.replace(/\s+/g, "").toUpperCase();
     const [duplicate] = await db.execute<{ organizationName: string; createdAt: string }>(sql`
@@ -257,7 +262,7 @@ export async function platformAdminRoutes(app: FastifyInstance) {
         reference: body.reference,
         amountPaise: body.amountPaise,
         currency: offer.currency,
-        payload: { verificationMode: "manual", verifiedBy: auth.userId, reason: body.reason, claimId: body.claimId },
+        payload: { verificationMode: "manual", verifiedBy: auth.userId, reason: body.reason, claimId: body.claimId, ...(referralUsed ? { referral: referralUsed } : {}) },
       });
       await audit(tx, req, {
         action: "platform.manual_payment_verified",

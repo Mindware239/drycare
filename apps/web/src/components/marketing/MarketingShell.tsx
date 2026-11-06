@@ -1,5 +1,6 @@
 "use client";
 
+import { visitor, visitorCountry } from "@/lib/visitor";
 import { LanguagePicker } from "@/components/I18nRoot";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,7 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { siteContact } from "./siteConfig";
 import "./site.css";
 
-const nav = [["Home", "/"], ["Features", "/features"], ["About Us", "/about"], ["Pricing", "/pricing"], ["FAQ", "/faq"]];
+const nav = [["Home", "/"], ["Features", "/features"], ["About Us", "/about"], ["Pricing", "/pricing"], ["Hardware", "/hardware"], ["Partners", "/partners"], ["Download", "/download"], ["FAQ", "/faq"]];
 
 const solutions = [["Order Booking & Billing", "booking"], ["Garment Tagging", "tagging"], ["Order Status Tracking", "status"], ["Pickup & Delivery", "delivery"], ["Customers & Memberships", "customers"], ["Payments & Dues", "payments"], ["Multi-Store & Plant", "plant"], ["Reports", "reports"]];
 const builtFor = ["Dry Cleaners", "Laundry Stores", "Laundry Chains & Franchises"];
@@ -20,6 +21,26 @@ export function SiteBrand({ href = "/" }: { href?: string }) {
       <img src="/site/logo.png" alt="" width={48} height={28} />
       <span>Drycare</span>
     </Link>
+  );
+}
+
+/** The owner's limited-time referral offer. Buying online is in India for now, so it shows there, and ends by itself on its last day. */
+function OfferBanner() {
+  const [offer, setOffer] = useState<{ code: string; percent: number; endsOn: string } | null>(null);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    try { if (sessionStorage.getItem("drycare.offerClosed")) return; } catch {}
+    if (!visitor(visitorCountry()).india) return;
+    void fetch("/api/v1/commercial/referral-offer").then((r) => (r.ok ? r.json() : null)).then(setOffer).catch(() => {});
+  }, []);
+  if (!offer || hidden) return null;
+  const until = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${offer.endsOn}T00:00:00Z`));
+  return (
+    <div role="region" aria-label="Offer" style={{ background: "#151514", color: "#faf8f4", fontSize: 14, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "4px 12px", padding: "8px 44px 8px 16px", position: "relative", textAlign: "center" }}>
+      <span>{`Use referral code ${offer.code} for ${offer.percent}% off quarterly and yearly plans, until ${until}.`}</span>
+      <Link href="/pricing" style={{ color: "#3cbf5a", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>View Plans</Link>
+      <button type="button" aria-label="Close offer" onClick={() => { setHidden(true); try { sessionStorage.setItem("drycare.offerClosed", "1"); } catch {} }} style={{ position: "absolute", insetInlineEnd: 8, top: "50%", transform: "translateY(-50%)", width: 32, height: 32, border: 0, borderRadius: "50%", background: "transparent", color: "#faf8f4", cursor: "pointer", fontSize: 18 }}>×</button>
+    </div>
   );
 }
 
@@ -61,10 +82,11 @@ export function MarketingShell({ children }: { children: ReactNode }) {
   }, []);
 
   const current = (href: string) => (pathname === href ? ("page" as const) : undefined);
-  const company: [string, string][] = [["About Us", "/about"], ["Pricing", "/pricing"], ...(pathname === "/features" ? [["Features", "/features"] as [string, string]] : []), ["Why Drycare", "/#why"], ["FAQs", "/faq"], ["Book a Demo", "/#demo"], ["Contact Us", "/contact"]];
+  const company: [string, string][] = [["About Us", "/about"], ["Pricing", "/pricing"], ["Hardware & Accessories", "/hardware"], ["Become a Partner", "/partners"], ...(pathname === "/features" ? [["Features", "/features"] as [string, string]] : []), ["Why Drycare", "/#why"], ["FAQs", "/faq"], ["Book a Demo", "/#demo"], ["Contact Us", "/contact"]];
 
   return (
     <div className="dc-site" id="top">
+      <OfferBanner />
       <header className="dc-header">
         <div className="dc-header-in">
           <SiteBrand />

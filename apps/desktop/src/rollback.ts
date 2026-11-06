@@ -29,7 +29,7 @@ while ((Get-Date) -lt $deadline) {
 # Never came up healthy: close whatever is running from this folder, then put the old version back.
 Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appDir, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
-& robocopy $copyDir $appDir /MIR /R:3 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
+& robocopy $copyDir $appDir /MIR /IS /IT /R:3 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
 $ok = $LASTEXITCODE -lt 8
 $stamp = (Get-Date).ToString('o')
 @{ from = $from; to = $to; restored = $ok; at = $stamp } | ConvertTo-Json | Set-Content -Path $result -Encoding UTF8

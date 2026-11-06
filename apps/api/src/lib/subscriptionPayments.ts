@@ -30,7 +30,7 @@ export async function applySubscriptionPayment(tx: DbOrTx, input: {
     throw conflict("This business already has an active subscription on a different plan. Use “Manage plan” on the customer page, or record the payment after the current period ends.", "ACTIVE_SUBSCRIPTION_EXISTS");
   }
   const now = new Date();
-  const durationDays = plan.interval === "year" ? 365 : 30;
+  const durationDays = plan.interval === "year" ? 365 : plan.interval === "quarter" ? 90 : 30;
   // Renewing early extends from the current end date so the shop never loses paid days.
   const periodStart = existing?.endsAt && existing.endsAt > now ? existing.endsAt : now;
   const endsAt = new Date(periodStart.getTime() + durationDays * 86_400_000);

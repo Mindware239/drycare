@@ -54,7 +54,7 @@ export async function platformConsoleRoutes(app: FastifyInstance) {
         (select count(*) from orgs where trial_started_at is not null)::int as "everTrialed",
         (select count(distinct organization_id) from pays where status = 'paid')::int as "payingEver",
         (select count(*) from subs where status = 'active' and (ends_at is null or ends_at > now()))::int as "paidActive",
-        (select coalesce(sum(case when interval = 'year' then price_paise / 12.0 else price_paise end), 0)
+        (select coalesce(sum(case when interval = 'year' then price_paise / 12.0 when interval = 'quarter' then price_paise / 3.0 else price_paise end), 0)
            from subs where status = 'active' and (ends_at is null or ends_at > now())) as "mrrPaise",
         (select count(*) from subs where status = 'active' and ends_at between now() and now() + interval '14 days')::int as "renewals14",
         (select count(*) from subs where status in ('canceled', 'expired') or (status = 'active' and ends_at <= now()))::int as "lapsedSubscriptions",
@@ -71,6 +71,13 @@ export async function platformConsoleRoutes(app: FastifyInstance) {
       select to_char(d, 'YYYY-MM-DD') as day, count(o.id)::int as count
       from generate_series((now() at time zone 'Asia/Kolkata')::date - 29, (now() at time zone 'Asia/Kolkata')::date, interval '1 day') d
       left join organizations o on ${CUSTOMER_ORG} and (o.created_at at time zone 'Asia/Kolkata')::date = d::date
+      group by d order by d
+    `);
+    const collections = await db.execute<{ day: string; paise: number }>(sql`
+      select to_char(d, 'YYYY-MM-DD') as day, coalesce(sum(${rupeesOf("p.amount_paise", "p.currency")}), 0)::float8 as paise
+      from generate_series((now() at time zone 'Asia/Kolkata')::date - 29, (now() at time zone 'Asia/Kolkata')::date, interval '1 day') d
+      left join commercial_payments p on p.status = 'paid' and (p.created_at at time zone 'Asia/Kolkata')::date = d::date
+        and p.organization_id in (select o.id from organizations o where ${CUSTOMER_ORG})
       group by d order by d
     `);
     const activity = await db.execute(sql`
@@ -105,16 +112,20 @@ export async function platformConsoleRoutes(app: FastifyInstance) {
       verifiedOwners: num(m.verifiedOwners),
       conversionBps: everTrialed ? Math.round((num(m.payingEver) / everTrialed) * 10_000) : null,
       publishedPlans: num(m.publishedPlans),
+      everTrialed,
+      payingEver: num(m.payingEver),
     };
     const emailReady = emailConfigured();
     const alerts: { tone: "red" | "amber" | "blue"; title: string; detail: string; href: string }[] = [];
     if (!metrics.publishedPlans) alerts.push({ tone: "red", title: "No plans are published", detail: "Customers cannot buy DryCare until at least one plan has an approved price and is published.", href: "/super-admin/plans" });
-    if (metrics.trialsExpiring7) alerts.push({ tone: "amber", title: `${metrics.trialsExpiring7} trial${metrics.trialsExpiring7 === 1 ? "" : "s"} end within 7 days`, detail: "Contact these shops before access lapses.", href: "/super-admin/trials?window=expiring" });
-    if (metrics.trialsLapsed) alerts.push({ tone: "amber", title: `${metrics.trialsLapsed} trial${metrics.trialsLapsed === 1 ? "" : "s"} have lapsed without payment`, detail: "Follow up, extend with a reason, or suspend.", href: "/super-admin/trials?window=lapsed" });
-    if (metrics.renewals14) alerts.push({ tone: "amber", title: `${metrics.renewals14} subscription${metrics.renewals14 === 1 ? "" : "s"} renew within 14 days`, detail: "Send renewal reminders and payment instructions.", href: "/super-admin/subscriptions" });
+    const [{ waiting }] = await db.execute<{ waiting: number }>(sql`select count(*)::int as waiting from commercial_payments p join organizations o on o.id = p.organization_id where p.status = 'pending' and p.provider like 'claim_%' and ${CUSTOMER_ORG}`);
+    if (waiting) alerts.push({ tone: "red", title: waiting === 1 ? "1 customer payment to check" : `${waiting} customer payments to check`, detail: "Match each UTR with your bank or UPI statement. The plan activates when you verify it.", href: "/super-admin/payments" });
+    if (metrics.trialsExpiring7) alerts.push({ tone: "amber", title: metrics.trialsExpiring7 === 1 ? "1 trial ends within 7 days" : `${metrics.trialsExpiring7} trials end within 7 days`, detail: "Contact these shops before access lapses.", href: "/super-admin/trials?window=expiring" });
+    if (metrics.trialsLapsed) alerts.push({ tone: "amber", title: metrics.trialsLapsed === 1 ? "1 trial has lapsed without payment" : `${metrics.trialsLapsed} trials have lapsed without payment`, detail: "Follow up, extend with a reason, or suspend.", href: "/super-admin/trials?window=lapsed" });
+    if (metrics.renewals14) alerts.push({ tone: "amber", title: metrics.renewals14 === 1 ? "1 subscription renews within 14 days" : `${metrics.renewals14} subscriptions renew within 14 days`, detail: "Send renewal reminders and payment instructions.", href: "/super-admin/subscriptions" });
     if (metrics.newLeads) alerts.push({ tone: "blue", title: `${metrics.newLeads} new website enquir${metrics.newLeads === 1 ? "y" : "ies"}`, detail: "Respond to sales and demo requests.", href: "/super-admin/leads" });
     if (!emailReady) alerts.push({ tone: "red", title: "Email delivery is not configured", detail: "Verification, reminders and super admin codes cannot be emailed until SMTP or Resend is set up.", href: "/super-admin/settings" });
-    return { metrics, signups, activity, alerts };
+    return { metrics, signups, collections, activity, alerts };
   });
 
   app.get("/platform-admin/trials/summary", async (req) => {
@@ -396,7 +407,7 @@ export async function platformConsoleRoutes(app: FastifyInstance) {
     const body = z.object({
       code: z.string().trim().toLowerCase().regex(/^[a-z0-9][a-z0-9-]{1,39}$/, "Use 2-40 lowercase letters, numbers or hyphens"),
       name: z.string().trim().min(2).max(80),
-      interval: z.enum(["month", "year"]).default("month"),
+      interval: z.enum(["month", "quarter", "year"]).default("month"),
     }).parse(req.body);
     const existing = await db.query.commercialPlans.findFirst({ where: eq(schema.commercialPlans.code, body.code) });
     if (existing) throw conflict("A plan with this code already exists.", "PLAN_CODE_TAKEN");

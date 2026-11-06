@@ -8,6 +8,8 @@ const designTitles: Record<string, string> = {
   features: "Features · Drycare Laundry & Dry Cleaning Software",
   about: "About Us · Drycare",
   pricing: "Pricing · Drycare Laundry & Dry Cleaning Software",
+  hardware: "Hardware & Accessories · Drycare",
+  partners: "Become a Partner · Drycare",
   faq: "FAQ · Drycare Laundry & Dry Cleaning Software",
 };
 

@@ -71,7 +71,7 @@ try {
   check("seller profile saved with no gaps", r.status === 200 && r.json.gaps.length === 0, r.json);
 
   section("Payment settings (super admin)");
-  r = await sa.req("PUT", "/platform-admin/settings/payments", { methods: { upi: true, bankTransfer: true, cash: false, instructions: "Share the UTR after paying." }, razorpay: { enabled: true, mode: "test", keyId: "rzp_test_ABC123" } });
+  r = await sa.req("PUT", "/platform-admin/settings/payments", { methods: { upi: true, bankTransfer: true, cash: false, instructions: "Share the UTR after paying." }, razorpay: { keySecret: "", enabled: true, mode: "test", keyId: "rzp_test_ABC123" } });
   check("online payments cannot be switched on without a key secret", r.status === 409 && r.json.error.code === "RAZORPAY_KEYS_REQUIRED", r.json);
   r = await sa.req("PUT", "/platform-admin/settings/payments", { methods: { upi: true, bankTransfer: true, cash: false, instructions: "" }, razorpay: { enabled: false, mode: "live", keyId: "rzp_test_ABC123" } });
   check("test key with live mode is rejected", r.status === 409 && r.json.error.code === "RAZORPAY_MODE_MISMATCH", r.json);

@@ -14,6 +14,8 @@ import { invoiceTotals } from "../lib/balances";
 import { getOrderDetail } from "./orders";
 
 const uuid = z.uuid();
+/** The ways each kind of exception can be closed. */
+const EXCEPTION_OUTCOMES: Record<string, string[]> = { missing: ["found", "claim", "comp"], damaged: ["accepted", "comp", "rework"], wrong_tag: ["retag", "matched"], delayed: ["accepted", "comp"] };
 
 /** Moves garments (and writes their location timeline) without touching their processing stage. */
 async function moveGarments(tx: Tx, auth: AuthContext, garmentIds: string[], to: GarmentLocation, kind: string, correlationId: string, notes?: string) {
@@ -534,19 +536,64 @@ export async function logisticsRoutes(app: FastifyInstance) {
 
   // ------------------------------------------------------------------ exceptions
 
+  /** The number shown as EX-0109: its place in this shop's list, which never changes because exceptions are never deleted. */
+  app.get("/garment-exceptions/:id/history", async (req) => {
+    const auth = requirePermission(req, "orders.read");
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const ex = await db.query.garmentExceptions.findFirst({ where: and(eq(schema.garmentExceptions.id, id), eq(schema.garmentExceptions.organizationId, auth.orgId)) });
+    if (!ex) throw notFound("Exception");
+    const events = await db.execute<{ id: string; kind: string; text: string; createdAt: string; by: string | null }>(sql`
+      select ev.id, ev.kind, ev.text, ev.created_at as "createdAt", u.name as by from garment_exception_events ev left join users u on u.id = ev.created_by
+      where ev.exception_id = ${id} order by ev.created_at desc`);
+    return [...events];
+  });
+
+  app.post("/garment-exceptions/:id/notes", async (req, reply) => {
+    const auth = requirePermission(req, "garments.process");
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = z.object({ kind: z.enum(["internal", "customer"]).default("internal"), text: z.string().trim().min(3, "Write at least 3 characters.").max(500) }).parse(req.body);
+    return db.transaction(async (tx) => {
+      const [ex] = await tx.select().from(schema.garmentExceptions).where(and(eq(schema.garmentExceptions.id, id), eq(schema.garmentExceptions.organizationId, auth.orgId))).for("update");
+      if (!ex) throw notFound("Exception");
+      const [row] = await tx.insert(schema.garmentExceptionEvents).values({ organizationId: auth.orgId, exceptionId: id, kind: body.kind, text: body.text, createdBy: auth.userId }).returning();
+      await tx.update(schema.garmentExceptions).set({ version: ex.version + 1, updatedAt: new Date() }).where(eq(schema.garmentExceptions.id, id));
+      await audit(tx, req, { action: "garment.exception_note_added", resourceType: "garment_exception", resourceId: id, after: { kind: body.kind } });
+      reply.code(201);
+      return row;
+    });
+  });
+
+  app.post("/garment-exceptions/:id/reopen", async (req) => {
+    const auth = requirePermission(req, "garments.override");
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = z.object({ reason: z.string().trim().min(5, "Say why it is being reopened (at least 5 characters).").max(500), version: z.number().int().optional() }).parse(req.body);
+    return db.transaction(async (tx) => {
+      const [ex] = await tx.select().from(schema.garmentExceptions).where(and(eq(schema.garmentExceptions.id, id), eq(schema.garmentExceptions.organizationId, auth.orgId))).for("update");
+      if (!ex) throw notFound("Exception");
+      if (ex.status !== "resolved") throw conflict("This exception is already open", "EXCEPTION_OPEN");
+      if (body.version !== undefined && body.version !== ex.version) throw conflict("Someone else changed this exception. Load the latest version and check again.", "EXCEPTION_CHANGED");
+      const now = new Date();
+      const [row] = await tx.update(schema.garmentExceptions).set({ status: "open", outcome: null, details: null, resolution: null, resolvedBy: null, resolvedAt: null, reopenedBy: auth.userId, reopenedAt: now, version: ex.version + 1, updatedAt: now }).where(eq(schema.garmentExceptions.id, id)).returning();
+      await tx.insert(schema.garmentExceptionEvents).values({ organizationId: auth.orgId, exceptionId: id, kind: "event", text: `Reopened: ${body.reason}`, createdBy: auth.userId });
+      await audit(tx, req, { action: "garment.exception_reopened", resourceType: "garment_exception", resourceId: id, before: { outcome: ex.outcome, resolution: ex.resolution }, after: { reason: body.reason } });
+      return row;
+    });
+  });
+
   app.get("/garment-exceptions", async (req) => {
     const auth = requirePermission(req, "orders.read");
     const q = z.object({ status: z.enum(["open", "resolved", "all"]).default("open") }).parse(req.query);
     const branchFilter = auth.branchIds.length ? sql`and o.branch_id = any(${`{${auth.branchIds.join(",")}}`}::uuid[])` : sql``;
     return db.execute(sql`
-      select e.id, e.kind, e.notes, e.status, e.resolution, e.created_at as "createdAt", e.resolved_at as "resolvedAt",
-             g.tag_code as "tagCode", g.location, oi.garment_type_name as "garmentType", o.id as "orderId", o.order_number as "orderNumber",
-             c.name as "customerName", tb.batch_number as "batchNumber", u.name as "createdByName"
-      from garment_exceptions e join garments g on g.id = e.garment_id join order_items oi on oi.id = g.order_item_id
+      select e.id, e.number, e.kind, e.notes, e.status, e.resolution, e.outcome, e.details_json as details, e.version, e.created_at as "createdAt", e.updated_at as "updatedAt", e.resolved_at as "resolvedAt", e.reopened_at as "reopenedAt",
+             g.id as "garmentId", g.tag_code as "tagCode", g.location, g.current_status as stage, g.workflow_stages as "workflowStages", oi.garment_type_name as "garmentType", o.id as "orderId", o.order_number as "orderNumber",
+             c.name as "customerName", tb.batch_number as "batchNumber", tb.facility_name as "facilityName", tb.direction as "batchDirection", u.name as "createdByName", ru.name as "resolvedByName", ou.name as "reopenedByName"
+      from (select x.*, row_number() over (partition by x.organization_id order by x.created_at, x.id)::int as number from garment_exceptions x where x.organization_id = ${auth.orgId}) e
+      join garments g on g.id = e.garment_id join order_items oi on oi.id = g.order_item_id
       join orders o on o.id = e.order_id join customers c on c.id = o.customer_id
-      left join transfer_batches tb on tb.id = e.batch_id left join users u on u.id = e.created_by
+      left join transfer_batches tb on tb.id = e.batch_id left join users u on u.id = e.created_by left join users ru on ru.id = e.resolved_by left join users ou on ou.id = e.reopened_by
       where e.organization_id = ${auth.orgId} ${branchFilter} ${q.status === "all" ? sql`` : sql`and e.status = ${q.status}`}
-      order by e.created_at desc limit 500`);
+      order by e.created_at desc limit 1000`);
   });
 
   app.post("/garments/:garmentId/exceptions", async (req, reply) => {
@@ -565,14 +612,84 @@ export async function logisticsRoutes(app: FastifyInstance) {
   app.post("/garment-exceptions/:id/resolve", async (req) => {
     const auth = requirePermission(req, "garments.override");
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const body = z.object({ resolution: z.string().trim().min(3).max(500), location: z.enum(["shop_storage", "at_facility"]).optional() }).parse(req.body);
+    const body = z.object({
+      resolution: z.string().trim().min(3).max(500),
+      location: z.enum(["shop_storage", "at_facility"]).optional(),
+      outcome: z.enum(["found", "claim", "comp", "accepted", "rework", "retag", "matched"]).optional(),
+      details: z.record(z.string(), z.union([z.string().trim().max(500), z.boolean()])).default({}),
+      version: z.number().int().optional(),
+    }).parse(req.body);
     return db.transaction(async (tx) => {
       const [ex] = await tx.select().from(schema.garmentExceptions).where(and(eq(schema.garmentExceptions.id, id), eq(schema.garmentExceptions.organizationId, auth.orgId))).for("update");
       if (!ex) throw notFound("Exception");
       if (ex.status !== "open") throw conflict("This exception is already resolved");
+      if (body.version !== undefined && body.version !== ex.version) throw conflict("Someone else changed this exception. Load the latest version and check again.", "EXCEPTION_CHANGED");
+      const d = body.details;
+      const text = (k: string) => String(d[k] ?? "").trim();
+      const refuse = (message: string) => unprocessable(message, "RESOLUTION_INVALID");
+      if (body.outcome) {
+        if (!EXCEPTION_OUTCOMES[ex.kind]?.includes(body.outcome)) throw refuse("That outcome does not apply to this kind of exception.");
+        if (ex.kind === "damaged") {
+          if (text("dmg").length < 10) throw refuse("Describe the damage in at least 10 characters.");
+          if (!text("evid")) throw refuse("Choose the supporting evidence.");
+        }
+        const [garment] = await tx.select().from(schema.garments).where(eq(schema.garments.id, ex.garmentId)).for("update");
+        switch (body.outcome) {
+          case "found": {
+            if (!body.location) throw refuse("Choose where the garment is now.");
+            if (text("foundWhere").length < 3) throw refuse("Say where it was found.");
+            const read = await resolveScanCode(tx, auth.orgId, text("tagScan"));
+            if (read.toUpperCase() !== garment.tagCode.toUpperCase()) throw refuse(`That tag does not match ${garment.tagCode}. Scan the garment's own tag.`);
+            break;
+          }
+          case "claim":
+            if (text("ref").length < 3) throw refuse("Enter the claim reference (at least 3 characters).");
+            if (text("claimDetail").length < 5) throw refuse("Add the claim details (at least 5 characters).");
+            break;
+          case "comp": {
+            const amount = Number(text("amount"));
+            if (!/^\d+(\.\d{1,2})?$/.test(text("amount")) || !(amount > 0)) throw refuse("Enter the amount paid, with up to 2 decimals.");
+            if (!text("method")) throw refuse("Choose how the customer was paid.");
+            if (text("method") !== "Cash" && text("txn").length < 4) throw refuse("Enter the transaction or credit reference.");
+            break;
+          }
+          case "rework": {
+            const step = text("step");
+            if (!garment.workflowStages.includes(step)) throw refuse("Choose a stage from this garment's service.");
+            if (["delivered", "cancelled"].includes(garment.currentStatus)) throw refuse("This garment has left the shop, so it cannot go back to production.");
+            const now = new Date();
+            await tx.update(schema.garments).set({ currentStatus: step, version: garment.version + 1, updatedAt: now }).where(eq(schema.garments.id, garment.id));
+            await tx.insert(schema.garmentStatusHistory).values({ organizationId: auth.orgId, garmentId: garment.id, previousStatus: garment.currentStatus, newStatus: step, transitionKind: "exception_rework", previousLocation: garment.location, newLocation: garment.location, actorUserId: auth.userId, branchId: garment.currentBranchId, notes: body.resolution, correlationId: req.id });
+            break;
+          }
+          case "retag": {
+            if (d.verify !== true) throw refuse("Confirm you checked the garment in person.");
+            const newTag = text("newTag").toUpperCase();
+            if (!/^[A-Z0-9][A-Z0-9-]{3,}$/.test(newTag)) throw refuse("Enter the new tag as printed, using letters, numbers and dashes.");
+            if (newTag === garment.tagCode.toUpperCase()) throw refuse("The new tag must be different from the old one.");
+            const taken = await tx.query.garments.findFirst({ where: and(eq(schema.garments.organizationId, auth.orgId), eq(schema.garments.tagCode, newTag)) });
+            if (taken) throw refuse(`${newTag} is already on another garment.`);
+            d.oldTag = garment.tagCode;
+            d.newTag = newTag;
+            await tx.update(schema.garments).set({ tagCode: newTag, tagVersion: garment.tagVersion + 1, version: garment.version + 1, updatedAt: new Date() }).where(eq(schema.garments.id, garment.id));
+            break;
+          }
+          case "matched": {
+            if (d.verify !== true) throw refuse("Confirm you checked the garment in person.");
+            const number = text("correctOrder").toUpperCase();
+            const other = await tx.query.orders.findFirst({ where: and(eq(schema.orders.organizationId, auth.orgId), eq(schema.orders.orderNumber, number)) });
+            if (!other) throw refuse(`There is no order ${number}.`);
+            if (other.id === ex.orderId) throw refuse("That is the same order. Choose the order it really belongs to.");
+            d.correctOrder = number;
+            break;
+          }
+        }
+      }
       if (body.location) await moveGarments(tx, auth, [ex.garmentId], body.location, "exception_resolved", req.id, body.resolution);
-      const [row] = await tx.update(schema.garmentExceptions).set({ status: "resolved", resolution: body.resolution, resolvedBy: auth.userId, resolvedAt: new Date() }).where(eq(schema.garmentExceptions.id, id)).returning();
-      await audit(tx, req, { action: "garment.exception_resolved", resourceType: "garment_exception", resourceId: id, after: { resolution: body.resolution, location: body.location } });
+      const now = new Date();
+      const [row] = await tx.update(schema.garmentExceptions).set({ status: "resolved", resolution: body.resolution, resolvedBy: auth.userId, resolvedAt: now, outcome: body.outcome ?? null, details: body.outcome ? d : null, version: ex.version + 1, updatedAt: now }).where(eq(schema.garmentExceptions.id, id)).returning();
+      await tx.insert(schema.garmentExceptionEvents).values({ organizationId: auth.orgId, exceptionId: id, kind: "event", text: `Resolved: ${body.resolution}`, createdBy: auth.userId });
+      await audit(tx, req, { action: "garment.exception_resolved", resourceType: "garment_exception", resourceId: id, after: { resolution: body.resolution, location: body.location, outcome: body.outcome, details: body.outcome ? d : undefined } });
       return row;
     });
   });

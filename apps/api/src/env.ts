@@ -33,6 +33,7 @@ const schema = z.object({
   BACKUP_DIR: z.string().optional(),
   /** Where uploaded PC installers are kept. */
   RELEASE_DIR: z.string().optional(),
+  STORE_IMAGE_DIR: z.string().optional(),
   APP_VERSION: z.string().default("0.1.0"),
   LICENSE_ENFORCED: z.string().default("false").transform((v) => v === "true"),
   LICENSE_PUBLIC_KEY: z.string().optional(),

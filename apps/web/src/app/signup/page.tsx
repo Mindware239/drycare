@@ -61,7 +61,10 @@ export default function SignupPage() {
       await api("/organizations", { body });
       // Came from linking a shop PC: go straight back to that approval (only this one in-app path is accepted).
       const next = new URLSearchParams(window.location.search).get("next");
-      window.location.assign(next && /^\/link-device\?code=[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(next) ? next : "/onboarding");
+      // A plan chosen on the pricing page: the trial has started, so go on to paying for it.
+      let wanted: string | null = null;
+      try { wanted = localStorage.getItem("drycare.wantPlan"); } catch {}
+      window.location.assign(next && /^\/link-device\?code=[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(next) ? next : wanted && /^[a-z0-9-]{1,60}$/.test(wanted) ? `/billing?plan=${wanted}` : "/onboarding");
     } catch (err) {
       setError((err as ApiError).message);
       setLoading(false);

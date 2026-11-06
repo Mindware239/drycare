@@ -5,7 +5,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID, verify } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { db, schema, sqlClient } from "../apps/api/src/db/client";
@@ -351,6 +351,10 @@ function runWatchdog(name: string, healthy: boolean) {
   writeFileSync(path.join(appDir, "app.cmd"), "@echo off\r\n");
   writeFileSync(path.join(appDir, "version.txt"), "new");
   writeFileSync(path.join(appDir, "only-in-new.txt"), "new");
+  // Same size and same time: the hardest case, because a plain copy would treat them as already the same.
+  const stamp = new Date(Date.now() - 60_000);
+  utimesSync(path.join(copyDir, "version.txt"), stamp, stamp);
+  utimesSync(path.join(appDir, "version.txt"), stamp, stamp);
   const healthFile = path.join(work, name, "health.txt");
   const resultFile = path.join(work, name, "result.json");
   if (healthy) writeFileSync(healthFile, "90.0.1");

@@ -28,6 +28,8 @@ import { platformBillingRoutes } from "./modules/platformBilling";
 import { platformLicenseRoutes } from "./modules/platformLicenses";
 import { licenseServerRoutes } from "./modules/licenseServer";
 import { releaseRoutes } from "./modules/releases";
+import { hardwareStoreRoutes } from "./modules/hardwareStore";
+import { downloadRoutes } from "./modules/downloads";
 import { reportsCenterRoutes } from "./modules/reportsCenter";
 import { bookingRoutes } from "./modules/booking";
 import { walletRoutes } from "./modules/wallet";
@@ -154,6 +156,8 @@ export async function buildServer() {
       await api.register(platformLicenseRoutes);
       await api.register(licenseServerRoutes);
       await api.register(releaseRoutes);
+      await api.register(hardwareStoreRoutes);
+      await api.register(downloadRoutes);
       await api.register(platformEntitlementRoutes);
       await api.register(membershipRoutes);
       await api.register(trackingRoutes);

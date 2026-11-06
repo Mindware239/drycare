@@ -26,7 +26,8 @@ const FEATURE_LABELS: Record<string, string> = {
   reports: "Reports", marketing: "Marketing campaigns", multiBranch: "Multiple branches", api: "API access", whatsapp: "WhatsApp messages",
   labelDesigner: "Tag designer (any tag size & layout)", customerMemberships: "Customer memberships", inventory: "Stock & purchasing", onlineBooking: "Online pickup booking", wallet: "Customer wallet", advancedReports: "Advanced reports",
 };
-const per = (interval: string) => (interval === "year" ? "year" : "month");
+const per = (interval: string) => (interval === "year" ? "year" : interval === "quarter" ? "quarter" : "month");
+type Referral = { code: string; percent: number; payablePaise: number; discountPaise: number };
 
 function loadRazorpay() {
   return new Promise<void>((resolve, reject) => {
@@ -45,8 +46,16 @@ export default function BillingPage() {
   const { data, error, reload } = useApi<Billing>(desktop || !info.data ? null : "/commercial/billing");
   const [planId, setPlanId] = useState("");
   const [notice, setNotice] = useState<{ tone: "green" | "red"; text: string } | null>(null);
+  const [referral, setReferral] = useState<Referral | null>(null);
+  useEffect(() => setReferral(null), [planId]);
   useEffect(() => {
     if (!data || planId) return;
+    const asked = data.plans.find((p) => p.code === new URLSearchParams(window.location.search).get("plan"));
+    if (asked) {
+      setPlanId(asked.id);
+      setTimeout(() => document.getElementById("pay")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+      return;
+    }
     setPlanId(data.subscription?.plan?.id && data.plans.some((p) => p.id === data.subscription!.plan!.id) ? data.subscription.plan.id : data.plans[0]?.id ?? "");
   }, [data, planId]);
 
@@ -127,9 +136,10 @@ export default function BillingPage() {
 
           {plan && (
             <>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">2 · Pay {money(plan.payablePaise, plan.currency)} for {plan.name}{active && sub?.plan?.id === plan.id ? " (renewal)" : ""}</h2>
+              <h2 id="pay" className="mb-3 scroll-mt-24 text-sm font-semibold uppercase tracking-wide text-slate-500">2 · Pay {money(referral?.payablePaise ?? plan.payablePaise, plan.currency)} for {plan.name}{active && sub?.plan?.id === plan.id ? " (renewal)" : ""}</h2>
               {active && sub?.plan && sub.plan.id !== plan.id && <div className="mb-4"><Alert tone="amber">You are on {sub.plan.name} until {dateOnly(sub.endsAt)}. To switch to {plan.name}, contact Drycare support so the change is applied correctly.</Alert></div>}
-              <PayOptions billing={data} plan={plan} disabled={Boolean(active && sub?.plan && sub.plan.id !== plan.id)} onDone={(text, tone = "green") => { setNotice({ tone, text }); void reload(); }} />
+              {data.pay.india && <ReferralBox plan={plan} applied={referral} onApplied={setReferral} />}
+              <PayOptions billing={data} plan={plan} due={referral?.payablePaise ?? plan.payablePaise} referral={referral?.code} disabled={Boolean(active && sub?.plan && sub.plan.id !== plan.id)} onDone={(text, tone = "green") => { setNotice({ tone, text }); setReferral(null); void reload(); }} />
             </>
           )}
         </>
@@ -173,7 +183,33 @@ export default function BillingPage() {
   );
 }
 
-function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; plan: Plan; disabled: boolean; onDone: (text: string, tone?: "green" | "red") => void }) {
+function ReferralBox({ plan, applied, onApplied }: { plan: Plan; applied: Referral | null; onApplied: (r: Referral | null) => void }) {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { setError(""); }, [plan.id]);
+  async function apply(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      onApplied(await api<Referral>("/commercial/referral/check", { body: { code: code.trim(), planId: plan.id } }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+    setBusy(false);
+  }
+  if (applied) return <div className="mb-4"><Alert tone="green" onClose={() => { onApplied(null); setCode(""); }}>{`Referral code ${applied.code} applied: ${applied.percent}% off. You save ${money(applied.discountPaise)} and pay ${money(applied.payablePaise)}.`}</Alert></div>;
+  return (
+    <form onSubmit={apply} className="mb-4 flex flex-wrap items-end gap-2 rounded-2xl border border-slate-200 bg-white p-4">
+      <Field label="Referral code" className="min-w-52 flex-1" hint="Have a referral code? It works on quarterly and yearly plans."><Input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" spellCheck={false} /></Field>
+      <Button type="submit" variant="secondary" loading={busy} disabled={!code.trim()}>Apply</Button>
+      {error && <p role="alert" className="w-full text-sm font-medium text-red-700">{error}</p>}
+    </form>
+  );
+}
+
+function PayOptions({ billing, plan, due, referral, disabled, onDone }: { billing: Billing; plan: Plan; due: number; referral?: string; disabled: boolean; onDone: (text: string, tone?: "green" | "red") => void }) {
   const options = [
     ...(billing.pay.online ? [{ key: "online", label: "Pay online", icon: CreditCard }] : []),
     ...(billing.pay.upi ? [{ key: "upi", label: "UPI QR", icon: QrCode }] : []),
@@ -186,7 +222,7 @@ function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; pla
   async function payOnline() {
     setPaying(true);
     try {
-      const c = await api<Checkout>("/commercial/checkout/razorpay", { body: { planId: plan.id } });
+      const c = await api<Checkout>("/commercial/checkout/razorpay", { body: { planId: plan.id, ...(referral ? { referral } : {}) } });
       await loadRazorpay();
       const RZ = (window as unknown as { Razorpay: new (o: object) => { open: () => void; on: (e: string, cb: (r: { error?: { description?: string } }) => void) => void } }).Razorpay;
       const rz = new RZ({
@@ -224,25 +260,25 @@ function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; pla
           {tab === "online" && (
             <div className="space-y-4">
               <p className="text-sm text-slate-600">{billing.pay.india ? "Pay by UPI app, debit / credit card, net banking or wallet through Razorpay. Your plan is activated instantly and the GST invoice is issued automatically." : "Pay by debit or credit card through Razorpay. Your plan is activated instantly and the invoice is issued automatically."}</p>
-              <Button size="lg" onClick={() => void payOnline()} loading={paying} disabled={disabled}><ShieldCheck className="h-4 w-4" />Pay {money(plan.payablePaise, plan.currency)} securely</Button>
+              <Button size="lg" onClick={() => void payOnline()} loading={paying} disabled={disabled}><ShieldCheck className="h-4 w-4" />Pay {money(due, plan.currency)} securely</Button>
               <p className="text-xs text-slate-500">Card and bank details are entered on Razorpay&apos;s secure window; Drycare never sees them.</p>
             </div>
           )}
           {tab === "upi" && billing.pay.upi && (
             <div className="flex flex-wrap items-start gap-6">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/v1/commercial/billing/upi-qr?planId=${plan.id}`} alt={`UPI QR for ${money(plan.payablePaise)}`} className="h-48 w-48 rounded-xl border border-slate-200 p-2" />
+              <img src={`/api/v1/commercial/billing/upi-qr?planId=${plan.id}${referral ? `&referral=${encodeURIComponent(referral)}` : ""}`} alt={`UPI QR for ${money(due)}`} className="h-48 w-48 rounded-xl border border-slate-200 p-2" />
               <div className="min-w-0 flex-1 space-y-2 text-sm">
-                <p>Scan with any UPI app (PhonePe, Google Pay, Paytm, BHIM). The amount <strong>{money(plan.payablePaise)}</strong> is filled in.</p>
-                <p className="text-slate-600">Or pay to UPI ID <span className="break-all font-mono font-semibold text-slate-900">{billing.pay.upi.vpa}</span> ({billing.pay.upi.payeeName}).</p>
+                <p>Scan with any UPI app (PhonePe, Google Pay, Paytm, BHIM). The amount <strong>{money(due)}</strong> is filled in.</p>
+                <p className="flex flex-wrap items-center gap-x-2 text-slate-600"><span>Or pay to UPI ID <span className="break-all font-mono font-semibold text-slate-900">{billing.pay.upi.vpa}</span> ({billing.pay.upi.payeeName}).</span><CopyButton label="UPI ID" text={billing.pay.upi.vpa} /></p>
                 <p className="text-slate-600">Then enter the UPI transaction ID in step 3.</p>
               </div>
             </div>
           )}
           {tab === "bank" && billing.pay.bank && (
             <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-              {[["Account name", billing.pay.bank.accountName], ["Account number", billing.pay.bank.accountNumber], ["IFSC", billing.pay.bank.ifsc], ["Bank", [billing.pay.bank.bankName, billing.pay.bank.branch].filter(Boolean).join(", ")], ["Amount", money(plan.payablePaise)]].map(([k, v]) => (
-                <div key={k} className="min-w-0"><dt className="text-xs text-slate-500">{k}</dt><dd className="break-words font-mono font-semibold text-slate-900">{v}</dd></div>
+              {[["Account name", billing.pay.bank.accountName], ["Account number", billing.pay.bank.accountNumber], ["IFSC", billing.pay.bank.ifsc], ["Bank", [billing.pay.bank.bankName, billing.pay.bank.branch].filter(Boolean).join(", ")], ["Amount", money(due)]].map(([k, v]) => (
+                <div key={k} className="min-w-0"><dt className="text-xs text-slate-500">{k}</dt><dd className="flex items-start gap-2 break-words font-mono font-semibold text-slate-900"><span className="min-w-0">{v}</span>{(k === "Account number" || k === "IFSC") && <CopyButton label={k} text={v} />}</dd></div>
               ))}
               <p className="text-xs text-slate-500 sm:col-span-2">Use NEFT, IMPS or RTGS, then enter the UTR number in step 3.</p>
             </dl>
@@ -250,12 +286,19 @@ function PayOptions({ billing, plan, disabled, onDone }: { billing: Billing; pla
           {billing.pay.methods.instructions && tab !== "online" && <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">{billing.pay.methods.instructions}</p>}
         </div>
       </section>
-      {(billing.pay.upi || billing.pay.bank) && <ReportPayment plan={plan} upi={Boolean(billing.pay.upi)} bank={Boolean(billing.pay.bank)} disabled={disabled} onDone={onDone} />}
+      {(billing.pay.upi || billing.pay.bank) && <ReportPayment plan={plan} due={due} referral={referral} upi={Boolean(billing.pay.upi)} bank={Boolean(billing.pay.bank)} disabled={disabled} onDone={onDone} />}
     </div>
   );
 }
 
-function ReportPayment({ plan, upi, bank, disabled, onDone }: { plan: Plan; upi: boolean; bank: boolean; disabled: boolean; onDone: (text: string, tone?: "green" | "red") => void }) {
+function CopyButton({ label, text }: { label: string; text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button type="button" aria-label={`Copy ${label}`} className="dc-press shrink-0 cursor-pointer rounded-md border border-slate-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-brand-700 hover:bg-brand-50" onClick={() => { void navigator.clipboard?.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); }}>{done ? "Copied" : "Copy"}</button>
+  );
+}
+
+function ReportPayment({ plan, due, referral, upi, bank, disabled, onDone }: { plan: Plan; due: number; referral?: string; upi: boolean; bank: boolean; disabled: boolean; onDone: (text: string, tone?: "green" | "red") => void }) {
   const [method, setMethod] = useState<"upi" | "bank_transfer">(upi ? "upi" : "bank_transfer");
   const [reference, setReference] = useState("");
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10));
@@ -267,7 +310,7 @@ function ReportPayment({ plan, upi, bank, disabled, onDone }: { plan: Plan; upi:
     setSaving(true);
     setError("");
     try {
-      await api("/commercial/payment-claims", { body: { planId: plan.id, method, reference: reference.trim(), amountPaise: plan.payablePaise, paidOn, note: note.trim() || undefined } });
+      await api("/commercial/payment-claims", { body: { planId: plan.id, method, reference: reference.trim(), amountPaise: due, paidOn, note: note.trim() || undefined, ...(referral ? { referral } : {}) } });
       setReference("");
       setNote("");
       onDone("Thank you. We'll confirm your payment shortly; your plan is activated and the invoice issued as soon as it is verified.");
@@ -280,7 +323,7 @@ function ReportPayment({ plan, upi, bank, disabled, onDone }: { plan: Plan; upi:
   return (
     <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-5">
       <p className="mb-1 flex items-center gap-2 font-semibold text-slate-900"><Send className="h-4 w-4 text-brand-700" />3 · Already paid by UPI or bank? Tell us</p>
-      <p className="mb-4 text-xs text-slate-500">We match it with our bank statement and activate your plan.</p>
+      <p className="mb-4 text-xs text-slate-500">We match it with our bank statement and activate your plan. If your free trial is still running, you can keep using Drycare while we check.</p>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Paid by">
@@ -293,7 +336,7 @@ function ReportPayment({ plan, upi, bank, disabled, onDone }: { plan: Plan; upi:
         <Field label="Note (optional)" className="sm:col-span-2"><Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></Field>
       </div>
       <Button type="submit" className="mt-4 w-full" loading={saving} disabled={disabled || reference.trim().length < 6}>
-        {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Report payment of {money(plan.payablePaise)}
+        {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Report payment of {money(due)}
       </Button>
       <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-4 text-slate-500"><TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />Never share your UPI PIN, OTP or bank password with anyone, including Drycare staff.</p>
     </form>

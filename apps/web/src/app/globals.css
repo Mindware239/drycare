@@ -339,7 +339,7 @@ h1, h2 {
 .dcd-row { transition: background-color .15s ease; }
 .dcd-row:hover { background: var(--dc-soft2); }
 .dcd-pill { transition: background-color .2s ease, color .2s ease, border-color .2s ease, transform .15s ease; }
-.dcd-pill:hover { border-color: var(--dc-solid); }
+.dcd-pill:hover { border-color: var(--dc-solid) !important; }
 .dcd-pill:active { transform: scale(.97); }
 .dcd-bar { transition: height .8s cubic-bezier(.2,.8,.2,1), filter .15s ease; }
 .dcd-col:hover .dcd-bar { filter: brightness(1.15); }
@@ -373,3 +373,16 @@ html[data-no-upi] option[value="upi"] { display: none; }
   .dc-slide-thumb.dc-slide-live, .dc-slide > button, .dc-press { transition: none; }
   .dc-press:active:not(:disabled) { transform: none; }
 }
+
+/* Super admin console: one chart colour per theme, checked against each surface. */
+:root { --chart-mark: #2a8a45; --chart-grid: #eeece6; --chart-ink: #6b6a65; --chart-surface: #ffffff; }
+:root[data-theme="dark"] { --chart-mark: #33a853; --chart-grid: #243042; --chart-ink: #a8b3c4; --chart-surface: #111827; }
+.dc-card { box-shadow: 0 1px 2px rgba(21,21,20,.04), 0 8px 24px -16px rgba(21,21,20,.12); }
+.dc-card-lift { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.dc-card-lift:hover { transform: translateY(-2px); border-color: var(--color-brand-300); box-shadow: 0 12px 28px -14px rgba(21,21,20,.22); }
+.dc-hero { background: #151514; color: #faf8f4; --chart-mark: #33a853; --chart-grid: rgba(250,248,244,.12); --chart-ink: rgba(250,248,244,.62); --chart-surface: #151514; }
+:root[data-theme="dark"] .dc-hero { background: #0b1220; border: 1px solid #243042; --chart-surface: #0b1220; }
+@media (prefers-reduced-motion: reduce) { .dc-card-lift { transition: none; } .dc-card-lift:hover { transform: none; } }
+
+.dc-ex-link { color: var(--dc-ink); text-decoration-color: var(--dc-grey); transition: color .15s ease; }
+.dc-ex-link:hover { color: var(--dc-blue); }

@@ -8,6 +8,9 @@ import { FeaturesPage } from "./FeaturesPage";
 import { HomePage, HowItWorks, Workflow } from "./HomePage";
 import { DemoSection, EnquiryForm, FinalCta, PageHero } from "./parts";
 import { PricingPage } from "./PricingPage";
+import { HardwarePage } from "./HardwarePage";
+import { DownloadsPage } from "./DownloadsPage";
+import { PartnersPage } from "./PartnersPage";
 
 export type MarketingPage = { title: string; description: string };
 
@@ -23,7 +26,7 @@ const pageCopy: Record<string, MarketingPage> = {
   demo: { title: "See Drycare in a Guided Demo", description: "Get a focused walkthrough of customer intake, garment processing, billing and reports for your store." },
   reviews: { title: "Customer Experiences", description: "We publish only genuine, approved feedback. No ratings or customer stories are invented." },
   customers: { title: "Built for Garment-Care Businesses", description: "Drycare supports independent shops, ironing businesses, premium garment care and multi-branch operations." },
-  download: { title: "Download Drycare for Windows", description: "Installer details, system requirements and setup guidance for the Windows desktop application." },
+  download: { title: "Download Drycare", description: "Get Drycare for Windows or Android. Start with a free trial, then choose a plan when you are ready." },
   resources: { title: "Drycare Resources", description: "Practical setup guides and product help for running garment-care operations." },
   contact: { title: "Talk to Drycare", description: "Send a sales or support enquiry and our team will get back to you." },
   trial: { title: "Start Your Drycare Trial", description: "Create an account and configure your business before activating the Windows application." },
@@ -99,31 +102,7 @@ function ContactPage({ page }: { page: MarketingPage }) {
 }
 
 function DownloadPage({ page }: { page: MarketingPage }) {
-  return (
-    <>
-      <PageHero title={page.title} description={page.description} />
-      <section className="dc-split" style={{ paddingTop: 16, alignItems: "start" }}>
-        <div className="dc-side">
-          <span className="dc-eyebrow">Windows desktop</span>
-          <h2 className="dc-h2">The install is prepared after your account is verified</h2>
-          <p className="dc-body">We don&apos;t publish an unverified installer link or checksum. Once the release, license and download service are ready, the secure installer will be available to your account.</p>
-          <div className="dc-row" style={{ paddingTop: 6 }}>
-            <Link href="/signup" className="dc-btn dc-btn-green">Create account</Link>
-            <Link href="/contact" className="dc-btn dc-btn-line">Ask for release access</Link>
-          </div>
-        </div>
-        <div className="dc-card-18" style={{ padding: "6px 24px", display: "flex", flexDirection: "column" }}>
-          {[["Windows PC", "A supported 64-bit Windows installation"], ["Local database", "Enough disk space for the database and backups"], ["Printer", "Exact model verified with the support team"], ["Network", "Approved local PC and firewall configuration"]].map(([title, text], i, all) => (
-            <div key={title} style={{ padding: "16px 0", borderBottom: i === all.length - 1 ? 0 : "1px solid #eeece6", display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: 16, fontWeight: 600 }}>{title}</span>
-              <span className="dc-small">{text}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-      <FinalCta />
-    </>
-  );
+  return <DownloadsPage title={page.title} description={page.description} />;
 }
 
 function LegalPage({ page }: { page: MarketingPage }) {
@@ -146,6 +125,8 @@ export function GenericPage({ slug }: { slug: string }) {
   if (slug === "features") return <FeaturesPage />;
   if (slug === "about") return <AboutPage />;
   if (slug === "pricing") return <PricingPage />;
+  if (slug === "hardware") return <HardwarePage />;
+  if (slug === "partners") return <PartnersPage />;
   if (slug === "faq") return <FaqPage />;
 
   const page = pageCopy[slug] ?? { title: "Drycare", description: "Explore Drycare for dry-cleaning and laundry operations." };

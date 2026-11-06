@@ -23,3 +23,10 @@ apps/desktop/stage/
 .idea/
 Thumbs.db
 *.tsbuildinfo
+
+# Android build output and native project caches
+apps/android/dist/
+apps/android/android/.gradle/
+apps/android/android/app/build/
+apps/android/android/build/
+apps/android/capacitor.config.json

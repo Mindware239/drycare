@@ -22,7 +22,7 @@ const FAQ: { id: string; title: string; items: [string, string][] }[] = [
   { id: "pricing", title: "Pricing & Billing", items: [
     ["How much does Drycare cost?", "Plans are priced per store. See the Pricing page for all plans and annual billing."],
     ["Is pricing per store?", "Starter and Growth prices are for one store. For several stores or a central plant, Enterprise pricing is based on your setup."],
-    ["Are GST and installation charges included?", "GST is applied as per applicable rates. Installation and hardware are quoted separately unless included in a bundle quotation."],
+    ["Are GST and installation charges included?", "GST is applied as per applicable rates. Hardware is sold separately from the software. The Hardware & Accessories page shows each package, including its freight, delivery and installation charge in India."],
     ["Can I change my plan later?", "Yes. Contact our team to upgrade, and they will explain how the change is applied to your current billing period."],
   ] },
   { id: "hardware", title: "Hardware", items: [

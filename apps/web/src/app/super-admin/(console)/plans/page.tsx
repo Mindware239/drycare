@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Eye, EyeOff, Plus, Store } from "lucide-react";
 import { CORE_FEATURE_LABELS, FEATURES, PLAN_FEATURE_KEYS } from "@drycare/shared";
 import { api } from "@/lib/api";
@@ -28,6 +28,7 @@ export default function PlansPage() {
         description="Plans shown on the public pricing page and used when you activate a customer's subscription. A plan needs an approved price before it can be published. Changing a price affects new subscriptions only; customers already paying keep their current period."
         actions={<Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New plan</Button>}
       />
+      <div className="mb-6"><ReferralPanel /></div>
       {error && <div className="mb-5"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-5"><Alert tone="green" onClose={() => setNotice("")}>{notice}</Alert></div>}
       {!plans ? <Panel><LoadingRows /></Panel> : plans.length === 0 ? <Panel><EmptyState icon={Store} title="No plans yet">Create your first plan, set its price and publish it.</EmptyState></Panel> : (
@@ -100,7 +101,7 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: (message: string) 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Field label="Plan name" required><Input name="name" required minLength={2} maxLength={80} defaultValue={plan.name} /></Field>
           <Field label="Price (₹)" required><Input type="number" min="0" step="1" required value={price} onChange={(e) => setPrice(e.target.value)} /></Field>
-          <Field label="Billing period"><Select name="interval" defaultValue={plan.interval}><option value="month">Monthly</option><option value="year">Annual</option></Select></Field>
+          <Field label="Billing period"><Select name="interval" defaultValue={plan.interval}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Annual</option></Select></Field>
           <Field label="Display order" hint="Lower numbers appear first"><Input name="sortOrder" type="number" min="0" max="1000" defaultValue={plan.sortOrder} /></Field>
           <Field label="Windows computers allowed"><Input name="deviceLimit" type="number" min="1" max="1000" required defaultValue={plan.deviceLimit} /></Field>
           <Field label="Branches / outlets allowed"><Input name="branchLimit" type="number" min="1" max="1000" required defaultValue={plan.branchLimit} /></Field>
@@ -155,8 +156,43 @@ function CreatePlan({ onClose, onCreated }: { onClose: () => void; onCreated: ()
         {error && <Alert>{error}</Alert>}
         <Field label="Plan name" required><Input required minLength={2} maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Professional" /></Field>
         <Field label="Plan code" hint="Permanent identifier used in records. Lowercase letters, numbers and hyphens."><Input value={code} onChange={(e) => setCode(e.target.value.toLowerCase())} placeholder={suggested || "professional"} /></Field>
-        <Field label="Billing period"><Select value={interval} onChange={(e) => setInterval(e.target.value)}><option value="month">Monthly</option><option value="year">Annual</option></Select></Field>
+        <Field label="Billing period"><Select value={interval} onChange={(e) => setInterval(e.target.value)}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Annual</option></Select></Field>
       </form>
     </Modal>
+  );
+}
+
+function ReferralPanel() {
+  const { data, reload } = useAdminData<{ code: string; percent: number; endsOn: string; active: boolean; used: number }>("/platform-admin/referral-offer");
+  const [f, setF] = useState<{ code: string; percent: string; endsOn: string; active: boolean } | null>(null);
+  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (data) setF({ code: data.code, percent: String(data.percent), endsOn: data.endsOn, active: data.active }); }, [data]);
+  if (!f || !data) return <Panel><LoadingRows rows={1} /></Panel>;
+  const ended = f.endsOn < new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api("/platform-admin/referral-offer", { method: "PUT", body: { code: f!.code.trim(), percent: Number(f!.percent), endsOn: f!.endsOn, active: f!.active } });
+      setMessage({ tone: "green", text: "Saved. The website banner follows this." });
+      await reload();
+    } catch (e) {
+      setMessage({ tone: "red", text: e instanceof Error ? e.message : "Could not save." });
+    }
+    setBusy(false);
+  }
+  return (
+    <Panel title="Referral offer" description={`Takes a percentage off quarterly and yearly plans, for customers in India. Shown as a banner on the website until its last day. Used on ${data.used} paid ${data.used === 1 ? "subscription" : "subscriptions"}.`}>
+      {message && <div className="mb-3"><Alert tone={message.tone === "green" ? "green" : undefined}>{message.text}</Alert></div>}
+      <div className="grid items-end gap-3 sm:grid-cols-[1.4fr_120px_180px_auto_auto]">
+        <Field label="Code"><Input value={f.code} maxLength={40} onChange={(e) => setF({ ...f, code: e.target.value })} /></Field>
+        <Field label="Discount (%)"><Input type="number" min={1} max={90} value={f.percent} onChange={(e) => setF({ ...f, percent: e.target.value })} /></Field>
+        <Field label="Last day"><Input type="date" value={f.endsOn} onChange={(e) => setF({ ...f, endsOn: e.target.value })} /></Field>
+        <label className="flex items-center gap-2 pb-2.5 text-sm font-medium"><input type="checkbox" className="h-4 w-4 accent-brand-700" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />On</label>
+        <Button loading={busy} onClick={() => void save()}>Save</Button>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">{!f.active ? "Off: the code and banner are not available." : ended ? "This offer has ended, so the code and banner are not available." : "Live now on the website."}</p>
+    </Panel>
   );
 }

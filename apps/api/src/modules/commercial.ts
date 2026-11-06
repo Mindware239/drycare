@@ -63,7 +63,7 @@ export async function commercialRoutes(app: FastifyInstance) {
     if (existing && ["trial", "active", "past_due"].includes(existing.status)) throw conflict("An active subscription or trial already exists.", "SUBSCRIPTION_EXISTS");
 
     const now = new Date();
-    const intervalDays = plan.interval === "year" ? 365 : plan.interval === "month" ? 30 : 0;
+    const intervalDays = plan.interval === "year" ? 365 : plan.interval === "quarter" ? 90 : plan.interval === "month" ? 30 : 0;
     if (!intervalDays) throw notFound("Supported billing interval");
     const endsAt = new Date(now.getTime() + intervalDays * 86_400_000);
     const [subscription] = await db.transaction(async (tx) => {

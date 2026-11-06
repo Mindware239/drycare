@@ -1035,13 +1035,36 @@ export const garmentExceptions = pgTable(
     createdBy: uuid("created_by").notNull(),
     resolvedBy: uuid("resolved_by"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    /** How it was resolved, and what was recorded for that. */
+    outcome: text("outcome"),
+    details: jsonb("details_json"),
+    /** Raised on each change, so two people cannot overwrite each other. */
+    version: integer("version").notNull().default(1),
+    reopenedBy: uuid("reopened_by"),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   (t) => [
     index("garment_exceptions_org_status_idx").on(t.organizationId, t.status),
     index("garment_exceptions_order_idx").on(t.orderId),
     check("garment_exceptions_kind_check", sql`${t.kind} in ('missing', 'damaged', 'wrong_tag', 'delayed')`),
   ],
+);
+
+/** What happened to an exception after it was reported: resolving, reopening, and notes. */
+export const garmentExceptionEvents = pgTable(
+  "garment_exception_events",
+  {
+    id: id(),
+    organizationId: orgId(),
+    exceptionId: uuid("exception_id").notNull().references(() => garmentExceptions.id),
+    kind: text("kind").notNull(), // event | internal | customer
+    text: text("text").notNull(),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("garment_exception_events_idx").on(t.exceptionId), check("garment_exception_events_kind_check", sql`${t.kind} in ('event', 'internal', 'customer')`)],
 );
 
 /** Label print requests. Browser printing cannot confirm paper output, so staff confirm the result. */

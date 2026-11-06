@@ -72,7 +72,7 @@ export function ConsoleHeader({ title, description, actions }: { title: string; 
   return (
     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="dcd-h text-[30px] leading-tight text-slate-900">{title}</h1>
         {description && <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
@@ -80,36 +80,33 @@ export function ConsoleHeader({ title, description, actions }: { title: string; 
   );
 }
 
-export function MetricCard({ icon: Icon, label, value, detail, tone = "brand", href }: { icon: LucideIcon; label: string; value: ReactNode; detail?: ReactNode; tone?: "brand" | "blue" | "amber" | "red" | "violet" | "emerald"; href?: string }) {
-  const tones = {
-    brand: "bg-brand-50 text-brand-700",
-    blue: "bg-blue-50 text-blue-700",
-    amber: "bg-amber-50 text-amber-700",
-    red: "bg-red-50 text-red-700",
-    violet: "bg-violet-50 text-violet-700",
-    emerald: "bg-emerald-50 text-emerald-700",
-  };
+export function MetricCard({ icon: Icon, label, value, detail, delta, tone = "brand", href }: { icon: LucideIcon; label: string; value: ReactNode; detail?: ReactNode; delta?: ReactNode; tone?: "brand" | "blue" | "amber" | "red" | "violet" | "emerald"; href?: string }) {
+  // Colour is kept for what needs attention; everything else wears the brand.
+  const chip = tone === "amber" ? "bg-amber-50 text-amber-700" : tone === "red" ? "bg-red-50 text-red-700" : "bg-brand-50 text-brand-700";
   const body = (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-[13px] font-medium text-slate-500">{label}</p>
-        <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight text-slate-900 tabular-nums">{value}</p>
-        {detail && <p className="mt-2 text-xs leading-5 text-slate-500">{detail}</p>}
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 text-[13px] font-medium text-slate-500">{label}</p>
+        <span className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", chip)}><Icon aria-hidden="true" className="h-[18px] w-[18px]" /></span>
       </div>
-      <span className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", tones[tone])}><Icon className="h-[18px] w-[18px]" /></span>
-    </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <p className="dcd-h min-w-0 break-words text-[32px] leading-tight text-slate-900 tabular-nums">{value}</p>
+        {delta}
+      </div>
+      {detail && <p className="mt-1.5 text-xs leading-5 text-slate-500">{detail}</p>}
+    </>
   );
-  const cls = "block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
-  return href ? <a href={href} className={cx(cls, "transition hover:border-brand-300 hover:shadow-md")}>{body}</a> : <div className={cls}>{body}</div>;
+  const cls = "block rounded-[20px] border border-slate-200 bg-white p-5 dc-card";
+  return href ? <a href={href} className={cx(cls, "dc-card-lift")}>{body}</a> : <div className={cls}>{body}</div>;
 }
 
 export function Panel({ title, description, actions, children, padded = true, className }: { title?: ReactNode; description?: ReactNode; actions?: ReactNode; children: ReactNode; padded?: boolean; className?: string }) {
   return (
-    <section className={cx("overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm", className)}>
+    <section className={cx("dc-card overflow-hidden rounded-[20px] border border-slate-200 bg-white", className)}>
       {(title || actions) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div className="min-w-0">
-            {title && <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>}
+            {title && <h2 className="text-base font-bold tracking-tight text-slate-900">{title}</h2>}
             {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -124,10 +121,10 @@ export function DataTable({ head, children, empty, minWidth = 860 }: { head: Rea
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-start text-sm" style={{ minWidth }}>
-        <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          <tr>{head.map((h, i) => <th key={i} className="whitespace-nowrap px-5 py-3">{h}</th>)}</tr>
+        <thead className="border-b border-slate-100 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <tr>{head.map((h, i) => <th key={i} className="whitespace-nowrap px-5 py-3 text-start">{h}</th>)}</tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">{children}</tbody>
+        <tbody className="divide-y divide-slate-100 [&>tr]:transition-colors [&>tr:hover]:bg-slate-50/70">{children}</tbody>
       </table>
       {empty}
     </div>
@@ -171,7 +168,7 @@ export function SegmentedTabs<T extends string>({ value, options, onChange }: { 
     <div className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1" role="tablist">
       {options.map((o) => (
         <button key={o.value} type="button" role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
-          className={cx("rounded-lg px-3 py-1.5 text-xs font-semibold transition", value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800")}>
+          className={cx("dc-press rounded-lg border px-3.5 py-1.5 text-[13px] font-semibold transition", value === o.value ? "border-slate-900 bg-white text-slate-900 shadow-sm" : "border-transparent text-slate-500 hover:text-slate-800")}>
           {o.label}{o.count !== undefined && <span className="ms-1.5 text-slate-400">{o.count}</span>}
         </button>
       ))}
@@ -223,6 +220,23 @@ export const ACTION_LABELS: Record<string, string> = {
   "platform.desktop_license_issued": "PC license issued",
   "platform.desktop_license_renewed": "PC license renewed",
   "platform.lead_status_changed": "Enquiry status changed",
+  "platform.release_created": "Release added",
+  "platform.release_file_uploaded": "Release installer uploaded",
+  "platform.release_updated": "Release settings changed",
+  "platform.release_test": "Release sent to testing",
+  "platform.release_stage": "Release rollout started",
+  "platform.release_next_stage": "Release rollout widened",
+  "platform.release_publish": "Release published",
+  "platform.release_pause": "Release paused",
+  "platform.release_resume": "Release resumed",
+  "platform.release_withdraw": "Release withdrawn",
+  "platform.release_recommend": "Release marked as recommended",
+  "platform.release_auto_paused": "Release paused automatically",
+  "platform.release_emergency_stop": "Emergency stop used",
+  "platform.release_pc_updated": "PC release channel changed",
+  "platform.release_rollback_started": "Rollback started",
+  "platform.release_rollback_stopped": "Rollback stopped",
+  "platform.rfid_module_paid": "RFID module paid",
   "platform.password_changed": "Admin password changed",
   "platform.password_change_failed": "Password change rejected",
   "platform.sessions_revoked": "Other sessions signed out",

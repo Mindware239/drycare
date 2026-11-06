@@ -297,7 +297,7 @@ export function HomePage() {
         <div className="dc-side">
           <h2 className="dc-h2">Software &amp; Hardware Integration</h2>
           <p className="dc-body">Drycare works with the tag printers, scanners and receipt printers your counter and workshop rely on. We help you choose compatible devices and set them up with your system.</p>
-          <Link href="#demo" className="dc-btn dc-btn-outline" style={{ marginTop: 8 }}>Ask about compatible hardware →</Link>
+          <Link href="/hardware" className="dc-btn dc-btn-outline" style={{ marginTop: 8 }}>See Hardware &amp; Packages →</Link>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14 }}>
           {hardware.map(([title, desc]) => (

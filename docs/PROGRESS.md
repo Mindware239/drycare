@@ -419,3 +419,31 @@ Follow the current prioritized plan in [COMMERCIAL_AUDIT.md](./COMMERCIAL_AUDIT.
 - A return starts at its first scan or at Finish, so opening the dialog moves nothing. A garment already flagged missing keeps its first exception.
 - Differs from the design on purpose: bags come from orders with printed labels, so there is no "+ New bag", no removing one garment from a bag, and "Waiting to send" lists bags. Finishing with garments missing asks for a reason and needs a manager.
 - Tests: `pnpm transfer-test`.
+
+## Super admin console look, and release setup guide
+
+- Dashboard: revenue panel, collections and registrations charts, trial-to-paid figures. Feature usage: trend, most used, adoption, by plan, and a feature filter. Charts are in `apps/web/src/app/super-admin/(console)/charts.tsx`.
+- Feature usage now counts customers the same way as the dashboard, leaving out test shops.
+- Software releases has a Setup guide tab. 0.1.22 is listed as a draft on the dev database, and nothing is offered to PCs.
+- The watchdog restore now overwrites every file (`robocopy /IS /IT`): a file of the same size and time was being skipped.
+
+## Garment exceptions, to the owner's design (migration 0043)
+
+- Summary cards and chips filter the list; rows carry the design's colours, overdue after 48 hours, sorting and search. Details, resolve with a review step, notes, history and reopen are dialogs on the same page.
+- Real effects: Found checks the tag and moves the garment. Re-processing sends it to the chosen stage of its service. Re-tag changes its tag. Two people cannot overwrite each other (`version`).
+- Only recorded, on purpose: compensation does not post to the cash book, a matched order does not move the garment or change bills, and a customer message is a draft that is not sent.
+- API: `GET /garment-exceptions/:id/history`, `POST .../notes`, `POST .../reopen`; `POST .../resolve` takes `outcome`, `details`, `version`. Tests: `pnpm exception-test`.
+
+## Hardware store on the website
+
+- Public page `/hardware`: three packages with quantities, four categories, product cards, equipment and consumables filters, compatibility, enquiry and bulk enquiry. Super admin > Hardware store edits products, prices, pictures, quantities and the charge. Settings key `hardware_store`; pictures in `STORE_IMAGE_DIR` (default `.local/store-images`).
+- Still needs the owner: prices, confirmed quantities, product pictures and specifications. No online checkout: customers enquire.
+- Tests: `pnpm hardware-store-test`.
+
+## Buying, offers, partners and downloads
+
+- Pricing leads through signup to paying (India). Razorpay activates instantly; UPI and bank transfer are verified by the owner. Quarterly billing added (90 days).
+- Referral offer: Super admin > Plans. The server works out every discounted amount. Tests: `pnpm referral-test`.
+- `/partners` applications arrive in Website enquiries. `/download` lists Windows and Android once they are released.
+- Android: `apps/android` (Capacitor). Build with `DRYCARE_CLOUD_URL=https://... pnpm --filter @drycare/android dist`. Key in `.local/android`: back it up.
+- Blocked until hosted: no public server exists. `drycare.in`, the fallback in the sitemap, robots and metadata, belongs to another company and must be replaced with the real domain.

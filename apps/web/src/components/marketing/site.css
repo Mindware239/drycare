@@ -227,3 +227,9 @@
 .dc-auth-h1 { margin: 0; font-family: "Urbanist", sans-serif; font-weight: 700; font-size: clamp(34px, 4vw, 44px); line-height: 1.1; letter-spacing: -.025em; }
 .dc-auth-sub { margin: 0; font-size: 17px; line-height: 1.6; color: #4f4e4a; }
 .dc-showpw { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font: inherit; font-size: 14px; font-weight: 600; min-height: 40px; min-width: 64px; border: 0; border-radius: 8px; background: #f3f1ec; color: #151514; }
+
+.dc-hw-card { transition: transform .18s ease, box-shadow .18s ease; }
+.dc-hw-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px -18px rgba(21,21,20,.35); }
+.dc-hw-chip { transition: background-color .2s ease, color .2s ease, transform .15s ease; }
+.dc-hw-chip:active { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) { .dc-hw-card, .dc-hw-chip { transition: none; } .dc-hw-card:hover { transform: none; } }

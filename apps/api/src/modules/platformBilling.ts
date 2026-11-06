@@ -2,6 +2,8 @@
  * Software-owner billing: seller profile, payment methods / Razorpay settings, subscription invoices (super admin),
  * and the shop-side "Plan & billing" screen: plans, how to pay, "I have paid" reports, Razorpay checkout, invoices.
  */
+import { REFERRAL_KEY, applyReferral, readReferralOffer } from "../lib/referral";
+import { referralLive } from "@drycare/shared";
 import type { FastifyInstance } from "fastify";
 import bwipjs from "bwip-js";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -187,6 +189,43 @@ export async function platformBillingRoutes(app: FastifyInstance) {
   });
 
   // ------------------------------------------------------------------ shop: plan & billing
+  /** Public, for the website banner. Nothing while the offer is off or has ended. */
+  app.get("/commercial/referral-offer", async () => {
+    const offer = await readReferralOffer();
+    return referralLive(offer) ? { code: offer.code, percent: offer.percent, endsOn: offer.endsOn } : null;
+  });
+
+  app.post("/commercial/referral/check", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
+    const auth = requirePermission(req, "org.manage");
+    const body = z.object({ code: z.string().trim().min(1).max(40), planId: z.uuid() }).parse(req.body);
+    const [plan, seller, org] = await Promise.all([payablePlan(body.planId, auth.orgId), getSellerBilling(db), db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) })]);
+    if (!plan || !org) throw notFound("Plan");
+    return applyReferral(body.code, plan, org, seller.invoice.gstRateBps);
+  });
+
+  app.get("/platform-admin/referral-offer", async (req) => {
+    requirePlatformAdmin(req);
+    const offer = await readReferralOffer();
+    const [{ used }] = await db.execute<{ used: number }>(sql`select count(*)::int as used from commercial_payments where status = 'paid' and upper(provider_payload_json->'referral'->>'code') = upper(${offer.code})`);
+    return { ...offer, used };
+  });
+
+  app.put("/platform-admin/referral-offer", async (req) => {
+    const auth = requirePlatformAdmin(req);
+    const body = z.object({
+      code: z.string().trim().regex(/^[A-Za-z0-9-]{3,40}$/, "Use letters, numbers and dashes"),
+      percent: z.number().int().min(1).max(90),
+      endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose an end date"),
+      active: z.boolean(),
+    }).parse(req.body);
+    const before = await readReferralOffer();
+    await db.transaction(async (tx) => {
+      await write(tx, REFERRAL_KEY, body as unknown as Record<string, unknown>, auth.userId);
+      await audit(tx, req, { action: "platform.referral_offer_changed", resourceType: "platform_settings", actorUserId: auth.userId, before, after: body });
+    });
+    return body;
+  });
+
   app.get("/commercial/billing", async (req) => {
     const auth = requirePermission(req, "org.manage");
     const [org, seller, payments, allPlans, subscription] = await Promise.all([
@@ -228,7 +267,7 @@ export async function platformBillingRoutes(app: FastifyInstance) {
   /** UPI QR with the payee and exact amount for a plan, so the shop cannot mistype either. */
   app.get("/commercial/billing/upi-qr", async (req, reply) => {
     const auth = requirePermission(req, "org.manage");
-    const { planId } = z.object({ planId: z.uuid() }).parse(req.query);
+    const { planId, referral } = z.object({ planId: z.uuid(), referral: z.string().trim().max(40).optional() }).parse(req.query);
     const [seller, payments, plan, org] = await Promise.all([
       getSellerBilling(db), getStoredPayments(db),
       payablePlan(planId, auth.orgId),
@@ -237,7 +276,8 @@ export async function platformBillingRoutes(app: FastifyInstance) {
     if (!plan || !org || !payments.methods.upi || !seller.upiId) throw notFound("UPI payment option");
     const offer = planOffer(plan, org, seller.invoice.gstRateBps);
     if (!offer.india) throw notFound("UPI payment option");
-    const amount = (offer.payablePaise / 100).toFixed(2);
+    const due = referral ? (await applyReferral(referral, plan, org, seller.invoice.gstRateBps)).payablePaise : offer.payablePaise;
+    const amount = (due / 100).toFixed(2);
     const params = new URLSearchParams({ pa: seller.upiId, pn: seller.upiPayeeName || seller.tradeName || seller.legalName || "DryCare", am: amount, cu: "INR", tn: `DryCare ${plan.name}` });
     const svg = bwipjs.toSVG({ bcid: "qrcode", text: `upi://pay?${params.toString()}`, scale: 3, eclevel: "M" } as Parameters<typeof bwipjs.toSVG>[0]);
     reply.header("content-type", "image/svg+xml").header("cache-control", "private, max-age=300");
@@ -253,9 +293,18 @@ export async function platformBillingRoutes(app: FastifyInstance) {
       amountPaise: z.number().int().positive().max(2_000_000_000),
       paidOn: z.string().trim().max(20).optional(),
       note: z.string().trim().max(300).optional(),
+      referral: z.string().trim().max(40).optional(),
     }).parse(req.body);
     const plan = await payablePlan(body.planId, auth.orgId);
     if (!plan) throw notFound("Plan");
+    // The server works out a discounted amount; it never takes the browser's word for it.
+    let referral: { code: string; percent: number; payablePaise: number } | undefined;
+    if (body.referral) {
+      const [seller, org] = await Promise.all([getSellerBilling(db), db.query.organizations.findFirst({ where: eq(schema.organizations.id, auth.orgId) })]);
+      if (!org) throw notFound("Organization");
+      const applied = await applyReferral(body.referral, plan, org, seller.invoice.gstRateBps);
+      referral = { code: applied.code, percent: applied.percent, payablePaise: applied.payablePaise };
+    }
     const reference = body.reference.replace(/\s+/g, "").toUpperCase();
     const [dup] = await db.execute(sql`select 1 from commercial_payments where upper(regexp_replace(provider_reference, '\\s+', '', 'g')) = ${reference} and status in ('pending','paid','verified') limit 1`);
     if (dup) throw conflict("This transaction ID has already been reported or used.", "PAYMENT_REFERENCE_USED");
@@ -263,9 +312,9 @@ export async function platformBillingRoutes(app: FastifyInstance) {
       organizationId: auth.orgId,
       provider: `claim_${body.method}`,
       providerReference: reference,
-      amountPaise: body.amountPaise,
+      amountPaise: referral?.payablePaise ?? body.amountPaise,
       status: "pending",
-      providerPayload: { planId: plan.id, planName: plan.name, paidOn: body.paidOn, note: body.note, reportedBy: auth.userId },
+      providerPayload: { planId: plan.id, planName: plan.name, paidOn: body.paidOn, note: body.note, reportedBy: auth.userId, ...(referral ? { referral } : {}) },
     }).returning();
     await audit(db, req, { action: "subscription.payment_reported", resourceType: "commercial_payment", resourceId: claim.id, orgId: auth.orgId, after: { plan: plan.code, method: body.method, amountPaise: body.amountPaise } });
     reply.code(201);
@@ -274,7 +323,7 @@ export async function platformBillingRoutes(app: FastifyInstance) {
 
   app.post("/commercial/checkout/razorpay", { config: { rateLimit: { max: 10, timeWindow: "10 minutes" } } }, async (req) => {
     const auth = requirePermission(req, "org.manage");
-    const { planId } = z.object({ planId: z.uuid() }).parse(req.body);
+    const { planId, referral } = z.object({ planId: z.uuid(), referral: z.string().trim().max(40).optional() }).parse(req.body);
     const creds = await razorpayCredentials(db);
     if (!creds) throw new AppError(503, "ONLINE_PAYMENT_OFF", "Online payment is not available right now. Pay by UPI or bank transfer instead.");
     const plan = await payablePlan(planId, auth.orgId);
@@ -284,10 +333,11 @@ export async function platformBillingRoutes(app: FastifyInstance) {
     if (!org) throw notFound("Organization");
     const offer = planOffer(plan, org, seller.invoice.gstRateBps);
     if (offer.payablePaise <= 0) throw conflict("This plan has no price to pay.", "PLAN_FREE");
-    const amountPaise = toProviderAmount(offer.payablePaise, offer.currency);
+    const applied = referral ? await applyReferral(referral, plan, org, seller.invoice.gstRateBps) : null;
+    const amountPaise = toProviderAmount(applied?.payablePaise ?? offer.payablePaise, offer.currency);
     const order = await createRazorpayOrder(creds, {
       amountPaise, currency: offer.currency, receipt: `dc_${auth.orgId.slice(0, 8)}_${Date.now()}`,
-      notes: { organizationId: auth.orgId, planId: plan.id, planCode: plan.code },
+      notes: { organizationId: auth.orgId, planId: plan.id, planCode: plan.code, ...(applied ? { referralCode: applied.code, referralPercent: String(applied.percent) } : {}) },
     }).catch((e: Error) => { throw new AppError(502, "RAZORPAY_ORDER_FAILED", `Could not start the payment: ${e.message}`); });
     return { keyId: creds.keyId, orderId: order.id, amountPaise, currency: offer.currency, planName: plan.name, businessName: seller.tradeName || seller.legalName || "DryCare", customerName: org.name };
   });
@@ -382,7 +432,7 @@ async function recordRazorpayPayment(
     const applied = await db.transaction(async (tx) => {
       const r = await applySubscriptionPayment(tx, {
         organizationId: orgId, plan, provider: "razorpay", reference: paymentId, amountPaise: fromProviderAmount(payment.amount, payment.currency), currency: payment.currency,
-        payload: { verificationMode: expectedOrgId ? "razorpay_checkout" : "razorpay_webhook", orderId, method: payment.method, mode: creds.mode },
+        payload: { verificationMode: expectedOrgId ? "razorpay_checkout" : "razorpay_webhook", orderId, method: payment.method, mode: creds.mode, ...(order.notes?.referralCode ? { referral: { code: order.notes.referralCode, percent: Number(order.notes.referralPercent) } } : {}) },
       });
       await audit(tx, req, { action: "subscription.paid_online", resourceType: "commercial_payment", resourceId: r.payment.id, orgId, after: { plan: plan.code, amountPaise: payment.amount, invoice: r.invoice?.number } });
       return r;

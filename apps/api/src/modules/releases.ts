@@ -8,7 +8,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { execFile } from "node:child_process";
 import { createHash, createPrivateKey, sign, verify } from "node:crypto";
-import { closeSync, createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readSync, renameSync, rmSync, statSync } from "node:fs";
+import { closeSync, createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readSync, renameSync, rmSync, statSync, statfsSync } from "node:fs";
 import path from "node:path";
 import { Transform, type Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -23,6 +23,7 @@ import { AppError, conflict, forbidden, notFound } from "../lib/errors";
 import { verifySignedLicense } from "../lib/license";
 import { openSecret } from "../lib/secretBox";
 import { signingKey } from "./platformLicenses";
+import { CUSTOMER_ORG } from "./platformConsole";
 
 type Release = typeof schema.desktopReleases.$inferSelect;
 type Device = typeof schema.licenseInstallations.$inferSelect;
@@ -170,6 +171,18 @@ function pcStatus(d: Device, releases: Release[], rollbacks: Rollback[], now = D
   return { status, latestEligible: latest?.version ?? null };
 }
 
+/** What the setup guide can check for itself. */
+async function releaseSetup() {
+  const dir = releaseDir();
+  let freeBytes: number | null = null;
+  try {
+    mkdirSync(dir, { recursive: true });
+    const s = statfsSync(dir);
+    freeBytes = Number(s.bavail) * Number(s.bsize);
+  } catch { /* Shown as unknown. */ }
+  return { signingKeyReady: Boolean(await signingKey()), storageDir: dir, storageOnDisk: true, freeBytes };
+}
+
 export async function releaseRoutes(app: FastifyInstance) {
   // ---- PCs
   app.post("/updates/check", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
@@ -295,6 +308,7 @@ export async function releaseRoutes(app: FastifyInstance) {
     const statuses = devices.map((d) => pcStatus(d, releases, rollbacks).status);
     const stable = newest("stable");
     return {
+      setup: await releaseSetup(),
       summary: {
         totalReleases: releases.length,
         latestStable: stable,
@@ -580,7 +594,20 @@ export async function releaseRoutes(app: FastifyInstance) {
     const { days, feature } = z.object({ days: z.coerce.number().int().min(7).max(365).default(30), feature: z.string().max(80).optional() }).parse(req.query);
     const since = sql`current_date - ${days}::int`;
     const half = Math.floor(days / 2);
-    const NOT_TEST = sql`(o.settings_json->>'platformInternal') is distinct from 'true' and o.slug not like 'test-%'`;
+    const NOT_TEST = CUSTOMER_ORG;
+    const scope = feature ? sql`and u.feature = ${feature}` : sql``;
+    const [trend, [{ previous, active }]] = await Promise.all([
+      db.execute<{ day: string; value: number }>(sql`
+        select to_char(d, 'YYYY-MM-DD') as day, coalesce(sum(u.count), 0)::int as value
+        from generate_series(current_date - ${days}::int, current_date, interval '1 day') d
+        left join (feature_usage_daily u join organizations o on o.id = u.organization_id and ${NOT_TEST}) on u.day = d::date ${scope}
+        group by d order by d`),
+      db.execute<{ previous: number; active: number }>(sql`
+        select coalesce(sum(u.count) filter (where u.day < ${since}), 0)::int as previous,
+               count(distinct u.organization_id) filter (where u.day >= ${since})::int as active
+        from feature_usage_daily u join organizations o on o.id = u.organization_id
+        where u.day >= current_date - ${days * 2}::int and ${NOT_TEST}`),
+    ]);
     const [rows, byPlan, customers, [{ total }]] = await Promise.all([
       db.execute<{ feature: string; uses: number; customers: number; recent: number; earlier: number }>(sql`
         select u.feature, sum(u.count)::int as uses, count(distinct u.organization_id)::int as customers,
@@ -601,6 +628,6 @@ export async function releaseRoutes(app: FastifyInstance) {
         : Promise.resolve([]),
       db.execute<{ total: number }>(sql`select count(*)::int as total from organizations o where ${NOT_TEST} and o.status in ('trial', 'active')`),
     ]);
-    return { days, totalCustomers: total, features: [...rows], byPlan: [...byPlan], customers: [...customers] };
+    return { days, totalCustomers: total, activeCustomers: active, previousUses: previous, trend: [...trend], features: [...rows], byPlan: [...byPlan], customers: [...customers] };
   });
 }

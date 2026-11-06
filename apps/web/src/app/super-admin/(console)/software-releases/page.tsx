@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { CircleAlert, CircleCheck, Clock3, FlaskConical, History, Monitor, OctagonX, Package, PackageCheck, Pencil, Plus, RotateCcw, Search, ShieldAlert, Sparkles, UploadCloud, WifiOff } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, ClipboardCopy, Clock3, FlaskConical, History, Monitor, OctagonX, Package, PackageCheck, Pencil, Plus, RotateCcw, Search, ShieldAlert, Sparkles, UploadCloud, WifiOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { Alert, Badge, Button, Field, Input, Modal, Select, Textarea, cx } from "@/components/ui";
 import { ConsoleHeader, DataTable, EmptyState, LoadingRows, MetricCard, Pager, Panel, SegmentedTabs, dateLabel, dateTimeLabel, useAdminData } from "../admin-ui";
@@ -16,6 +16,7 @@ type Release = {
 };
 type Rollback = { id: string; fromVersion: string; toVersion: string; status: string; reason: string; createdAt: string; scope: { type: string }; onOldVersion: number; onTarget: number; progress: Record<string, number> };
 type Data = {
+  setup: { signingKeyReady: boolean; storageDir: string; storageOnDisk: boolean; freeBytes: number | null };
   summary: { totalReleases: number; latestStable: string | null; latestBeta: string | null; registeredPcs: number; onLatest: number; pending: number; failures: number; offline: number };
   releases: Release[]; rollbacks: Rollback[];
   recentFailures: { id: string; installationId: string; fromVersion: string | null; toVersion: string; status: string; detail: string | null; createdAt: string }[];
@@ -25,7 +26,7 @@ type Pc = {
   lastSyncAt: string | null; lastSuccessAt: string | null; lastSuccessVersion: string | null; updateState: string; lastError: string | null;
 };
 type Pcs = { total: number; page: number; pageSize: number; items: Pc[]; filters: { versions: string[]; systems: string[] } };
-type Tab = "releases" | "pcs" | "rollback" | "history";
+type Tab = "guide" | "releases" | "pcs" | "rollback" | "history";
 
 const STATUS: Record<string, { label: string; color: "green" | "amber" | "red" | "slate" | "blue" }> = {
   draft: { label: "Draft", color: "slate" }, testing: { label: "Testing", color: "blue" }, staged: { label: "Staged", color: "amber" }, published: { label: "Published", color: "green" }, paused: { label: "Paused", color: "red" }, withdrawn: { label: "Withdrawn", color: "red" },
@@ -69,17 +70,18 @@ export default function SoftwareReleasesPage() {
         <MetricCard icon={CircleAlert} label="Update failures" value={s?.failures ?? "—"} tone="red" detail="PCs whose last update failed" />
         <MetricCard icon={WifiOff} label="Offline PCs" value={s?.offline ?? "—"} tone="violet" detail="Not seen for 7 days" />
       </div>
-      <div className="mb-4"><SegmentedTabs<Tab> value={tab} onChange={setTab} options={[{ value: "releases", label: "Deployment" }, { value: "pcs", label: "PCs" }, { value: "rollback", label: "Rollback", count: data?.rollbacks.filter((b) => b.status === "active").length || undefined }, { value: "history", label: "Release history" }]} /></div>
+      <div className="mb-4"><SegmentedTabs<Tab> value={tab} onChange={setTab} options={[{ value: "releases", label: "Deployment" }, { value: "pcs", label: "PCs" }, { value: "rollback", label: "Rollback", count: data?.rollbacks.filter((b) => b.status === "active").length || undefined }, { value: "history", label: "Release history" }, { value: "guide", label: "Setup guide" }]} /></div>
 
       {tab === "releases" && (!data ? <Panel><LoadingRows /></Panel> : (
         <Panel padded={false} title="Deployment" actions={<Button variant="ghost" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />Add new version</Button>}>
-          {!data.releases.length ? <div className="p-6"><EmptyState icon={Package} title="No versions yet">Build with pnpm dist, then add the version here and upload its installer.</EmptyState></div> : (
+          {!data.releases.length ? <div className="p-6"><EmptyState icon={Package} title="No versions yet">Open the <button type="button" className="font-semibold text-brand-700 underline" onClick={() => setTab("guide")}>Setup guide</button> to see how to build one and release it.</EmptyState></div> : (
             <DataTable minWidth={980} head={["#", "Release status", "Version", "Channel", "Staged rollout", "Signature", "Mandatory", ""]}>
               {data.releases.map((r, i) => <ReleaseRow key={r.id} index={data.releases.length - i} r={r} open={open === r.id} onToggle={() => setOpen(open === r.id ? null : r.id)} onDone={done} onFail={setFailure} />)}
             </DataTable>
           )}
         </Panel>
       ))}
+      {tab === "guide" && (data ? <SetupGuide data={data} /> : <Panel><LoadingRows /></Panel>)}
       {tab === "pcs" && <PcsTab />}
       {tab === "rollback" && data && <RollbackTab data={data} onDone={done} onFail={setFailure} />}
       {tab === "history" && (!data ? <Panel><LoadingRows /></Panel> : (
@@ -94,6 +96,53 @@ export default function SoftwareReleasesPage() {
       {creating && <NewRelease onClose={() => setCreating(false)} onDone={async (t) => { setCreating(false); await done(t); }} />}
       {stopping && <Confirm title="Emergency stop" message="Every release being rolled out pauses at once, and no more PCs can download them. PCs that already updated stay as they are; start a rollback if they need to go back." action="Stop all releases" danger onClose={() => setStopping(false)} run={async (reason) => { const r = await api<{ paused: string[] }>("/platform-admin/releases/emergency-stop", { body: { reason } }); setStopping(false); await done(`Stopped: ${r.paused.join(", ") || "nothing was rolling out"}.`); }} />}
     </>
+  );
+}
+
+function Copy({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="mt-2 flex items-start gap-2 rounded-lg bg-slate-900 p-3">
+      <code dir="ltr" className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-xs leading-5 text-slate-100">{text}</code>
+      <button type="button" aria-label="Copy command" className="dc-press shrink-0 cursor-pointer text-slate-300 hover:text-white" onClick={() => { void navigator.clipboard?.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); }}>{done ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}</button>
+    </div>
+  );
+}
+
+/** How to release, with what this server can already see as done. */
+function SetupGuide({ data }: { data: Data }) {
+  const { setup, releases } = data;
+  const local = typeof window !== "undefined" && /^(localhost|127\.|\[::1\])/.test(window.location.hostname);
+  const https = typeof window !== "undefined" && window.location.protocol === "https:";
+  const uploaded = releases.some((r) => r.sha256);
+  const signed = releases.some((r) => r.signatureStatus === "valid");
+  const out = releases.some((r) => ["staged", "published"].includes(r.status));
+  const steps: { title: string; state: "done" | "you" | "next"; why: React.ReactNode; extra?: React.ReactNode }[] = [
+    { title: "Licensing key", state: setup.signingKeyReady ? "done" : "you", why: setup.signingKeyReady ? "This server can sign update answers and download links, so PCs can trust them." : "Open Licenses once. The key is created the first time it is needed." },
+    { title: "Public server address", state: !local && https ? "done" : "you", why: !local && https ? `PCs can reach this server at ${window.location.origin}.` : "This console is open on this PC only, so other PCs cannot reach it yet. Host the server on a domain with HTTPS. PCs check in and download updates from that address." },
+    { title: "Build the installer with that address", state: !local && https && uploaded ? "done" : "next", why: "Raise the version in apps/desktop/package.json first. Without the address, the installed app cannot check in or update itself. The draft 0.1.22 was built without one, so build again once the server is live.", extra: <Copy text={'$env:DRYCARE_CLOUD_URL="https://your-server"; pnpm --filter @drycare/desktop dist'} /> },
+    { title: "Add the version and upload its installer", state: uploaded ? "done" : "next", why: uploaded ? "A version with its installer is listed under Deployment. Its file is in apps/desktop/release when built on this PC." : "Use Add new version, open Details, and upload apps/desktop/release/DryCare-Setup-<version>.exe." },
+    { title: "Code-signing certificate", state: signed ? "done" : "you", why: signed ? "A signed installer has been uploaded, so Windows shows your name as publisher." : "Buy one from a certificate authority, then build with these two settings. Until then Windows warns about an unknown publisher, releases show Not signed, and each needs your approval.", extra: signed ? undefined : <Copy text={'$env:CSC_LINK="C:\\path\\certificate.pfx"; $env:CSC_KEY_PASSWORD="your-password"; pnpm --filter @drycare/desktop dist'} /> },
+    { title: "Where installers are kept", state: "you", why: <>On this server&apos;s disk, in <code className="break-all font-mono text-xs">{setup.storageDir}</code>{setup.freeBytes !== null ? ` (${(setup.freeBytes / 1073741824).toFixed(0)} GB free)` : ""}. Keep this folder backed up, because a rollback needs the earlier installers. Set RELEASE_DIR to move it. Object storage is not connected yet.</> },
+    { title: "Test on one PC, then roll out", state: out ? "done" : "next", why: "Set the status to Testing and put one spare PC in the beta group from the PCs tab. Once that update works, choose Staged: it starts at 10%, and Go to 25% widens it. A PC needs an activated license to get updates." },
+    { title: "Watch it, and stop it if needed", state: out ? "done" : "next", why: "The PCs tab shows each PC's version and result. A rollout pauses itself when too many fail. Emergency stop halts everything, and the Rollback tab sends PCs back to an earlier version." },
+  ];
+  const done = steps.filter((s) => s.state === "done").length;
+  return (
+    <Panel title="Set up and release" description={`${done} of ${steps.length} done. Checked from this server's own records.`}>
+      <ol className="space-y-5">
+        {steps.map((s, i) => (
+          <li key={s.title} className="flex gap-3">
+            <span aria-hidden="true" className={cx("flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold", s.state === "done" ? "bg-brand-500 text-slate-900" : s.state === "you" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600")}>{s.state === "done" ? <Check className="h-4 w-4" /> : i + 1}</span>
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">{s.title}<Badge color={s.state === "done" ? "green" : s.state === "you" ? "amber" : "slate"}>{s.state === "done" ? "Done" : s.state === "you" ? "Needs you" : "Next"}</Badge></p>
+              <p className="mt-0.5 text-[13px] leading-6 text-slate-600">{s.why}</p>
+              {s.extra}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Panel>
   );
 }
 

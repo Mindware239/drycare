@@ -7,18 +7,13 @@ import { SlideGroup } from "@/components/SlideGroup";
 import { chooseVisitorCountry, cleanMoney, ELSEWHERE, visitor, visitorCountry, visitorPrice } from "@/lib/visitor";
 import { Accordion, EnquiryForm, useVw } from "./parts";
 
-const BUNDLES: [string, string[]][] = [
-  ["Basic Store Bundle", ["Drycare Starter software", "Compatible receipt printer", "Garment tag / barcode label printer", "Installation assistance"]],
-  ["Laundry Growth Bundle", ["Drycare Growth software", "Receipt printer", "Tag printer and barcode scanner", "Setup and staff training"]],
-  ["Multi-Store & Plant Bundle", ["Drycare Growth or Enterprise software", "Printers for each store and plant", "Barcode scanners for garment tracking", "Deployment assistance"]],
-];
 const FAQS: [string, string][] = [
   ["Which plan is suitable for my laundry?", "Starter suits a single store that needs order booking, garment tagging and billing. Growth adds pickup and delivery, customer updates, memberships and advanced reports. Enterprise is for chains, franchises and central processing plants. Our team can help you decide."],
   ["Can I use Drycare without purchasing hardware?", "Yes. Drycare can be purchased on its own. If you already have a receipt printer, tag printer or scanner, our team can check whether it is compatible."],
   ["Can I print garment tags with barcodes?", "Yes. Drycare supports garment tagging with barcode labels. You will need a compatible tag or label printer, which we can supply as part of a bundle quotation."],
   ["Can I upgrade from Starter to Growth?", "Yes, you can move to Growth as your business grows. Contact our team and they will explain how the change is applied to your current billing period."],
   ["Is pricing calculated per store?", "The Starter and Growth prices shown are for one store. For several stores or a central processing plant, Enterprise pricing is based on your setup and requirements."],
-  ["Are GST and installation charges included?", "GST is applied as per applicable rates. Installation and hardware are quoted separately unless included in a bundle quotation. Our team will confirm the full amount before you buy."],
+  ["Are GST and installation charges included?", "GST is applied as per applicable rates. Hardware is sold separately from the software. The Hardware & Accessories page shows each package, including its freight, delivery and installation charge in India."],
   ["Can Drycare manage multiple stores and a central plant?", "Yes. The Enterprise Plan includes a multi-store dashboard, store-to-plant garment transfer, consolidated reports and central price control."],
   ["Can I request a custom Enterprise quotation?", "Yes. Share your store count, plant setup and integration needs through the enquiry form, and our team will prepare a quotation."],
 ];
@@ -31,13 +26,15 @@ const CONTACT_PLAN = { id: "contact", name: "Enterprise", tagline: "Centralised 
 export function PricingPage() {
   const vw = useVw();
   const cw = Math.min(vw, 1180) - 64;
-  const [annual, setAnnual] = useState(false);
+  const [period, setPeriod] = useState<"month" | "quarter" | "year">("month");
+  const annual = period === "year";
   const [offer, setOffer] = useState<PublicPlans | null>(null);
   useEffect(() => { void fetch("/api/v1/commercial/public-plans").then((r) => (r.ok ? r.json() : null)).then(setOffer).catch(() => setOffer({ features: [], plans: [] })); }, []);
   const hasYearly = !!offer?.plans.some((p) => p.interval === "year");
-  const shownPlans = offer?.plans.filter((p) => (annual && hasYearly ? p.interval === "year" : p.interval !== "year")) ?? [];
+  const hasQuarterly = !!offer?.plans.some((p) => p.interval === "quarter");
+  const shownPlans = offer?.plans.filter((p) => p.interval === (period === "year" && !hasYearly ? "month" : period)) ?? [];
   const showContact = !offer?.plans.some((p) => p.name.toLowerCase().startsWith("enterprise"));
-  const interestOptions = [DEFAULT_INTEREST, "Talk to sales", ...shownPlans.map((p) => p.name), ...(showContact ? [CONTACT_PLAN.name] : []), ...BUNDLES.map((b) => b[0])];
+  const interestOptions = [DEFAULT_INTEREST, "Talk to sales", ...shownPlans.map((p) => p.name), ...(showContact ? [CONTACT_PLAN.name] : [])];
   // Prices follow the visitor's country, and start in rupees until the browser has told us where that is.
   const [country, setCountry] = useState("IN");
   useEffect(() => setCountry(visitorCountry()), []);
@@ -48,6 +45,12 @@ export function PricingPage() {
   const [cmp, setCmp] = useState(0);
   const [interest, setInterest] = useState(DEFAULT_INTEREST);
   const enquiry = useRef<HTMLElement>(null);
+  /** Online buying is in India for now: a new shop signs up and starts its trial, then lands on the payment step with this plan chosen. */
+  const buy = async (code: string) => {
+    try { localStorage.setItem("drycare.wantPlan", code); } catch {}
+    const signedIn = await fetch("/api/v1/auth/session").then((r) => r.ok).catch(() => false);
+    window.location.assign(signedIn ? `/billing?plan=${encodeURIComponent(code)}` : "/signup");
+  };
   const goEnquiry = (value: string) => {
     setInterest(value);
     if (enquiry.current) window.scrollTo({ top: enquiry.current.getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" });
@@ -68,10 +71,10 @@ export function PricingPage() {
             <h1 className="dc-h1" style={{ fontSize: "clamp(38px, 5vw, 60px)" }}>The Right Plan for Your Laundry Business</h1>
             <p className="dc-lead">From single-store dry cleaners to multi-branch laundry chains, choose a plan that simplifies order booking, garment tracking, pickups, deliveries and payments.</p>
             {hasYearly && <SlideGroup label="Billing period" color="#151514" style={{ display: "flex", gap: 4, padding: 5, borderRadius: 999, background: "#f3f1ec", border: "1px solid #e4e1d9", marginTop: 10 }}>
-              {([["Monthly", false, null], ["Annual", true, null]] as const).map(([label, value, tag]) => {
-                const on = annual === value;
+              {([["Monthly", "month", null], ...(hasQuarterly ? [["Quarterly", "quarter", null]] : []), ["Annual", "year", null]] as ["Monthly" | "Quarterly" | "Annual", "month" | "quarter" | "year", null][]).map(([label, value, tag]) => {
+                const on = period === value;
                 return (
-                  <button key={label} type="button" role="radio" aria-checked={on} onClick={() => setAnnual(value)} style={{ font: "inherit", fontSize: 15, fontWeight: 600, minHeight: 44, padding: "10px 24px", borderRadius: 999, border: 0, background: "transparent", color: on ? "#faf8f4" : "#151514", display: "flex", alignItems: "center", gap: 8 }}>
+                  <button key={label} type="button" role="radio" aria-checked={on} onClick={() => setPeriod(value)} style={{ font: "inherit", fontSize: 15, fontWeight: 600, minHeight: 44, padding: "10px 24px", borderRadius: 999, border: 0, background: "transparent", color: on ? "#faf8f4" : "#151514", display: "flex", alignItems: "center", gap: 8 }}>
                     {label}{tag && <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: on ? "#3cbf5a" : "#dff3e4", color: on ? "#151514" : "#1f6b34" }}>{tag}</span>}
                   </button>
                 );
@@ -84,7 +87,7 @@ export function PricingPage() {
                 <option value={ELSEWHERE}>Other countries (USD)</option>
               </select>
             </label>
-            <span aria-live="polite" style={{ fontSize: 14, color: "#6b6963" }}>{annual ? "Annual plans are billed upfront for 12 months." : "Monthly plans are billed every month. Switch to Annual to pay upfront and save."}</span>
+            <span aria-live="polite" style={{ fontSize: 14, color: "#6b6963" }}>{period === "quarter" ? "Quarterly plans are billed every 3 months." : annual ? "Annual plans are billed upfront for 12 months." : "Monthly plans are billed every month. Switch to Annual to pay upfront and save."}</span>
           </div>
 
           <div className="dc-g-plans">
@@ -95,8 +98,9 @@ export function PricingPage() {
               const yearly = p.interval === "year";
               const amount = local(p.pricePaise);
               const price = show(amount);
-              const per = yearly ? "/ year" : "/ month";
-              const billing = yearly ? `Billed ${price} upfront each year · about ${show(Math.round(amount / 1200) * 100)}/month` : "Billed monthly";
+              const quarterly = p.interval === "quarter";
+              const per = yearly ? "/ year" : quarterly ? "/ quarter" : "/ month";
+              const billing = yearly ? `Billed ${price} upfront each year · about ${show(Math.round(amount / 1200) * 100)}/month` : quarterly ? `Billed ${price} every 3 months · about ${show(Math.round(amount / 300) * 100)}/month` : "Billed monthly";
               const list = [`${p.branchLimit} branch${p.branchLimit === 1 ? "" : "es"} · ${p.deviceLimit} device${p.deviceLimit === 1 ? "" : "s"}`, ...offer?.features.filter((f) => p.included.includes(f.key)).map((f) => f.label) ?? []];
               return (
                 <article key={p.id} className={`dc-plan${hi ? " dc-plan-hi" : ""}`}>
@@ -112,7 +116,7 @@ export function PricingPage() {
                     </div>
                     <span style={{ fontSize: 14, lineHeight: 1.5, color: sub }}>{billing}</span>
                   </div>
-                  <button type="button" onClick={() => goEnquiry(p.name)} className={`dc-btn ${hi ? "dc-btn-green" : "dc-btn-outline"}`} style={{ justifyContent: "center", whiteSpace: "nowrap" }}>{`Choose ${p.name} →`}</button>
+                  <button type="button" onClick={() => { if (place.india) void buy(p.code); else goEnquiry(p.name); }} className={`dc-btn ${hi ? "dc-btn-green" : "dc-btn-outline"}`} style={{ justifyContent: "center", whiteSpace: "nowrap" }}>{`Choose ${p.name} →`}</button>
                   <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 11 }}>
                     {list.map((feature) => (
                       <li key={feature} style={{ display: "grid", gridTemplateColumns: "20px minmax(0,1fr)", gap: 10, fontSize: 14, lineHeight: 1.45, color: hi ? "#faf8f4" : "#333330" }}>
@@ -138,7 +142,7 @@ export function PricingPage() {
               </article>
             )}
           </div>
-          <p style={{ margin: "28px 0 0", textAlign: "center", fontSize: 14, color: "#6b6963" }}>Software prices shown are for one store. Hardware is charged separately.</p>
+          <p style={{ margin: "28px 0 0", textAlign: "center", fontSize: 14, color: "#6b6963" }}>{place.india ? "Choose a plan to sign up and start using Drycare straight away, then pay online, by UPI or by bank transfer. Prices shown are for one store, plus GST. Hardware is charged separately." : "Online buying is available in India for now. Choose a plan and our team will help you. Prices shown are for one store. Hardware is charged separately."}</p>
         </div>
       </section>
 
@@ -147,25 +151,11 @@ export function PricingPage() {
           <h2 className="dc-h2">Complete Your Store Setup</h2>
           <p className="dc-body">Combine Drycare with compatible printers and scanners for a complete counter and garment-tagging setup.</p>
         </div>
-        <div className="dc-g-plans" style={{ marginTop: 0 }}>
-          {BUNDLES.map(([name, items], i) => (
-            <article key={name} className="dc-card-18" style={{ padding: 26, display: "flex", flexDirection: "column", gap: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span className="dc-num" style={{ fontSize: 13 }}>{`0${i + 1}`}</span>
-                <h3 className="dc-t" style={{ margin: 0, fontSize: 21, lineHeight: 1.2 }}>{name}</h3>
-              </div>
-              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
-                {items.map((item) => <li key={item} style={{ display: "grid", gridTemplateColumns: "20px minmax(0,1fr)", gap: 10, fontSize: 15, lineHeight: 1.45, color: "#33332f" }}><span aria-hidden="true" className="dc-tick" style={{ width: 20, height: 20, fontSize: 11, marginTop: 1 }}>✓</span><span>{item}</span></li>)}
-              </ul>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 16, borderTop: "1px solid #eeece6", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, color: "#6b6963" }}>Price on quotation</span>
-                <button type="button" onClick={() => goEnquiry(name)} className="dc-btn dc-btn-outline" style={{ alignSelf: "auto" }}>Get a Quote →</button>
-              </div>
-            </article>
-          ))}
+        <div className="dc-card-18" style={{ padding: 26, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <p style={{ margin: 0, flex: "1 1 320px", fontSize: 16, lineHeight: 1.5, color: "#33332f" }}>Starter Setup, Professional Setup and Complete Store Setup: see every item and quantity you get, with prices and delivery.</p>
+          <Link href="/hardware#packages" className="dc-btn dc-btn-outline" style={{ alignSelf: "auto" }}>See Hardware Packages →</Link>
         </div>
-        <p style={{ margin: 0, fontSize: 14, color: "#4f4e4a", padding: "14px 18px", borderRadius: 12, background: "#f7f7f5" }}>Hardware is charged separately from software unless a specific bundle quotation says otherwise.</p>
-      </section>
+</section>
 
       <section className="dc-sec" style={{ paddingTop: 16, gap: 32 }}>
         <div className="dc-head" style={{ maxWidth: 640 }}>

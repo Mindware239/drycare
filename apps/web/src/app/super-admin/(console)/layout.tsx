@@ -61,6 +61,7 @@ const NAV: { section: string; items: { href: string; label: string; icon: Lucide
       { href: "/super-admin/software-releases", label: "Software releases", icon: PackageCheck },
       { href: "/super-admin/feature-usage", label: "Feature usage", icon: BarChart3 },
       { href: "/super-admin/hardware", label: "Printers & scanners", icon: Printer },
+      { href: "/super-admin/hardware-store", label: "Hardware store", icon: Store },
     ],
   },
   {
